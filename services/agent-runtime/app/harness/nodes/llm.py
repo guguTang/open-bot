@@ -76,12 +76,22 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     compaction_retries = int(state.get("compaction_retries") or 0)
 
     if rnd > max_rounds:
+        # Do not show a canned「上限」line. Force a tools-off synthesis turn instead.
+        existing = str(state.get("final_text") or "").strip()
+        if existing:
+            return {
+                "status": "done",
+                "final_text": existing,
+                "pending_tool_calls": [],
+                "round": rnd,
+                "needs_finalize": False,
+            }
         return {
-            "status": "done",
-            "final_text": state.get("final_text")
-            or "（已达工具轮次上限，请缩小任务或使用 defer_work。）",
+            "status": "running",
+            "final_text": "",
             "pending_tool_calls": [],
             "round": rnd,
+            "needs_finalize": True,
         }
 
     # Merge follow-ups before the next model call.

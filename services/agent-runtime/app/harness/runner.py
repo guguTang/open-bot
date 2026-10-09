@@ -51,7 +51,7 @@ async def run_durable_events(
     request_id: str | None = None,
     langfuse_trace_id: str = "",
     root_obs: Any = None,
-    max_tool_rounds: int = 12,
+    max_tool_rounds: int = 24,
     configurable_extra: dict[str, Any] | None = None,
     resume_command: Command | None = None,
 ) -> AsyncIterator[str]:

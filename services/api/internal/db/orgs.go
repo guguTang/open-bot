@@ -33,6 +33,7 @@ type OrgSettings struct {
 	LLMModel         string    `json:"llm_model"`
 	LLMEnableTools   bool      `json:"llm_enable_tools"`
 	LLMContextWindow *int      `json:"llm_context_window,omitempty"`
+	LLMMaxToolRounds *int      `json:"llm_max_tool_rounds,omitempty"`
 	FeatureFlagsJSON string    `json:"feature_flags_json"`
 	DecisionProvider string    `json:"decision_provider"`
 	DecisionBaseURL  string    `json:"decision_base_url"`
@@ -48,6 +49,7 @@ type OrgSettingsPublic struct {
 	LLMModel         string `json:"llm_model"`
 	LLMEnableTools   bool   `json:"llm_enable_tools"`
 	LLMContextWindow *int   `json:"llm_context_window"`
+	LLMMaxToolRounds *int   `json:"llm_max_tool_rounds"`
 	APIKeySet        bool   `json:"api_key_set"`
 	APIKeyHint       string `json:"api_key_hint,omitempty"`
 	FeatureFlagsJSON string `json:"feature_flags_json"`
@@ -80,6 +82,7 @@ func (s *OrgSettings) Public() OrgSettingsPublic {
 		LLMModel:         s.LLMModel,
 		LLMEnableTools:   s.LLMEnableTools,
 		LLMContextWindow: s.LLMContextWindow,
+		LLMMaxToolRounds: s.LLMMaxToolRounds,
 		APIKeySet:        set,
 		APIKeyHint:       hint,
 		FeatureFlagsJSON: s.FeatureFlagsJSON,
@@ -219,6 +222,7 @@ ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_provider TEXT NOT NUL
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_base_url TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_api_key TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_model TEXT NOT NULL DEFAULT '';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS llm_max_tool_rounds INT;
 
 CREATE TABLE IF NOT EXISTS org_invites (
   id TEXT PRIMARY KEY,
@@ -357,15 +361,16 @@ func (d *DB) GetOrgSettings(orgID string) (*OrgSettings, error) {
 	}
 	row := d.SQL.QueryRow(`
 SELECT org_id, llm_name, llm_base_url, llm_api_key, llm_model, llm_enable_tools,
-       llm_context_window, feature_flags_json, updated_at,
+       llm_context_window, llm_max_tool_rounds, feature_flags_json, updated_at,
        decision_provider, decision_base_url, decision_api_key, decision_model
 FROM org_settings WHERE org_id = $1
 `, orgID)
 	var s OrgSettings
 	var cw sql.NullInt64
+	var mtr sql.NullInt64
 	if err := row.Scan(
 		&s.OrgID, &s.LLMName, &s.LLMBaseURL, &s.LLMAPIKey, &s.LLMModel, &s.LLMEnableTools,
-		&cw, &s.FeatureFlagsJSON, &s.UpdatedAt,
+		&cw, &mtr, &s.FeatureFlagsJSON, &s.UpdatedAt,
 		&s.DecisionProvider, &s.DecisionBaseURL, &s.DecisionAPIKey, &s.DecisionModel,
 	); err != nil {
 		return nil, err
@@ -374,10 +379,14 @@ FROM org_settings WHERE org_id = $1
 		v := int(cw.Int64)
 		s.LLMContextWindow = &v
 	}
+	if mtr.Valid && mtr.Int64 > 0 {
+		v := int(mtr.Int64)
+		s.LLMMaxToolRounds = &v
+	}
 	return &s, nil
 }
 
-func (d *DB) UpsertOrgLLM(orgID, name, baseURL, apiKey, model string, enableTools bool, contextWindow *int, keepAPIKey bool) (*OrgSettings, error) {
+func (d *DB) UpsertOrgLLM(orgID, name, baseURL, apiKey, model string, enableTools bool, contextWindow *int, maxToolRounds *int, keepAPIKey bool) (*OrgSettings, error) {
 	cur, err := d.GetOrgSettings(orgID)
 	if err != nil {
 		return nil, err
@@ -396,13 +405,19 @@ func (d *DB) UpsertOrgLLM(orgID, name, baseURL, apiKey, model string, enableTool
 	} else {
 		cw = nil
 	}
+	var mtr any
+	if maxToolRounds != nil && *maxToolRounds > 0 {
+		mtr = *maxToolRounds
+	} else {
+		mtr = nil
+	}
 	now := Now()
 	_, err = d.SQL.Exec(`
 UPDATE org_settings SET
   llm_name = $2, llm_base_url = $3, llm_api_key = $4, llm_model = $5,
-  llm_enable_tools = $6, llm_context_window = $7, updated_at = $8
+  llm_enable_tools = $6, llm_context_window = $7, llm_max_tool_rounds = $8, updated_at = $9
 WHERE org_id = $1
-`, orgID, name, strings.TrimSpace(baseURL), key, strings.TrimSpace(model), enableTools, cw, now)
+`, orgID, name, strings.TrimSpace(baseURL), key, strings.TrimSpace(model), enableTools, cw, mtr, now)
 	if err != nil {
 		return nil, err
 	}

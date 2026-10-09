@@ -1043,11 +1043,12 @@ def test_context_length_detector() -> None:
 
 
 def test_default_interactive_round_cap() -> None:
-    _ok(DEFAULT_TOOL_ROUNDS == 12, f"interactive default is 12 (got {DEFAULT_TOOL_ROUNDS})")
-    _ok(clamp_tool_rounds(None) == 12, "clamp None -> 12")
+    _ok(DEFAULT_TOOL_ROUNDS == 24, f"interactive default is 24 (got {DEFAULT_TOOL_ROUNDS})")
+    _ok(clamp_tool_rounds(None) == 24, "clamp None -> 24")
     _ok(clamp_tool_rounds(4) == 4, "explicit lower still allowed")
     _ok(clamp_tool_rounds(16) == 16, "background 16 kept")
-    _ok(clamp_tool_rounds(100) == 24, "hard ceiling")
+    _ok(clamp_tool_rounds(32) == 32, "admin-raised 32 kept")
+    _ok(clamp_tool_rounds(100) == 48, "hard ceiling")
 
 
 async def test_context_overflow_compacts_and_retries() -> None:

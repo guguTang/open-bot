@@ -270,7 +270,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		"system_prompt":   systemPrompt,
 		"messages":        historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
 		"enabled_skills":  enabledSkills,
-		"max_tool_rounds": 16,
+		"max_tool_rounds": s.effectiveMaxToolRounds(task.UserID),
 		"request_id":      task.ID,
 		"background":      true,
 		"owner_task":      task.ID,

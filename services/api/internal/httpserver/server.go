@@ -496,6 +496,33 @@ func (s *Server) handleListLLM(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"connections": pub})
 }
 
+
+const (
+	defaultMaxToolRounds = 24
+	hardMaxToolRounds    = 48
+)
+
+// effectiveMaxToolRounds returns the org-configured tool-round cap (admin LLM page),
+// falling back to defaultMaxToolRounds. Clamped to [1, hardMaxToolRounds].
+func (s *Server) effectiveMaxToolRounds(userID string) int {
+	n := defaultMaxToolRounds
+	u, err := s.db.GetUserByID(userID)
+	if err == nil && u != nil && strings.TrimSpace(u.OrgID) != "" {
+		if settings, serr := s.db.GetOrgSettings(u.OrgID); serr == nil && settings != nil {
+			if settings.LLMMaxToolRounds != nil && *settings.LLMMaxToolRounds > 0 {
+				n = *settings.LLMMaxToolRounds
+			}
+		}
+	}
+	if n < 1 {
+		return 1
+	}
+	if n > hardMaxToolRounds {
+		return hardMaxToolRounds
+	}
+	return n
+}
+
 func llmRuntimePayload(conn *db.LLMConnection) map[string]any {
 	if conn == nil {
 		return nil
@@ -1597,15 +1624,16 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		requestID := uuid.NewString()
 		payloadMap := map[string]any{
-			"conversation_id": id,
-			"content":         runtimeContent,
-			"agent_id":        agentID,
-			"user_id":         uid,
-			"channel_id":      conv.ChannelID,
-			"system_prompt":   systemPrompt,
-			"messages":        history,
-			"enabled_skills":  enabledSkills,
-			"request_id":      requestID,
+			"conversation_id":  id,
+			"content":          runtimeContent,
+			"agent_id":         agentID,
+			"user_id":          uid,
+			"channel_id":       conv.ChannelID,
+			"system_prompt":    systemPrompt,
+			"messages":         history,
+			"enabled_skills":   enabledSkills,
+			"request_id":       requestID,
+			"max_tool_rounds":  s.effectiveMaxToolRounds(uid),
 		}
 		if replyToID != "" {
 			payloadMap["reply_to_id"] = replyToID

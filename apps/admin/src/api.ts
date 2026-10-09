@@ -45,6 +45,7 @@ export type OrgLLMSettings = {
   llm_model: string;
   llm_enable_tools: boolean;
   llm_context_window?: number | null;
+  llm_max_tool_rounds?: number | null;
   api_key_set: boolean;
   api_key_hint?: string;
   feature_flags_json?: string;
@@ -246,6 +247,7 @@ export async function adminPutOrgLLM(body: {
   model: string;
   enable_tools: boolean;
   context_window?: number | null;
+  max_tool_rounds?: number | null;
 }): Promise<OrgLLMSettings> {
   const res = await fetch(`${API_BASE}/v1/admin/org/llm`, {
     method: "PUT",

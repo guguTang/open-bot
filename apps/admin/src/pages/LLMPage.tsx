@@ -36,6 +36,7 @@ export default function LLMPage() {
           model: data.llm_model || "",
           enable_tools: Boolean(data.llm_enable_tools),
           context_window: data.llm_context_window ?? undefined,
+          max_tool_rounds: data.llm_max_tool_rounds ?? 24,
         });
       })
       .catch((err) => {
@@ -118,6 +119,7 @@ export default function LLMPage() {
                 }
               }
               const cw = values.context_window;
+              const mtr = values.max_tool_rounds;
               await adminPutOrgLLM({
                 name: values.name || "",
                 base_url: values.base_url || "",
@@ -125,6 +127,7 @@ export default function LLMPage() {
                 model: values.model || "",
                 enable_tools: Boolean(values.enable_tools),
                 context_window: cw && Number(cw) > 0 ? Number(cw) : null,
+                max_tool_rounds: mtr && Number(mtr) > 0 ? Number(mtr) : null,
               });
               message.success("组织默认模型已保存");
               const data = await adminGetOrgLLM();
@@ -136,6 +139,7 @@ export default function LLMPage() {
                 model: data.llm_model || "",
                 enable_tools: Boolean(data.llm_enable_tools),
                 context_window: data.llm_context_window ?? undefined,
+          max_tool_rounds: data.llm_max_tool_rounds ?? 24,
               });
               return true;
             } catch (err) {
@@ -157,6 +161,15 @@ export default function LLMPage() {
             label="上下文窗口 (tokens)"
             placeholder="可选"
             min={1}
+            fieldProps={{ precision: 0 }}
+          />
+          <ProFormDigit
+            name="max_tool_rounds"
+            label="工具轮次上限"
+            placeholder="默认 24"
+            min={1}
+            max={48}
+            extra="单次对话最多调用工具的轮数；触顶后会综合已有工具结果给出最终回答（不会提示「已达上限」）。"
             fieldProps={{ precision: 0 }}
           />
           <ProFormSwitch

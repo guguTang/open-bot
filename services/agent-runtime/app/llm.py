@@ -176,10 +176,10 @@ _TOOL_CONTEXT_HEAD = 7_000
 _TOOL_CONTEXT_TAIL = 3_500
 _CONTEXT_OVERFLOW_RETRIES = 2
 
-# Interactive turns need room for a real lookup (list_machines → query → follow-ups).
-# Background tasks may still request a higher clamped cap.
-DEFAULT_TOOL_ROUNDS = 12
-MAX_TOOL_ROUNDS = 24
+# Interactive turns need room for multi-step host lookups (list → query → follow-ups).
+# Org admin may raise further via llm_max_tool_rounds (clamped by MAX_TOOL_ROUNDS).
+DEFAULT_TOOL_ROUNDS = 24
+MAX_TOOL_ROUNDS = 48
 
 DEFER_ON_EXHAUST_REPLY = "还在做，做好会发在这里。"
 

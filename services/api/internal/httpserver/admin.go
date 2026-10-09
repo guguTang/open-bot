@@ -289,12 +289,13 @@ func (s *Server) handleAdminGetLLM(w http.ResponseWriter, r *http.Request) {
 }
 
 type orgLLMBody struct {
-	Name          string `json:"name"`
-	BaseURL       string `json:"base_url"`
-	APIKey        string `json:"api_key"`
-	Model         string `json:"model"`
-	EnableTools   bool   `json:"enable_tools"`
-	ContextWindow *int   `json:"context_window"`
+	Name           string `json:"name"`
+	BaseURL        string `json:"base_url"`
+	APIKey         string `json:"api_key"`
+	Model          string `json:"model"`
+	EnableTools    bool   `json:"enable_tools"`
+	ContextWindow  *int   `json:"context_window"`
+	MaxToolRounds  *int   `json:"max_tool_rounds"`
 }
 
 func (s *Server) handleAdminPutLLM(w http.ResponseWriter, r *http.Request) {
@@ -316,17 +317,18 @@ func (s *Server) handleAdminPutLLM(w http.ResponseWriter, r *http.Request) {
 	if s.rejectIfToolsUnsupported(w, r, body.BaseURL, apiKey, body.Model, body.EnableTools) {
 		return
 	}
-	settings, err := s.db.UpsertOrgLLM(u.OrgID, body.Name, body.BaseURL, body.APIKey, body.Model, body.EnableTools, body.ContextWindow, body.APIKey == "")
+	settings, err := s.db.UpsertOrgLLM(u.OrgID, body.Name, body.BaseURL, body.APIKey, body.Model, body.EnableTools, body.ContextWindow, body.MaxToolRounds, body.APIKey == "")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	s.writeAudit(u.OrgID, u.ID, "org.llm_update", "org_settings", u.OrgID, map[string]any{
-		"llm_name":         settings.LLMName,
-		"llm_base_url":     settings.LLMBaseURL,
-		"llm_model":        settings.LLMModel,
-		"llm_enable_tools": settings.LLMEnableTools,
-		"api_key_updated": body.APIKey != "",
+		"llm_name":            settings.LLMName,
+		"llm_base_url":        settings.LLMBaseURL,
+		"llm_model":           settings.LLMModel,
+		"llm_enable_tools":    settings.LLMEnableTools,
+		"llm_max_tool_rounds": settings.LLMMaxToolRounds,
+		"api_key_updated":     body.APIKey != "",
 	})
 	writeJSON(w, http.StatusOK, settings.Public())
 }

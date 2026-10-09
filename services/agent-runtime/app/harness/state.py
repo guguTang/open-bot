@@ -39,6 +39,7 @@ class AgentState(TypedDict):
     system_prompt: str
     replay_results: dict[str, str]  # tool_call_id -> prior result (safe replay)
     needs_compaction: bool
+    needs_finalize: bool
     reset_seq: int  # model context starts after this journal seq (0 = none)
     compaction_retries: int
     extension_names: list[str]
@@ -47,7 +48,7 @@ class AgentState(TypedDict):
 def initial_state(
     *,
     messages: list[dict[str, Any]] | None = None,
-    max_rounds: int = 12,
+    max_rounds: int = 24,
     langfuse_trace_id: str = "",
     skip_recall: bool = False,
 ) -> AgentState:
@@ -74,6 +75,7 @@ def initial_state(
         "system_prompt": "",
         "replay_results": {},
         "needs_compaction": False,
+        "needs_finalize": False,
         "reset_seq": 0,
         "compaction_retries": 0,
         "extension_names": [],

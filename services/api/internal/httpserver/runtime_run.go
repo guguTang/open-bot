@@ -98,6 +98,7 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 		"messages":        history,
 		"enabled_skills":  enabledSkills,
 		"request_id":      requestID,
+		"max_tool_rounds": s.effectiveMaxToolRounds(userID),
 	}
 	if llmPayload != nil {
 		payloadMap["llm"] = llmPayload

@@ -812,7 +812,7 @@ async def openai_path(
     mcp_extra_tools: list[dict[str, Any]] | None = None,
     root_obs: Any | None = None,
     request: Request | None = None,
-    max_tool_rounds: int = 12,
+    max_tool_rounds: int = 24,
     client: ClientContext | None = None,
     preferred_machine_id: str = "",
     mem_store: MemoryStore | None = None,
