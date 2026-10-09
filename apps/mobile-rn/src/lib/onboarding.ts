@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { readJson, writeJson } from "@/lib/storage";
 
 export type OnboardingOption = {
   letter: string;
@@ -50,7 +50,7 @@ export const ONBOARDING_WELCOME = [
   "你现在最想让我先帮你做什么？",
 ] as const;
 
-const DISMISS_KEY = "openbot_onboarding_dismissed";
+const DISMISS_KEY = "onboarding_dismissed";
 
 /**
  * 引导卡的展示粒度：一个助手一个 key，会话建出来后改用会话 id。
@@ -63,27 +63,13 @@ export function onboardingStorageKey(
   return conversationId ? `conv:${conversationId}` : `pending:${agentId}`;
 }
 
-async function readDismissed(): Promise<Record<string, boolean>> {
-  try {
-    const raw = await SecureStore.getItemAsync(DISMISS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, boolean>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+export function isOnboardingDismissed(key: string): boolean {
+  return Boolean(readJson<Record<string, boolean>>(DISMISS_KEY, {})[key]);
 }
 
-export async function isOnboardingDismissed(key: string): Promise<boolean> {
-  return Boolean((await readDismissed())[key]);
-}
-
-export async function setOnboardingDismissed(key: string): Promise<void> {
-  const map = await readDismissed();
+export function setOnboardingDismissed(key: string): void {
+  const map = readJson<Record<string, boolean>>(DISMISS_KEY, {});
   map[key] = true;
-  try {
-    await SecureStore.setItemAsync(DISMISS_KEY, JSON.stringify(map));
-  } catch {
-    /* 存不进去也只是下次再看到一次引导卡，不阻断流程 */
-  }
+  // 存不进去只是下次再看到一次引导卡，不阻断流程
+  writeJson(DISMISS_KEY, map);
 }

@@ -1,16 +1,17 @@
 import { Button, Card, Chip, ListGroup, Typography } from "heroui-native";
-import * as Linking from "expo-linking";
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, View } from "react-native";
 
 import * as api from "@/api";
-import type { Sandbox, SandboxDirEntry } from "@/api/types";
+import type { SandboxDirEntry } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FormField, SectionTitle } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { WebPreviewModal } from "@/components/chat/WebPreviewModal";
 import { formatDateTime, formatSize } from "@/lib/format";
 import { friendlyOpenError, normalizeWorkspacePath, previewTitleFromPath } from "@/lib/workspace";
+import { useBusy, useSandbox, useSandboxMutations } from "@/queries";
 
 /**
  * 运行环境（高级）。
@@ -89,11 +90,13 @@ function joinPath(base: string, name: string): string {
 export default function SandboxScreen(): JSX.Element {
   const { confirm } = useConfirm();
 
-  const [sandbox, setSandbox] = useState<Sandbox | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  /**
+   * 「跑一条命令 / 读一个文件 / 写一个文件」期间的忙碌态。
+   * 它们不是缓存里的任何一把键（结果只回显在当前面板里），所以留在本地 state；
+   * 但按钮的禁用口径要和原来一样是「整页一起禁」，所以并进下面的 busy。
+   */
+  const [fileBusy, setFileBusy] = useState(false);
 
   const [cmd, setCmd] = useState("echo hi");
   const [execOut, setExecOut] = useState("");
@@ -101,6 +104,11 @@ export default function SandboxScreen(): JSX.Element {
   /** 目录浏览器的路径，始终是「我的文件」下的相对路径，空串代表根目录 */
   const [dirInput, setDirInput] = useState("");
   const [entries, setEntries] = useState<SandboxDirEntry[]>([]);
+  /** 应用内桌面预览；open=false 时不渲染 WebView */
+  const [desktop, setDesktop] = useState<{ open: boolean; url: string }>({
+    open: false,
+    url: "",
+  });
   const [listing, setListing] = useState(false);
 
   const [fileInput, setFileInput] = useState("hello.txt");
@@ -108,81 +116,63 @@ export default function SandboxScreen(): JSX.Element {
   /** 实际读/写过的文件（内部路径），用于展示文件名标题 */
   const [openedFile, setOpenedFile] = useState<string>("");
 
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      // 不带 ensure：单纯打开页面不应该有「把运行环境拉起来」的副作用，
-      // 启动是用户显式点「确保启动」或「打开桌面」才发生的事。
-      setSandbox(await api.getSandbox());
-    } catch (err) {
-      setError(publicError(err, "读取运行环境状态失败"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 运行环境状态是服务端状态；这几个接口都把最新的 Sandbox 原样返回，
+  // 所以成功回调里直接写缓存即可，不用再回打一次 GET。
+  const sandboxQuery = useSandbox();
+  const {
+    ensure: ensureMut,
+    stop: stopMut,
+    checkpoint: checkpointMut,
+    reset: resetMut,
+  } = useSandboxMutations();
+  const sandbox = sandboxQuery.data ?? null;
+  const busy = useBusy(ensureMut, stopMut, checkpointMut, resetMut) || fileBusy;
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  const refresh = useCallback(() => {
-    void load();
-  }, [load]);
+  const refresh = () => {
+    void sandboxQuery.refetch();
+  };
 
   async function ensure(): Promise<void> {
-    setBusy(true);
     setMsg("");
     try {
       // ensureSandbox() 与 GET /v1/sandbox?ensure=1 是同一件事：
       // 幂等——已在运行就直接返回现状，不会重启。语义上等于「确保它开着」。
-      const s = await api.ensureSandbox();
-      setSandbox(s);
+      const s = await ensureMut.mutateAsync();
       setMsg(s.status === "running" ? "运行环境已在运行" : "运行环境状态：" + statusText(s.status));
     } catch (err) {
       setMsg(publicError(err, "启动运行环境失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
   async function openDesktop(): Promise<void> {
-    setBusy(true);
     setMsg("");
     try {
-      const s = await api.ensureSandbox({ desktop: true });
-      setSandbox(s);
+      const s = await ensureMut.mutateAsync({ desktop: true });
       if (!s.desktop_port) {
         setMsg(
           publicLastError(s.last_error) || "桌面预览未就绪，请联系管理员确认桌面环境是否已安装"
         );
         return;
       }
-      // RN 没有内置浏览器（也没有装 WebView），桌面预览只能交给系统浏览器打开。
-      // URL 走 API 反代 + JWT，不暴露真实端口。
+      // 桌面走 API 反代 + JWT，不暴露真实端口。
+      // 本轮引入了 WebView，桌面直接在应用内打开；系统浏览器作为兜底保留
+      // （noVNC 在应用外启动时能复用宿主机已装好的客户端）。
       const url = await api.sandboxDesktopURL({ desktop_token: s.desktop_token });
-      await Linking.openURL(url);
-      setMsg("桌面已在浏览器中打开");
+      setDesktop({ open: true, url });
     } catch (err) {
-      setMsg(publicError(err, "无法在浏览器中打开桌面"));
-    } finally {
-      setBusy(false);
+      setMsg(publicError(err, "无法打开桌面"));
     }
   }
 
   async function checkpoint(): Promise<void> {
-    setBusy(true);
     setMsg("");
     try {
-      const res = await api.checkpointSandbox();
-      setSandbox(res.sandbox);
+      const res = await checkpointMut.mutateAsync();
       // checkpoint_path 是宿主机目录，绝不能整段显示，只取最后一段名字
       const name = previewTitleFromPath(res.checkpoint_path || "");
       setMsg(name ? `已保存快照：${name}` : "已保存快照");
     } catch (err) {
       setMsg(publicError(err, "保存快照失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -195,16 +185,12 @@ export default function SandboxScreen(): JSX.Element {
     });
     if (!ok) return;
 
-    setBusy(true);
     setMsg("");
     try {
-      const s = await api.stopSandbox();
-      setSandbox(s);
+      await stopMut.mutateAsync();
       setMsg("已停止");
     } catch (err) {
       setMsg(publicError(err, "停止运行环境失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -219,11 +205,9 @@ export default function SandboxScreen(): JSX.Element {
     });
     if (!ok) return;
 
-    setBusy(true);
     setMsg("");
     try {
-      const res = await api.resetSandbox();
-      setSandbox(res.sandbox);
+      await resetMut.mutateAsync();
       // 后端 warning 是英文内部文案（含 workspace / container 等实现细节），
       // 这里只保留它的语义：已清空，但快照还在。
       setMsg("已重置：运行文件已全部清空并重建运行环境（系统保留了一份快照）");
@@ -232,8 +216,6 @@ export default function SandboxScreen(): JSX.Element {
       setOpenedFile("");
     } catch (err) {
       setMsg(publicError(err, "重置运行环境失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -243,7 +225,7 @@ export default function SandboxScreen(): JSX.Element {
       setMsg("请填写要执行的命令");
       return;
     }
-    setBusy(true);
+    setFileBusy(true);
     setMsg("");
     setExecOut("");
     try {
@@ -254,7 +236,7 @@ export default function SandboxScreen(): JSX.Element {
     } catch (err) {
       setMsg(publicError(err, "执行命令失败"));
     } finally {
-      setBusy(false);
+      setFileBusy(false);
     }
   }
 
@@ -274,7 +256,7 @@ export default function SandboxScreen(): JSX.Element {
   }
 
   async function openFile(path: string): Promise<void> {
-    setBusy(true);
+    setFileBusy(true);
     setMsg("");
     try {
       const res = await api.readSandboxFile(normalizeWorkspacePath(path));
@@ -285,7 +267,7 @@ export default function SandboxScreen(): JSX.Element {
     } catch (err) {
       setMsg(friendlyOpenError(err));
     } finally {
-      setBusy(false);
+      setFileBusy(false);
     }
   }
 
@@ -295,7 +277,7 @@ export default function SandboxScreen(): JSX.Element {
       setMsg("请填写文件路径");
       return;
     }
-    setBusy(true);
+    setFileBusy(true);
     setMsg("");
     try {
       const res = await api.writeSandboxFile(normalizeWorkspacePath(path), fileContent);
@@ -305,7 +287,7 @@ export default function SandboxScreen(): JSX.Element {
     } catch (err) {
       setMsg(friendlyOpenError(err));
     } finally {
-      setBusy(false);
+      setFileBusy(false);
     }
   }
 
@@ -315,8 +297,8 @@ export default function SandboxScreen(): JSX.Element {
     <ScreenScaffold
       title="运行环境"
       subtitle="助手生成脚本、临时文件与预览时使用的隔离环境"
-      loading={loading}
-      error={error}
+      loading={sandboxQuery.isLoading}
+      error={sandboxQuery.error ? publicError(sandboxQuery.error, "读取运行环境状态失败") : null}
       onRetry={refresh}
       headerRight={
         <Button size="sm" variant="secondary" onPress={refresh}>
@@ -365,7 +347,7 @@ export default function SandboxScreen(): JSX.Element {
                 isDisabled={busy}
                 onPress={() => void openDesktop()}
               >
-                <Button.Label>在浏览器中打开桌面</Button.Label>
+                <Button.Label>打开桌面</Button.Label>
               </Button>
               <Button
                 size="sm"
@@ -571,6 +553,16 @@ export default function SandboxScreen(): JSX.Element {
       </View>
 
       {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
+
+      {desktop.open && desktop.url ? (
+        <WebPreviewModal
+          visible
+          onClose={() => setDesktop({ open: false, url: "" })}
+          mode="url"
+          uri={desktop.url}
+          title="运行环境桌面"
+        />
+      ) : null}
     </ScreenScaffold>
   );
 }

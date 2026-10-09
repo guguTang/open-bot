@@ -43,11 +43,7 @@ export function BotOnboarding({
               {ONBOARDING_WELCOME[0]}
             </Typography.Paragraph>
           </View>
-          <CloseButton
-            isDisabled={disabled}
-            onPress={onDismiss}
-            accessibilityLabel="关闭引导"
-          />
+          <CloseButton isDisabled={disabled} onPress={onDismiss} accessibilityLabel="关闭引导" />
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -69,7 +65,11 @@ export function BotOnboarding({
                       {opt.letter}
                     </Typography.Paragraph>
                   </View>
-                  <Typography.Paragraph className="flex-1 text-sm" weight="medium" numberOfLines={1}>
+                  <Typography.Paragraph
+                    className="flex-1 text-sm"
+                    weight="medium"
+                    numberOfLines={1}
+                  >
                     {opt.title}
                   </Typography.Paragraph>
                 </View>

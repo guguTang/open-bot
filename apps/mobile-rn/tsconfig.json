@@ -4,7 +4,12 @@
     "strict": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@/assets/*": ["./assets/*"]
+      "@/assets/*": ["./assets/*"],
+      // expo-mermaid 把 TS 源码当 types 入口发布，其内部实现对 RN 0.86 / React 19
+      // 不兼容，tsc 会去检查它而报一堆无关错误。把它指到我们的本地声明，
+      // 只保留我们用到的公开 API 的类型。详见 src/types/expo-mermaid.d.ts。
+      // 只影响类型解析，Metro 的模块解析仍走 node_modules，运行时不受影响。
+      "expo-mermaid": ["./src/types/expo-mermaid.d.ts"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "uniwind-env.d.ts"]

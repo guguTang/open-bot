@@ -1,15 +1,15 @@
 import { Button, Card, Chip, Input, Label, ListGroup, TextField, Typography } from "heroui-native";
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 
-import * as api from "@/api";
 import type { BotSecretMeta, BotSecretRequest } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FormField, SectionTitle } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { EmptyState } from "@/components/states";
 import { formatDateTime } from "@/lib/format";
+import { useBotSecretMutations, useBotSecrets, useBusy, useSecretRequests } from "@/queries";
 
 /**
  * 密钥。对齐 Web 端 `settingsTab === "secrets"` + `SecretPromptModal`：
@@ -22,53 +22,41 @@ import { formatDateTime } from "@/lib/format";
  * 明文只在提交的瞬间经过内存，服务端只存密文，列表 API 永不回传。
  */
 
-const POLL_MS = 8000;
-
 function errText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+/** 密钥列表读不出来几乎都是服务端没配加密密钥，错误文案固定给这一句更有指向性。 */
+const LOAD_ERROR_TEXT =
+  "加载密钥失败，请检查服务端是否已配置加密密钥（ENCRYPTION_KEY / BOT_SECRETS_KEY）";
+
 export default function SecretsScreen(): JSX.Element {
   const { confirm } = useConfirm();
 
-  const [secrets, setSecrets] = useState<BotSecretMeta[]>([]);
-  const [requests, setRequests] = useState<BotSecretRequest[]>([]);
   /** 每条待处理请求各自一个输入框的值 */
   const [values, setValues] = useState<Record<string, string>>({});
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
 
   const [name, setName] = useState("api_token");
   const [origin, setOrigin] = useState("https://api.github.com");
   const [value, setValue] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
 
-  /**
-   * 助手随时可能发起新的密钥请求，所以列表要轮询（与 Web 端同频 8s）。
-   * 失败静默：轮询请求报错不该把整页打成错误态，下一轮会自愈。
-   */
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      const [secs, reqs] = await Promise.all([api.listBotSecrets(), api.listBotSecretRequests()]);
-      setSecrets(secs);
-      setRequests(reqs);
-    } catch {
-      setError("加载密钥失败，请检查服务端是否已配置加密密钥（ENCRYPTION_KEY / BOT_SECRETS_KEY）");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 待授权请求由助手随时发起，所以这把键自己轮询（见 useSecretRequests）；
+  // 「已保存」只会被本页的写操作改变，那些操作已经就地失效了它。
+  const secretsQuery = useBotSecrets();
+  const requestsQuery = useSecretRequests();
+  const { create, remove, resolve } = useBotSecretMutations();
+  const busy = useBusy(create, remove, resolve);
+  const secrets = secretsQuery.data ?? [];
+  const requests = requestsQuery.data ?? [];
+  /** 两个列表原来是并排一次取，所以骨架要等齐 —— 这里保持同样口径。 */
+  const loading = secretsQuery.isLoading || requestsQuery.isLoading;
+  const loadError = secretsQuery.error ?? requestsQuery.error;
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    const id = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(id);
-  }, [load]);
+  const refresh = () => {
+    void Promise.all([secretsQuery.refetch(), requestsQuery.refetch()]);
+  };
 
   async function submit(): Promise<void> {
     if (!name.trim()) {
@@ -81,10 +69,9 @@ export default function SecretsScreen(): JSX.Element {
     }
 
     setFormError(null);
-    setBusy(true);
     setMsg("");
     try {
-      await api.createBotSecret({
+      await create.mutateAsync({
         name: name.trim(),
         value,
         origin: origin.trim(),
@@ -93,15 +80,12 @@ export default function SecretsScreen(): JSX.Element {
       // 存完立刻清空输入框：明文不该在屏幕上多留一秒
       setValue("");
       setMsg("已保存");
-      await load();
     } catch (err) {
       setMsg(errText(err, "保存失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function remove(secret: BotSecretMeta): Promise<void> {
+  async function removeSecret(secret: BotSecretMeta): Promise<void> {
     const ok = await confirm({
       title: "删除该密钥？",
       message: `「${secret.name}」将被永久删除，依赖它的助手会立刻拿不到凭据。此操作不可撤销。`,
@@ -111,16 +95,12 @@ export default function SecretsScreen(): JSX.Element {
     });
     if (!ok) return;
 
-    setBusy(true);
     setMsg("");
     try {
-      await api.deleteBotSecret(secret.id);
+      await remove.mutateAsync(secret.id);
       setMsg(`已删除 ${secret.name}`);
-      await load();
     } catch (err) {
       setMsg(errText(err, "删除失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -131,39 +111,34 @@ export default function SecretsScreen(): JSX.Element {
       return;
     }
 
-    setBusy(true);
     setMsg("");
     try {
       // 原样带回助手请求时的元信息，后端据此决定把凭据绑定到哪个会话/助手
-      await api.resolveBotSecretRequest(req.id, {
-        value: secret,
-        name: req.name,
-        origin: req.origin,
-        auth_type: req.auth_type,
-        agent_id: req.agent_id,
+      await resolve.mutateAsync({
+        id: req.id,
+        body: {
+          value: secret,
+          name: req.name,
+          origin: req.origin,
+          auth_type: req.auth_type,
+          agent_id: req.agent_id,
+        },
       });
       setValues((prev) => ({ ...prev, [req.id]: "" }));
       setMsg("已授权，助手可以继续了");
-      await load();
     } catch (err) {
       setMsg(errText(err, "授权失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
   async function dismiss(req: BotSecretRequest): Promise<void> {
-    setBusy(true);
     setMsg("");
     try {
       // dismiss：本次拒绝，请求就此结束，助手会收到「用户未提供」的信号
-      await api.resolveBotSecretRequest(req.id, { dismiss: true });
+      await resolve.mutateAsync({ id: req.id, body: { dismiss: true } });
       setMsg("已忽略");
-      await load();
     } catch (err) {
       setMsg(errText(err, "忽略失败"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -172,15 +147,19 @@ export default function SecretsScreen(): JSX.Element {
       title="密钥"
       subtitle="助手可用的凭据"
       loading={loading}
-      error={error}
+      error={loadError ? LOAD_ERROR_TEXT : null}
       empty={
         requests.length === 0 && secrets.length === 0 ? (
-          <EmptyState icon="key-outline" title="还没有密钥" hint="在下方添加一个助手需要访问的凭据" />
+          <EmptyState
+            icon="key-outline"
+            title="还没有密钥"
+            hint="在下方添加一个助手需要访问的凭据"
+          />
         ) : undefined
       }
-      onRetry={() => void load()}
+      onRetry={refresh}
       headerRight={
-        <Button size="sm" variant="secondary" onPress={() => void load()}>
+        <Button size="sm" variant="secondary" onPress={refresh}>
           <Button.Label>刷新</Button.Label>
         </Button>
       }
@@ -274,7 +253,7 @@ export default function SecretsScreen(): JSX.Element {
                     size="sm"
                     variant="danger-soft"
                     isDisabled={busy}
-                    onPress={() => void remove(s)}
+                    onPress={() => void removeSecret(s)}
                   >
                     <Button.Label>删除</Button.Label>
                   </Button>

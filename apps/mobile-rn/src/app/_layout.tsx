@@ -1,9 +1,12 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { HeroUINativeProvider, type HeroUINativeConfig } from "heroui-native";
 import type { JSX } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { queryClient } from "@/queries/client";
+import { RealtimeProvider } from "@/providers/realtime";
 import { SecretPromptProvider } from "@/providers/secretPrompt";
 import { SessionProvider } from "@/providers/session";
 
@@ -27,20 +30,28 @@ export default function RootLayout(): JSX.Element {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <HeroUINativeProvider config={config}>
-        <SessionProvider>
-          {/* ConfirmProvider 必须挂 —— 所有破坏性操作都走 useConfirm()，缺了会直接 throw */}
-          <ConfirmProvider>
-            {/* 密钥授权是全局的：助手随时可能发起请求，和当前在哪个页面无关 */}
-            <SecretPromptProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="login" />
-                <Stack.Screen name="chats" />
-                <Stack.Screen name="collab" />
-                <Stack.Screen name="settings" />
-              </Stack>
-            </SecretPromptProvider>
-          </ConfirmProvider>
-        </SessionProvider>
+        {/* QueryClientProvider 必须包在 SessionProvider 里面：
+            查询要用 JWT，登录态要先就位。 */}
+        <QueryClientProvider client={queryClient}>
+          <SessionProvider>
+            {/* ConfirmProvider 必须挂 —— 所有破坏性操作都走 useConfirm()，缺了会直接 throw */}
+            <ConfirmProvider>
+              {/* 全局实时通道：在线绿点、presence、跨端表情、群聊他人回复 */}
+              <RealtimeProvider>
+                {/* 密钥授权是全局的：助手随时可能发起请求，和当前在哪个页面无关 */}
+                <SecretPromptProvider>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="chats" />
+                    <Stack.Screen name="collab" />
+                    <Stack.Screen name="settings" />
+                    <Stack.Screen name="train" />
+                  </Stack>
+                </SecretPromptProvider>
+              </RealtimeProvider>
+            </ConfirmProvider>
+          </SessionProvider>
+        </QueryClientProvider>
       </HeroUINativeProvider>
     </GestureHandlerRootView>
   );

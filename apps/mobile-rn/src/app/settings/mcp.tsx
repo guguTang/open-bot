@@ -1,13 +1,13 @@
 import { Button, Card, Chip, RadioGroup, Typography } from "heroui-native";
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 
-import * as api from "@/api";
 import type { MCPServer, MCPServerInput } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { useBusy, useMcpMutations, useMcpServers } from "@/queries";
 
 /**
  * MCP Client server 管理。行为对齐 `apps/web/src/App.tsx` 的 `settingsTab === "mcp"` 分区。
@@ -39,10 +39,6 @@ type FieldErrors = {
 export default function McpSettingsScreen(): JSX.Element {
   const { confirm } = useConfirm();
 
-  const [servers, setServers] = useState<MCPServer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [testResult, setTestResult] = useState("");
 
@@ -51,27 +47,17 @@ export default function McpSettingsScreen(): JSX.Element {
   const [errors, setErrors] = useState<FieldErrors>({});
 
   // 手动调用工具
-  const [callBusy, setCallBusy] = useState(false);
   const [callServerId, setCallServerId] = useState("");
   const [callToolName, setCallToolName] = useState("echo");
   const [callArgs, setCallArgs] = useState('{"message":"hello"}');
   const [callResult, setCallResult] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      setError(null);
-      setServers(await api.listMCPServers());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+  // 列表与写操作在查询层；「测试连接 / 手动调用」不改状态，只借它们的 pending 禁用按钮。
+  const serversQuery = useMcpServers();
+  const { create, update, remove, test, callTool } = useMcpMutations();
+  const busy = useBusy(create, update, remove, test);
+  const callBusy = callTool.isPending;
+  const servers = serversQuery.data ?? [];
 
   function patch(next: Partial<MCPServerInput>): void {
     setForm((prev) => ({ ...prev, ...next }));
@@ -90,10 +76,9 @@ export default function McpSettingsScreen(): JSX.Element {
     setErrors(nextErrors);
     if (nextErrors.name || nextErrors.command || nextErrors.url) return;
 
-    setBusy(true);
     setMsg("");
     try {
-      let args: string[] = [];
+      let args: string[];
       try {
         const parsed: unknown = JSON.parse(argsText || "[]");
         if (!Array.isArray(parsed)) throw new Error("args 须为 JSON 数组");
@@ -102,7 +87,7 @@ export default function McpSettingsScreen(): JSX.Element {
         throw new Error(err instanceof Error ? err.message : "args JSON 无效");
       }
 
-      await api.createMCPServer({
+      await create.mutateAsync({
         name,
         transport: form.transport,
         // command / url 都照原样提交，由后端按 transport 取用 —— 与 Web 端一致。
@@ -115,28 +100,21 @@ export default function McpSettingsScreen(): JSX.Element {
       setForm(emptyForm);
       setArgsText("[]");
       setErrors({});
-      await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
     }
   }
 
   async function toggle(s: MCPServer, enabled: boolean): Promise<void> {
-    setBusy(true);
     setMsg("");
     try {
-      await api.updateMCPServer(s.id, { enabled });
-      await load();
+      await update.mutateAsync({ id: s.id, body: { enabled } });
     } catch (err) {
       setMsg(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function remove(s: MCPServer): Promise<void> {
+  async function removeServer(s: MCPServer): Promise<void> {
     const ok = await confirm({
       title: "删除该 MCP server？",
       message: "助手将立即失去该 server 提供的工具。",
@@ -145,26 +123,21 @@ export default function McpSettingsScreen(): JSX.Element {
       destructive: true,
     });
     if (!ok) return;
-    setBusy(true);
     setMsg("");
     try {
-      await api.deleteMCPServer(s.id);
+      await remove.mutateAsync(s.id);
       // 手动调用面板正选中它的话要同步清掉，否则下一次调用会指向已删除的 server。
       if (callServerId === s.id) setCallServerId("");
-      await load();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
     }
   }
 
   async function runTest(s: MCPServer): Promise<void> {
-    setBusy(true);
     setTestResult("");
     setMsg("");
     try {
-      const r = await api.testMCPServer(s.id);
+      const r = await test.mutateAsync(s.id);
       if (r.ok) {
         // 新服务端回 tool_names，旧服务端只回 tools，这里两边都兜住。
         const names = r.tool_names || (r.tools || []).map((t) => t.name);
@@ -175,13 +148,10 @@ export default function McpSettingsScreen(): JSX.Element {
       }
     } catch (err) {
       setTestResult(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function callTool(): Promise<void> {
-    setCallBusy(true);
+  async function callToolManually(): Promise<void> {
     setCallResult("");
     try {
       let args: Record<string, unknown>;
@@ -191,7 +161,7 @@ export default function McpSettingsScreen(): JSX.Element {
         throw new Error("arguments 须为 JSON 对象");
       }
       if (!callServerId) throw new Error("请选择 server");
-      const r = await api.mcpCallTool({
+      const r = await callTool.mutateAsync({
         server_id: callServerId,
         tool: callToolName,
         arguments: args,
@@ -199,8 +169,6 @@ export default function McpSettingsScreen(): JSX.Element {
       setCallResult(r.error ? `错误: ${r.error}` : r.text || JSON.stringify(r, null, 2));
     } catch (err) {
       setCallResult(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCallBusy(false);
     }
   }
 
@@ -208,9 +176,9 @@ export default function McpSettingsScreen(): JSX.Element {
     <ScreenScaffold
       title="MCP"
       subtitle="外部工具服务"
-      loading={loading}
-      error={error}
-      onRetry={() => void load()}
+      loading={serversQuery.isLoading}
+      error={serversQuery.error?.message || "加载失败"}
+      onRetry={() => void serversQuery.refetch()}
     >
       <Typography.Paragraph color="muted">
         配置 MCP Client servers（stdio / sse / http）。启用后，在 LLM 开启 tools 时会注入工具；本地
@@ -273,7 +241,12 @@ export default function McpSettingsScreen(): JSX.Element {
                 >
                   <Button.Label>{s.enabled ? "停用" : "启用"}</Button.Label>
                 </Button>
-                <Button size="sm" variant="danger" isDisabled={busy} onPress={() => void remove(s)}>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  isDisabled={busy}
+                  onPress={() => void removeServer(s)}
+                >
                   <Button.Label>删除</Button.Label>
                 </Button>
               </View>
@@ -394,7 +367,7 @@ export default function McpSettingsScreen(): JSX.Element {
             multiline
           />
 
-          <Button isDisabled={callBusy || !callServerId} onPress={() => void callTool()}>
+          <Button isDisabled={callBusy || !callServerId} onPress={() => void callToolManually()}>
             <Button.Label>{callBusy ? "调用中…" : "调用"}</Button.Label>
           </Button>
 

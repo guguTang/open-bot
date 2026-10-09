@@ -20,6 +20,15 @@ type SessionState = {
   restoring: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   signUp: (username: string, password: string) => Promise<void>;
+  /**
+   * 接管一份已经在外部拿到的会话（OIDC 回调换回来的 token+user）。
+   *
+   * 单独提供这个口子，是因为 OIDC 流程在 `lib/oidc.ts` 里自己完成了
+   * code → token 交换，登录页拿到的只是结果。如果那里直接调 `setSession`，
+   * 内存里的 `user` 不会更新，顶栏会一直显示「?」、返回根路由又会被弹回登录页，
+   * 直到重启 App 才对。
+   */
+  adoptSession: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -67,19 +76,29 @@ export function SessionProvider({ children }: { children: ReactNode }): JSX.Elem
     [router]
   );
 
+  const adoptSession = useCallback(
+    async (token: string, nextUser: User) => {
+      await setSession(token, nextUser);
+      setUser(nextUser);
+      router.replace("/chats");
+    },
+    [router]
+  );
+
   const value = useMemo<SessionState>(
     () => ({
       user,
       restoring,
       signIn: (username, password) => apply(username, password, "in"),
       signUp: (username, password) => apply(username, password, "up"),
+      adoptSession,
       signOut: async () => {
         await clearSession();
         setUser(null);
         router.replace("/login");
       },
     }),
-    [user, restoring, apply, router]
+    [user, restoring, apply, adoptSession, router]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

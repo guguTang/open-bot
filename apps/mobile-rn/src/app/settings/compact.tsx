@@ -1,13 +1,11 @@
 import { Button, ListGroup, Typography } from "heroui-native";
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
-import * as api from "@/api";
-import type { CompactConfig, LLMConnection } from "@/api/types";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { EmptyState } from "@/components/states";
 import { formatSize } from "@/lib/format";
+import { useCompactConfig, useLlmConnections } from "@/queries";
 
 /**
  * 压缩策略（只读）。
@@ -31,36 +29,24 @@ type CompactRow = {
 };
 
 export default function CompactScreen(): JSX.Element {
-  const [cfg, setCfg] = useState<CompactConfig | null>(null);
-  const [defaultLLM, setDefaultLLM] = useState<LLMConnection | null>(null);
-  const [loading, setLoading] = useState(true);
+  // fetchCompactConfig 内部已经把失败兜底成 null（不抛），所以这里永远不会进错误态：
+  // 读不到时页面走 empty 态提示「确认服务端已启动」，和 Web 端同一套降级。
+  const compactQuery = useCompactConfig();
+  // 默认 LLM 只影响「上下文窗口来源」这一行的说明文案，拿不到就不显示，
+  // 不应该让一个纯装饰性的附加请求把整页打成错误态。
+  const llmQuery = useLlmConnections();
+  const cfg = compactQuery.data ?? null;
+  const defaultLLM = llmQuery.data?.find((c) => c.is_default) ?? null;
+  /**
+   * 这里用 isFetching 而不是 isLoading：原来每次刷新都会先置 loading=true，
+   * 也就是「重新取数期间也回骨架」。isFetching 保持同样的观感，
+   * 且这两把键没有轮询，回骨架只发生在首屏和手动刷新。
+   */
+  const loading = compactQuery.isFetching || llmQuery.isFetching;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    // fetchCompactConfig 内部已经把失败兜底成 null（不抛），所以这里永远不会进 catch；
-    // 读不到时页面走 empty 态提示「确认服务端已启动」，和 Web 端同一套降级。
-    setCfg(await api.fetchCompactConfig());
-
-    // 默认 LLM 只影响「上下文窗口来源」这一行的说明文案，拿不到就不显示，
-    // 不应该让一个纯装饰性的附加请求把整页打成错误态。
-    try {
-      const list = await api.listLLMConnections();
-      setDefaultLLM(list.find((c) => c.is_default) ?? null);
-    } catch {
-      setDefaultLLM(null);
-    }
-
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  const refresh = useCallback(() => {
-    void load();
-  }, [load]);
+  const refresh = () => {
+    void Promise.all([compactQuery.refetch(), llmQuery.refetch()]);
+  };
 
   const rows: CompactRow[] = [];
 

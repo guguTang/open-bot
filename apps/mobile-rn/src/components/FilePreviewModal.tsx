@@ -18,13 +18,14 @@ type Props = {
 /**
  * 文件预览。
  *
- * Web 端这里用 `<iframe srcdoc>` + sandbox 渲染 HTML（见 `HtmlPreviewModal.tsx`），
- * 但 RN **没有 WebView**（`react-native-webview` 不在依赖里，加它会显著拖慢首屏）。
- * 所以移动端一律降级成「等宽纯文本源码 + 复制」：
+ * 这里只负责**纯文本**：等宽源码 + 复制。
  * - 文本文件：完全可用
- * - HTML / SVG：只能看源码，不渲染
+ * - HTML / SVG：要看渲染效果请走 `chat/WebPreviewModal.tsx`（WebView + 消毒）
  *
- * 这是有意的能力裁剪，不是遗漏。真要渲染得引入 WebView 方案，代价与收益不匹配。
+ * 早期版本没有 WebView，HTML 一律降级成看源码；本轮已引入
+ * `react-native-webview`，但分工保持不变：文本走这里（快、无原生开销），
+ * 渲染走 WebPreviewModal（贵、需要消毒）。别把两者合并成一个组件，
+ * 否则每看一个 txt 都要付 WebView 的启动成本。
  */
 export function FilePreviewModal({
   open,

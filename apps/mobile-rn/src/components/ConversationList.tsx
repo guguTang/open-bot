@@ -160,7 +160,9 @@ export function ConversationList({
 
   return (
     <View className="gap-3">
-      {error ? <ErrorAlert title="加载失败" description={error} onRetry={() => void load()} /> : null}
+      {error ? (
+        <ErrorAlert title="加载失败" description={error} onRetry={() => void load()} />
+      ) : null}
 
       {rows.length === 0 ? (
         (empty ?? (

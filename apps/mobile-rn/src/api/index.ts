@@ -7,15 +7,28 @@ import type {
   Agent,
   AgentBusMessage,
   AgentInput,
+  AgentPatch,
+  AgentSkill,
   AttachmentMeta,
+  AutoReviewRule,
+  BotLesson,
+  BotPresenceEvent,
   BotSecretMeta,
   BotSecretRequest,
   BotSecretResolveInput,
   Channel,
+  CloneAgentInput,
+  CloneAgentResult,
   CompactConfig,
   Conversation,
+  CreateFeedbackInput,
+  HostConfirmPayload,
+  InboundHook,
   LLMConnection,
   LLMInput,
+  LLMToolsProbeResult,
+  LessonPatch,
+  LessonStatus,
   ListMessagesResult,
   Machine,
   MachineInput,
@@ -23,6 +36,9 @@ import type {
   MCPServerInput,
   MCPToolEntry,
   Message,
+  MessageFeedback,
+  OIDCConfig,
+  ReactionUpdatedEvent,
   Routine,
   RoutineInput,
   RoutineRun,
@@ -33,7 +49,10 @@ import type {
   StatusEvent,
   StreamHandlers,
   User,
+  UserSettings,
 } from "./types";
+
+export { BOT_ONLINE_THRESHOLD_SEC, NEGATIVE_REACTION_EMOJIS, REACTION_EMOJIS } from "./types";
 
 export class AuthError extends Error {
   constructor(message: string) {
@@ -236,6 +255,12 @@ export type SendMessageExtras = {
   attachments?: AttachmentMeta[];
   /** 群聊 @点名：指定本轮由哪些助手应答 */
   agentIds?: string[];
+  /** 引用回复：被回复消息 id */
+  replyToId?: string;
+  /** 线程回复的根消息 id */
+  threadRootId?: string;
+  /** DM 内 @其他 Bot 的转交上下文 */
+  handoffContext?: unknown;
 };
 
 /**
@@ -255,6 +280,9 @@ export async function sendMessageStream(
   const body: Record<string, unknown> = { content };
   if (extras?.attachments?.length) body.attachments = extras.attachments;
   if (extras?.agentIds?.length) body.agent_ids = extras.agentIds;
+  if (extras?.replyToId) body.reply_to_id = extras.replyToId;
+  if (extras?.threadRootId) body.thread_root_id = extras.threadRootId;
+  if (extras?.handoffContext) body.handoff_context = extras.handoffContext;
   // 客户端环境信封：让助手知道「我的手机」而不是笼统的 web 客户端
   body.client = detectClientContext();
 
@@ -644,5 +672,442 @@ export async function heartbeatMachine(id: string): Promise<Machine> {
 export async function deleteMachine(id: string): Promise<void> {
   await request(`/v1/machines/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+
+/* ------------------------------------------------------------------ OIDC（Casdoor） */
+
+/** 探测后端是否启用了 OIDC。未启用时登录页不显示第三方入口。 */
+export async function fetchOIDCConfig(): Promise<OIDCConfig> {
+  return request("/v1/auth/oidc/config", { auth: false });
+}
+
+/**
+ * 取 Casdoor 授权地址。`redirect=0` 表示让前端自己接管跳转
+ * （浏览器 Web 端走 `/auth/callback`，RN 走 `WebBrowser.openAuthSessionAsync`）。
+ */
+export async function startOIDCLogin(): Promise<{ authorize_url: string; state: string }> {
+  return request("/v1/auth/oidc/start?redirect=0", { auth: false });
+}
+
+/** 用授权码换本地 JWT。 */
+export async function exchangeOIDCCode(
+  code: string,
+  state: string
+): Promise<{ token: string; user: User }> {
+  return request("/v1/auth/oidc/exchange", {
+    method: "POST",
+    auth: false,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, state }),
+  });
+}
+
+/* ------------------------------------------------------------------ 助手：克隆 / 岗位 / 引导 */
+
+export async function cloneAgent(
+  id: string,
+  body: CloneAgentInput = {}
+): Promise<CloneAgentResult> {
+  return request(`/v1/agents/${encodeURIComponent(id)}/clone`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listAgentSkills(agentId: string): Promise<AgentSkill[]> {
+  const data = await request<{ skills?: AgentSkill[] }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/skills`
+  );
+  return data.skills ?? [];
+}
+
+export async function setAgentSkill(
+  agentId: string,
+  name: string,
+  enabled: boolean
+): Promise<AgentSkill> {
+  return request(`/v1/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function replaceAgentSkills(
+  agentId: string,
+  enabled: string[]
+): Promise<AgentSkill[]> {
+  const data = await request<{ skills?: AgentSkill[] }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/skills`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    }
+  );
+  return data.skills ?? [];
+}
+
+/**
+ * 首次引导卡落库：把 A–E 预设（或用户自定义方向）写进 Bot 的岗位描述 / 人设 / 默认技能。
+ * Web 端在发第一条消息**之前**先调这里，RN 早期版本漏了这一步，
+ * 导致手机上选的引导方向根本没进 Bot 配置。
+ */
+export async function applyAgentOnboarding(
+  agentId: string,
+  body: { focus?: string; description?: string; system_prompt?: string; skills?: string[] | null }
+): Promise<Agent> {
+  const data = await request<{ agent?: Agent }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/onboarding`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  return (data.agent ?? data) as Agent;
+}
+
+/* ------------------------------------------------------------------ 技能包 */
+
+/**
+ * 上传 zip 技能包。与 Web 端同一个 `/v1/skills/upload` 端点，
+ * 区别只在 multipart 字段名：zip 走 `archive`，正文走 JSON。
+ * RN 侧 file 传本地 uri（`filePart` 负责包成 `{uri,name,type}`）。
+ */
+export async function uploadSkillPackage(file: {
+  uri: string;
+  name: string;
+  mime: string;
+}): Promise<Skill> {
+  const form = new FormData();
+  form.append("archive", filePart(file.uri, file.name || "skill.zip", file.mime));
+  return upload("/v1/skills/upload", form);
+}
+
+/** 导出技能包为 zip，返回可下载的 URL（鉴权头由调用方补）。 */
+export async function exportSkillZipURL(name: string): Promise<string> {
+  return `${API_BASE}/v1/skills/${encodeURIComponent(name)}/export`;
+}
+
+/* ------------------------------------------------------------------ LLM tools 探测 */
+
+export async function probeLLMTools(body: {
+  base_url?: string;
+  api_key?: string;
+  model?: string;
+  connection_id?: string;
+}): Promise<LLMToolsProbeResult> {
+  return request("/v1/llm/probe-tools", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function formatLLMToolsProbe(result: LLMToolsProbeResult): string {
+  const modeLabel: Record<string, string> = {
+    native: "原生 function calling",
+    markup: "文本工具协议",
+    forced_only: "仅强制 tool_choice",
+    none: "不支持 tools",
+    error: "检测失败",
+  };
+  const label = modeLabel[result.mode] || result.mode;
+  const head = result.can_enable_tools ? `可用（${label}）` : `不可用（${label}）`;
+  return [head, result.detail, result.hint].filter(Boolean).join(" ");
+}
+
+/* ------------------------------------------------------------------ 附件地址 */
+
+export function isImageAttachmentMime(mime?: string | null): boolean {
+  return Boolean(mime && /^image\//i.test(mime.trim()));
+}
+
+/** 相对路径补全成绝对 API 地址（不带任何凭据）。 */
+export function absolutizeApiUrl(url: string): string {
+  const u = (url || "").trim();
+  if (!u) return "";
+  if (/^(https?:|file:|data:)/i.test(u)) return u;
+  if (u.startsWith("/")) return `${API_BASE}${u}`;
+  return `${API_BASE}/${u}`;
+}
+
+/**
+ * 附件的 `<Image>` 可直接用的地址。附件 GET 需要鉴权，这里把 JWT 拼到 query
+ * （与 Web 端一致），因为 RN 的 `Image` 没法注入请求头。
+ */
+export async function attachmentDisplayUrl(
+  attOrUrl: { url?: string } | string | null | undefined
+): Promise<string | null> {
+  const raw = typeof attOrUrl === "string" ? attOrUrl : attOrUrl?.url;
+  if (!raw || !raw.trim()) return null;
+  const trimmed = raw.trim();
+  if (/^(file:|data:)/i.test(trimmed)) return trimmed;
+  const abs = absolutizeApiUrl(trimmed);
+  if (!abs) return null;
+  if (/[?&](access_token|token)=/.test(abs)) return abs;
+  const token = await getToken();
+  if (!token) return abs;
+  const sep = abs.includes("?") ? "&" : "?";
+  return `${abs}${sep}access_token=${encodeURIComponent(token)}`;
+}
+
+/** 去掉凭据的地址，可安全展示 / 复制给用户。 */
+export function attachmentCopyUrl(
+  attOrUrl: { url?: string } | string | null | undefined
+): string | null {
+  const raw = typeof attOrUrl === "string" ? attOrUrl : attOrUrl?.url;
+  if (!raw || !raw.trim()) return null;
+  const trimmed = raw.trim();
+  if (/^(file:|data:)/i.test(trimmed)) return trimmed;
+  return absolutizeApiUrl(trimmed.split(/[?#]/)[0] || trimmed);
+}
+
+export function isAttachmentAuthUrl(url: string): boolean {
+  return /\/v1\/conversations\/[^/]+\/attachments\/[^/?#]+/i.test(url || "");
+}
+
+function extFromNameOrMime(name?: string, mime?: string): string {
+  const fromName = (name || "").match(/\.([a-z0-9]{1,8})$/i)?.[1];
+  if (fromName) return fromName.toLowerCase();
+  const map: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "image/bmp": "bmp",
+  };
+  return map[(mime || "").toLowerCase()] || "png";
+}
+
+/** `image-YYYYMMDD-HHmmss` + 原扩展名。 */
+export function imageDownloadFilename(name?: string, mime?: string, date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const stamp =
+    `image-${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}` +
+    `-${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`;
+  return `${stamp}.${extFromNameOrMime(name, mime)}`;
+}
+
+/** 产物文件下载地址（鉴权头由 `lib/download.ts` 补，不走 query）。 */
+export function sandboxFileDownloadURL(path: string, opts?: { agent_id?: string }): string {
+  const q = new URLSearchParams({ path });
+  if (opts?.agent_id) q.set("agent_id", opts.agent_id);
+  return `${API_BASE}/v1/sandbox/files/download?${q.toString()}`;
+}
+
+/* ------------------------------------------------------------------ 表情回应 */
+
+export async function toggleReaction(
+  messageId: string,
+  emoji: string
+): Promise<ReactionUpdatedEvent> {
+  return request(`/v1/messages/${encodeURIComponent(messageId)}/reactions`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emoji }),
+  });
+}
+
+export async function deleteReaction(
+  messageId: string,
+  emoji: string
+): Promise<ReactionUpdatedEvent> {
+  return request(
+    `/v1/messages/${encodeURIComponent(messageId)}/reactions?emoji=${encodeURIComponent(emoji)}`,
+    { method: "DELETE" }
+  );
+}
+
+/* ------------------------------------------------------------------ 聊天全局 WS */
+
+/** `/v1/events/ws`：在线绿点、presence、跨端消息、反应变更。与单会话 SSE 互补。 */
+export async function chatEventsWebSocketUrl(): Promise<string> {
+  const t = (await getToken()) ?? "";
+  const wsBase = toWebSocketBase(API_BASE);
+  const q = t ? `?token=${encodeURIComponent(t)}` : "";
+  return `${wsBase}/v1/events/ws${q}`;
+}
+
+/* ------------------------------------------------------------------ 本机操作确认 */
+
+export async function createHostConfirm(
+  conversationId: string,
+  body: HostConfirmPayload
+): Promise<Message> {
+  return request(`/v1/conversations/${conversationId}/host-confirms`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function decideHostConfirm(
+  conversationId: string,
+  messageId: string,
+  status: "allowed" | "denied"
+): Promise<Message> {
+  return request(
+    `/v1/conversations/${conversationId}/host-confirms/${encodeURIComponent(messageId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }
+  );
+}
+
+/* ------------------------------------------------------------------ 中断标记 */
+
+export const STOP_MARKER_TEXT = "（已停止）";
+
+export function isStopMarkerContent(content: string | undefined | null): boolean {
+  return /^[（(]?\s*已停止\s*[）)]?$/u.test((content ?? "").trim());
+}
+
+/** 只落库不触发回复（DM 内 @其他 Bot 转交时，用来在原会话留痕）。 */
+export async function persistConversationMessage(
+  conversationId: string,
+  content: string
+): Promise<Message> {
+  const data = await request<{ message?: Message }>(
+    `/v1/conversations/${conversationId}/messages`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, persist_only: true }),
+    }
+  );
+  return (data.message ?? data) as Message;
+}
+
+/* ------------------------------------------------------------------ 入站 Hook */
+
+export async function listInboundHooks(): Promise<InboundHook[]> {
+  const data = await request<{ hooks?: InboundHook[] }>("/v1/inbound-hooks");
+  return data.hooks ?? [];
+}
+
+export async function createInboundHook(body: {
+  provider: string;
+  label?: string;
+  secret?: string;
+}): Promise<InboundHook> {
+  return request("/v1/inbound-hooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteInboundHook(id: string): Promise<void> {
+  await request(`/v1/inbound-hooks/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+/* ------------------------------------------------------------------ 本机管理（补齐） */
+
+export async function updateMachine(
+  id: string,
+  body: { label?: string; exec_policy?: "allow" | "ask" | "deny" | string }
+): Promise<Machine> {
+  const data = await request<{ machine?: Machine }>(`/v1/machines/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return (data.machine ?? data) as Machine;
+}
+
+export async function updateMachineLabel(id: string, label: string): Promise<Machine> {
+  return updateMachine(id, { label });
+}
+
+/* ------------------------------------------------------------------ 用户设置（审核与时区） */
+
+export async function fetchUserSettings(): Promise<UserSettings> {
+  return request("/v1/me/settings");
+}
+
+export async function updateUserSettings(body: {
+  timezone?: string;
+  auto_review_enabled?: boolean;
+  auto_review_rules?: AutoReviewRule[];
+}): Promise<UserSettings> {
+  return request("/v1/me/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/* ------------------------------------------------------------------ 消息反馈与训练 */
+
+export async function createMessageFeedback(body: CreateFeedbackInput): Promise<MessageFeedback> {
+  return request("/v1/message-feedbacks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listAgentFeedbacks(agentId: string): Promise<MessageFeedback[]> {
+  const data = await request<{ feedbacks?: MessageFeedback[] }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/feedbacks`
+  );
+  return data.feedbacks ?? [];
+}
+
+export async function listAgentLessons(
+  agentId: string,
+  status?: LessonStatus | string
+): Promise<BotLesson[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  const data = await request<{ lessons?: BotLesson[] }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/lessons${q}`
+  );
+  return data.lessons ?? [];
+}
+
+export async function listActiveAgentLessons(agentId: string): Promise<BotLesson[]> {
+  const data = await request<{ lessons?: BotLesson[] }>(
+    `/v1/agents/${encodeURIComponent(agentId)}/lessons/active`
+  );
+  return data.lessons ?? [];
+}
+
+export async function updateLesson(id: string, body: LessonPatch): Promise<BotLesson> {
+  return request(`/v1/lessons/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deleteLesson(id: string): Promise<void> {
+  await request(`/v1/lessons/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export type {
+  AgentPatch,
+  AgentSkill,
+  AutoReviewRule,
+  BotLesson,
+  BotPresenceEvent,
+  CloneAgentInput,
+  CloneAgentResult,
+  CreateFeedbackInput,
+  HostConfirmPayload,
+  InboundHook,
+  LLMToolsProbeResult,
+  LessonPatch,
+  LessonStatus,
+  MessageFeedback,
+  OIDCConfig,
+  ReactionUpdatedEvent,
+  UserSettings,
+};
 
 export type { StatusEvent };

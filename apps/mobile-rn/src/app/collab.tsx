@@ -1,5 +1,6 @@
 import { Button, Card, Chip, ListGroup, Typography } from "heroui-native";
 import type { JSX } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 
@@ -9,6 +10,9 @@ import { AgentAvatar } from "@/components/AgentAvatar";
 import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { EmptyState } from "@/components/states";
+import { errText } from "@/lib/errors";
+import { useAgents, useChannels } from "@/queries";
+import { qk } from "@/queries/client";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
 
 /**
@@ -26,13 +30,14 @@ import { formatDateTime, formatRelativeTime } from "@/lib/format";
  */
 
 /** 断线时的轮询间隔，与 Web 端一致 */
+/** 稳定空数组引用，避免 `?? []` 让下游 memo 每次渲染都失效。 */
+const EMPTY_INBOX: AgentBusMessage[] = [];
+const EMPTY_AGENTS: Agent[] = [];
+const EMPTY_CHANNELS: Channel[] = [];
+
 const POLL_MS = 3000;
 /** WS 断开后的重连间隔；太短会在服务端重启时形成重连风暴 */
 const RECONNECT_MS = 3000;
-
-function errText(err: unknown, fallback: string): string {
-  return err instanceof Error && err.message ? err.message : fallback;
-}
 
 /** 未读 = read_at 为空；与后端 `MarkAgentMessageRead` 的判定口径保持一致 */
 function isUnread(m: AgentBusMessage): boolean {
@@ -55,12 +60,32 @@ function agentName(id: string, agents: Agent[]): string {
 }
 
 export default function CollabScreen(): JSX.Element {
-  const [messages, setMessages] = useState<AgentBusMessage[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * 收件箱数据交给 TanStack Query，WS 推送改成「让缓存失效」。
+   *
+   * 原来是 WS 直接往本地数组里塞消息，断线再起 3 秒轮询补 —— 两套机制都要
+   * 自己管定时器、去重、存活标记。现在：
+   * - 真相只有一份（query 缓存），WS 和轮询都只是「触发重取」的信号
+   * - 轮询由 `refetchInterval` 声明式接管：WS 活着就返回 false（不轮询），
+   *   断了自动恢复，不需要 startPoll / stopPoll 一对手写定时器
+   */
   const [live, setLive] = useState(false);
+  const queryClient = useQueryClient();
+  const inboxQuery = useQuery({
+    queryKey: qk.inbox,
+    // 包一层：listAgentBusInbox 带可选筛选参数，直接传会被当成 queryFn 的
+    // context 参数（AbortSignal / queryKey），类型对不上。
+    queryFn: () => api.listAgentBusInbox(),
+    refetchInterval: () => (live ? false : POLL_MS),
+  });
+  const messages = inboxQuery.data ?? EMPTY_INBOX;
+  const agentsQuery = useAgents();
+  const channelsQuery = useChannels();
+  const agents = useMemo(() => agentsQuery.data ?? EMPTY_AGENTS, [agentsQuery.data]);
+  const channels = useMemo(() => channelsQuery.data ?? EMPTY_CHANNELS, [channelsQuery.data]);
+
+  const loading = inboxQuery.isLoading;
+  const error = inboxQuery.error ? errText(inboxQuery.error, "加载协作收件箱失败") : null;
   const [msg, setMsg] = useState("");
 
   // 发送表单
@@ -76,77 +101,27 @@ export default function CollabScreen(): JSX.Element {
   const [memberPick, setMemberPick] = useState<Record<string, string>>({});
 
   const wsRef = useRef<WebSocket | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 卸载后禁止任何 setState / 重连，避免对已销毁组件排队异步回调 */
   const aliveRef = useRef(true);
 
-  /** 合并新消息：按 id 去重并保持「priority 在前、时间倒序」，与后端列表排序一致 */
-  const merge = useCallback((prev: AgentBusMessage[], incoming: AgentBusMessage[]) => {
-    const map = new Map(prev.map((m) => [m.id, m]));
-    for (const m of incoming) map.set(m.id, { ...map.get(m.id), ...m });
-    return [...map.values()].sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority ? -1 : 1;
-      return (Date.parse(b.created_at) || 0) - (Date.parse(a.created_at) || 0);
-    });
-  }, []);
-
   /** 拉到未读就顺手标记已读：收件箱打开着，未读标记留着没有意义 */
-  const markRead = useCallback(async (m: AgentBusMessage) => {
-    if (!isUnread(m)) return;
-    // 先本地消掉红点，再发请求：等网络往返会让未读标记「闪」一下
-    setMessages((prev) =>
-      prev.map((x) => (x.id === m.id ? { ...x, read_at: new Date().toISOString() } : x))
-    );
-    try {
-      await api.markAgentBusRead(m.id);
-    } catch {
-      // 标记失败不影响展示：下轮轮询会再试一次
-    }
-  }, []);
-
-  const load = useCallback(
-    async (silent = false) => {
-      if (!aliveRef.current) return;
+  const markRead = useCallback(
+    async (m: AgentBusMessage) => {
+      if (!isUnread(m)) return;
+      // 先在缓存里消掉红点，再发请求：等网络往返会让未读标记「闪」一下。
+      // 失败不回滚 —— 下次重取会以服务端为准，强行回滚反而会闪回来。
+      queryClient.setQueryData<AgentBusMessage[]>(qk.inbox, (prev) =>
+        prev?.map((x) => (x.id === m.id ? { ...x, read_at: new Date().toISOString() } : x))
+      );
       try {
-        if (!silent) setError(null);
-        const [msgs, agentList, channelList] = await Promise.all([
-          api.listAgentBusInbox(),
-          api.listAgents(),
-          api.listChannels().catch(() => [] as Channel[]),
-        ]);
-        if (!aliveRef.current) return;
-        setMessages((prev) => merge(prev, msgs));
-        setAgents(agentList);
-        setChannels(channelList);
-        // 首次拿到助手后给发送表单一个默认来源，省掉一次手动选择
-        setFromAgent((prev) => prev || agentList[0]?.id || "");
-        for (const m of msgs) {
-          if (isUnread(m)) void markRead(m);
-        }
-      } catch (err) {
-        if (!aliveRef.current) return;
-        // 轮询失败保持静默：不该让一个瞬时网络抖动把整页打成错误态
-        if (!silent) setError(errText(err, "加载协作收件箱失败"));
-      } finally {
-        if (aliveRef.current) setLoading(false);
+        await api.markAgentBusRead(m.id);
+      } catch {
+        // 标记失败不影响展示：下轮轮询会再试一次
       }
     },
-    [merge, markRead]
+    [queryClient]
   );
-
-  /** WS 就绪时停轮询；断线时立刻起 3 秒轮询兜底 */
-  const stopPoll = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  const startPoll = useCallback(() => {
-    if (pollRef.current) return;
-    pollRef.current = setInterval(() => void load(true), POLL_MS);
-  }, [load]);
 
   /**
    * 建立 WS 连接。用具名函数表达式自引用来安排重连，避免 `connect` ↔ `scheduleReconnect`
@@ -192,9 +167,9 @@ export default function CollabScreen(): JSX.Element {
 
         ws.onopen = () => {
           if (!aliveRef.current) return;
+          // 连上就置位：refetchInterval 的闭包读到它，自动停轮询，
+          // 不需要手写 startPoll / stopPoll 一对定时器
           setLive(true);
-          // 连上就停轮询，避免同一条消息被两条通道重复推送
-          stopPoll();
         };
 
         ws.onmessage = (event) => {
@@ -208,9 +183,11 @@ export default function CollabScreen(): JSX.Element {
             return;
           }
           if (parsed.type === "agent_message" && parsed.message) {
-            const incoming = parsed.message;
-            setMessages((prev) => merge(prev, [incoming]));
-            if (isUnread(incoming)) void markRead(incoming);
+            // 不再直接往本地数组塞消息，统一走「让缓存失效 → 重取」。
+            // 这样 WS 推来的消息和轮询拉到的消息走同一条路径，
+            // 不会出现两条通道各维护一份列表导致顺序和去重不一致。
+            void queryClient.invalidateQueries({ queryKey: qk.inbox });
+            if (isUnread(parsed.message)) void markRead(parsed.message);
           }
         };
 
@@ -221,26 +198,23 @@ export default function CollabScreen(): JSX.Element {
         ws.onclose = () => {
           if (wsRef.current === ws) wsRef.current = null;
           if (!aliveRef.current) return;
+          // 断线：refetchInterval 自动恢复轮询，同时安排重连
           setLive(false);
-          // 断线：立刻起轮询兜底，同时安排重连
-          startPoll();
           scheduleReconnect();
         };
       })();
     },
-    [markRead, merge, startPoll, stopPoll]
+    [markRead, queryClient]
   );
 
   useEffect(() => {
     aliveRef.current = true;
 
-    // 首屏：先拉一次拿历史，再建立实时通道
-    void load();
+    // 首屏由 useQuery 自己拉取；这里只负责建立实时通道
     connect();
 
     return () => {
       aliveRef.current = false;
-      stopPoll();
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current);
         reconnectRef.current = null;
@@ -256,7 +230,7 @@ export default function CollabScreen(): JSX.Element {
         wsRef.current = null;
       }
     };
-  }, [connect, load, stopPoll]);
+  }, [connect]);
 
   async function send(): Promise<void> {
     const text = body.trim();
@@ -285,7 +259,7 @@ export default function CollabScreen(): JSX.Element {
       setBody("");
       // priority 只在服务端异步唤醒助手，发完立刻拉一次让用户看到自己的消息
       setMsg(priority ? "已投递，正在唤醒对方助手…" : "已投递");
-      await load(true);
+      await inboxQuery.refetch();
     } catch (err) {
       setMsg(errText(err, "投递失败"));
     } finally {
@@ -305,7 +279,7 @@ export default function CollabScreen(): JSX.Element {
       await api.addChannelMember(channelIdToAdd, agentId);
       setMemberPick((prev) => ({ ...prev, [channelIdToAdd]: "" }));
       setMsg("已加入成员");
-      await load(true);
+      await inboxQuery.refetch();
     } catch (err) {
       setMsg(errText(err, "添加成员失败"));
     } finally {
@@ -321,15 +295,19 @@ export default function CollabScreen(): JSX.Element {
       subtitle={live ? "实时连接中" : "连接中断，正在轮询"}
       loading={loading}
       error={error}
-      onRetry={() => void load()}
+      onRetry={() => void inboxQuery.refetch()}
       headerRight={
-        <Button size="sm" variant="secondary" onPress={() => void load()}>
+        <Button size="sm" variant="secondary" onPress={() => void inboxQuery.refetch()}>
           <Button.Label>刷新</Button.Label>
         </Button>
       }
       empty={
         messages.length === 0 ? (
-          <EmptyState icon="chatbubbles-outline" title="还没有协作消息" hint="在下方选一个助手，往总线上投递一条消息" />
+          <EmptyState
+            icon="chatbubbles-outline"
+            title="还没有协作消息"
+            hint="在下方选一个助手，往总线上投递一条消息"
+          />
         ) : undefined
       }
     >
