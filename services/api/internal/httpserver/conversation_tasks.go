@@ -360,31 +360,47 @@ func (s *Server) saveAssistantThreaded(userID, conversationID, agentID, text, re
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
+	rid := strings.TrimSpace(requestID)
+	// Durable harness may already have projected this turn via journal
+	// commit_assistant(project=True). Reuse that row so one user turn cannot
+	// produce two identical assistant messages in DB/UI.
+	if rid != "" {
+		if existing, err := s.db.FindAssistantByRequestID(conversationID, rid); err == nil && existing != nil {
+			s.emitAssistantSaved(emit, conversationID, existing)
+			s.publishConversationMessage(userID, existing)
+			return existing
+		}
+	}
 	msg, err := s.db.AddMessageWithOpts(conversationID, "assistant", text, db.AddMessageOpts{
 		AgentID:      agentID,
 		ReplyToID:    strings.TrimSpace(replyToID),
 		ThreadRootID: strings.TrimSpace(threadRootID),
-		RequestID:    strings.TrimSpace(requestID),
+		RequestID:    rid,
 	})
 	if err != nil {
 		log.Printf("save assistant conv=%s: %v", conversationID, err)
 		return nil
 	}
-	if emit != nil {
-		meta := map[string]any{
-			"phase":           "message_saved",
-			"message_id":      msg.ID,
-			"conversation_id": conversationID,
-			"reply_to_id":     msg.ReplyToID,
-			"thread_root_id":  msg.ThreadRootID,
-		}
-		if msg.RequestID != "" {
-			meta["request_id"] = msg.RequestID
-		}
-		emit("meta", meta)
-	}
+	s.emitAssistantSaved(emit, conversationID, msg)
 	s.publishConversationMessage(userID, msg)
 	return msg
+}
+
+func (s *Server) emitAssistantSaved(emit func(event string, data any), conversationID string, msg *db.Message) {
+	if emit == nil || msg == nil {
+		return
+	}
+	meta := map[string]any{
+		"phase":           "message_saved",
+		"message_id":      msg.ID,
+		"conversation_id": conversationID,
+		"reply_to_id":     msg.ReplyToID,
+		"thread_root_id":  msg.ThreadRootID,
+	}
+	if msg.RequestID != "" {
+		meta["request_id"] = msg.RequestID
+	}
+	emit("meta", meta)
 }
 
 // cancelTasksAndNotify stops queued and running work for this conversation.

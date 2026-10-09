@@ -271,6 +271,39 @@ func (d *DB) GetMessage(userID, conversationID, messageID string) (*Message, err
 	return &m, nil
 }
 
+// FindAssistantByRequestID returns the newest assistant message for a runtime
+// request_id in this conversation, if any. Used so the HTTP finish path can
+// reuse a row already projected by the durable harness journal (same request_id)
+// instead of inserting a duplicate identical reply.
+func (d *DB) FindAssistantByRequestID(conversationID, requestID string) (*Message, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	requestID = strings.TrimSpace(requestID)
+	if conversationID == "" || requestID == "" {
+		return nil, ErrNotFound
+	}
+	row := d.SQL.QueryRow(
+		`SELECT id, conversation_id, role, content, COALESCE(agent_id,''),
+		        COALESCE(reply_to_id,''), COALESCE(thread_root_id,''), created_at,
+		        COALESCE(agent_message_id, ''), COALESCE(request_id, '')
+		 FROM messages
+		 WHERE conversation_id = $1 AND request_id = $2 AND role = 'assistant'
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		conversationID, requestID,
+	)
+	var m Message
+	if err := row.Scan(
+		&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.AgentID, &m.ReplyToID, &m.ThreadRootID,
+		&m.CreatedAt, &m.AgentMessageID, &m.RequestID,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &m, nil
+}
+
 // ResolveThreadRoot returns the thread_root_id for a new reply to parent.
 // If parent is already in a thread, inherit; otherwise parent becomes the root.
 // Deprecated for chat send: handleSendMessage no longer auto-assigns thread_root
