@@ -4,7 +4,7 @@
 
 ## 已拍板架构
 
-- **前端**：React + TypeScript + Vite；桌面 Tauri 2；移动一期 Capacitor
+- **前端**：React + TypeScript + Vite；桌面 Tauri 2；移动两条路线并行——`apps/mobile` 为 Capacitor 壳（复用 web），`apps/mobile-rn` 为 React Native + Expo + HeroUI Native 原生实现
 - **产品 API**：Go（鉴权、会话、SSE、多助手、LLM 连接）
 - **Agent 运行时**：Python（Skills、Memory、Compaction、OpenAI 兼容）
 - **存储**：PostgreSQL（用户 / LLM 连接 / 会话消息 / 助手人设）
@@ -84,6 +84,21 @@ make dev-mobile-ios  # 打开 Xcode（需本机 Xcode + CocoaPods）
 - 说明见 [apps/mobile/README.md](apps/mobile/README.md)；本轮不做上架、推送证书、原生插件大集合
 
 
+### 移动端（React Native / Expo + HeroUI Native，`apps/mobile-rn`）
+
+与上面的 Capacitor 壳并存的两条路线：这条是原生实现，自己写 UI，只复用后端契约。
+
+```bash
+cp apps/mobile-rn/.env.example apps/mobile-rn/.env   # 真机必须改局域网 IP
+make dev-mobile-rn      # 等价于 cd apps/mobile-rn && pnpm start
+```
+
+- **流式**用 `expo/fetch`（RN 内置 fetch 拿不到 `response.body`），SSE 解析器逐行移植自 Web 端
+- Token 存 `expo-secure-store`（Keychain / Keystore）
+- iOS 模拟器需完整 Xcode；没装 Xcode 就用真机 + Expo Go
+- 说明见 [apps/mobile-rn/README.md](apps/mobile-rn/README.md)
+
+
 ### 沙箱电脑（Phase 1）
 
 ```bash
@@ -122,6 +137,7 @@ make sandbox-image   # 构建 openbot-sandbox:dev
 - Routines：cron 例行任务（API 内嵌调度 + Web 设置页）
 - 桌面壳：Tauri 2（`apps/desktop`，复用 `apps/web`；`make dev-desktop`）
 - 移动壳：Capacitor 7（`apps/mobile`，复用 `apps/web/dist`；`make sync-mobile` / `make dev-mobile-ios`）
+- 移动端（原生）：Expo + HeroUI Native（`apps/mobile-rn`）：登录、助手列表、SSE 流式聊天页
 
 ### 快速验收
 

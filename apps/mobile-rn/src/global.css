@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "uniwind";
+
+@import "heroui-native/styles";
+/* Vibrant：默认主题把 soft 前景色往 foreground 混 20%，品牌色会发灰；
+   这张表只混 8%，让 accent-soft / danger-soft 保持饱和度。 */
+@import "heroui-native/styles/vibrant";
+
+/* End-user path: heroui-native lives in the project's node_modules, one
+   level up from this src/global.css file. */
+@source '../node_modules/heroui-native/lib';
+
+/* ── 圆角尺度 ───────────────────────────────────────────────────────
+   HeroUI 的圆角全部由 --radius 派生，显式写出来是为了让下面几个数字
+   在代码里可查，而不是靠记忆：
+     --radius-xl    12px  内联块 / chip / 输入框内的小圆角
+     --radius-2xl   16px  消息气泡、手搓的小方块
+     --radius-3xl   24px  Card / ListGroup（surface__root 用的就是这个）
+   手搓容器请用这些 token，不要再写死 px，否则和 Card 的圆角对不上。 */
+@theme {
+  --radius: 0.5rem;
+}
+
+/* ── 品牌色 ─────────────────────────────────────────────────────────
+   HeroUI 默认 accent 是 oklch(0.6204 0.195 253.83)，偏青的通用蓝，
+   用它的产品放在一起分不出彼此。这里保持**同样的明度**（对比度不冒险），
+   只把色相推到靛紫并略降彩度，避开「又一个 SaaS 蓝」，
+   同时保留库已验证过的前景对比度。 */
+@layer theme {
+  :root {
+    @variant light {
+      --accent: oklch(0.615 0.176 272);
+    }
+
+    @variant dark {
+      --accent: oklch(0.615 0.176 272);
+    }
+  }
+}
