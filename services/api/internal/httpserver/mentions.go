@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -212,16 +213,92 @@ func groupForcedAgentSet(content string, members []string, agents []*db.Agent) m
 	return out
 }
 
+// groupParticipationRoleHint is a short role line for the roster / PASS prompt.
+func groupParticipationRoleHint(a *db.Agent) string {
+	if a == nil {
+		return ""
+	}
+	if d := strings.TrimSpace(a.Description); d != "" {
+		return d
+	}
+	sp := strings.TrimSpace(a.SystemPrompt)
+	if sp == "" {
+		return ""
+	}
+	line := strings.TrimSpace(strings.Split(sp, "\n")[0])
+	runes := []rune(line)
+	if len(runes) > 80 {
+		return string(runes[:80]) + "…"
+	}
+	return line
+}
+
+// formatGroupMemberRoster lists channel peers (name + role) for participation prompts.
+func formatGroupMemberRoster(members []string, agents []*db.Agent, selfID string) string {
+	byID := map[string]*db.Agent{}
+	for _, a := range agents {
+		if a != nil {
+			byID[a.ID] = a
+		}
+	}
+	var lines []string
+	for _, id := range members {
+		a := byID[id]
+		name := id
+		role := ""
+		if a != nil {
+			if n := strings.TrimSpace(a.Name); n != "" {
+				name = n
+			}
+			role = groupParticipationRoleHint(a)
+		}
+		tag := ""
+		if id == selfID {
+			tag = "（你）"
+		}
+		if role != "" {
+			lines = append(lines, fmt.Sprintf("- %s%s：%s", name, tag, role))
+		} else {
+			lines = append(lines, fmt.Sprintf("- %s%s", name, tag))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // groupParticipationExtraSystem is appended in channel turns so bots can stay silent.
 // forced: this agent was @mentioned or @everyone — should reply, not PASS.
-func groupParticipationExtraSystem(forced bool) string {
+// Non-forced prompts name this bot's role and inject a short member roster so
+// specialty bots prefer [PASS] when another peer is the better fit.
+func groupParticipationExtraSystem(forced bool, self *db.Agent, members []string, agents []*db.Agent) string {
 	if forced {
 		return "【群聊参与】你在群聊中，且本回合被用户点名（@你或 @everyone/@all）。请直接回复用户，不要输出 [PASS]，也不要只打招呼敷衍。"
 	}
-	return "【群聊参与】你在群聊中。同一条用户消息也会发给其他成员，各自独立决定是否发言。\n" +
-		"- 若内容与你的身份/专长相关，或用户在征求每位成员（例如让大家介绍自己、轮流表态），请正常回复。\n" +
+	selfID := ""
+	selfName := "你"
+	selfRole := ""
+	if self != nil {
+		selfID = self.ID
+		if n := strings.TrimSpace(self.Name); n != "" {
+			selfName = n
+		}
+		selfRole = groupParticipationRoleHint(self)
+	}
+	roster := formatGroupMemberRoster(members, agents, selfID)
+	roleLine := fmt.Sprintf("你的身份是「%s」。\n", selfName)
+	if selfRole != "" {
+		roleLine = fmt.Sprintf("你的身份是「%s」：%s\n", selfName, selfRole)
+	}
+	body := "【群聊参与】你在群聊中。同一条用户消息会并行发给多名成员，各自独立决定是否发言（看不到彼此本回合的回复）。\n" +
+		roleLine
+	if roster != "" {
+		body += "群成员：\n" + roster + "\n"
+	}
+	body += "决策规则（严格执行）：\n" +
+		"- 仅当用户请求明显属于你的职责/专长，或需要每位成员表态（如自我介绍、轮流发言），才正常回复。\n" +
+		"- 若问题更适合其他专长成员（例如写诗/文案→写作类；写代码/排障→编程类；查资料→研究类），即使你也能勉强回答，也请只输出一行：[PASS]\n" +
 		"- 若明显在对别人说话、或与你无关，请只输出一行：[PASS]\n" +
 		"- 输出 [PASS] 时不要附加任何其他文字。"
+	return body
 }
 
 // isGroupPassReply reports a structured silence / no-op reply from a group candidate.

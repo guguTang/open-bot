@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tangxin/open-bot/services/api/internal/db"
@@ -190,4 +191,64 @@ func TestResolveGroupSendTargetsReplyParentNotHardFilter(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("reply-parent without @ still all candidates, got %#v", got)
 	}
+}
+
+func TestGroupParticipationExtraSystem(t *testing.T) {
+	members := []string{"coding", "writing"}
+	agents := []*db.Agent{
+		{ID: "coding", Name: "码农助手", Description: "负责写代码与排障"},
+		{ID: "writing", Name: "写手", Description: "负责写东西与改稿"},
+	}
+	forced := groupParticipationExtraSystem(true, agents[0], members, agents)
+	if !containsAll(forced, "点名", "不要输出 [PASS]") {
+		t.Fatalf("forced prompt weak: %q", forced)
+	}
+	if containsAll(forced, "群成员") {
+		t.Fatalf("forced prompt should not need roster, got %q", forced)
+	}
+
+	coding := groupParticipationExtraSystem(false, agents[0], members, agents)
+	writing := groupParticipationExtraSystem(false, agents[1], members, agents)
+	for _, prompt := range []string{coding, writing} {
+		if !containsAll(prompt, "[PASS]", "群成员", "写诗/文案", "并行") {
+			t.Fatalf("non-forced missing PASS/roster cues: %q", prompt)
+		}
+	}
+	if !containsAll(coding, "码农助手", "负责写代码与排障", "写手") {
+		t.Fatalf("coding prompt should name self + peers: %q", coding)
+	}
+	if !containsAll(writing, "写手", "负责写东西与改稿", "码农助手") {
+		t.Fatalf("writing prompt should name self + peers: %q", writing)
+	}
+	if !containsAll(coding, "（你）") || !containsAll(writing, "（你）") {
+		t.Fatalf("roster should mark self")
+	}
+}
+
+func TestStampEmitAgentID(t *testing.T) {
+	var gotEvent string
+	var gotData map[string]any
+	emit := func(event string, data any) {
+		gotEvent = event
+		gotData = data.(map[string]any)
+	}
+	wrapped := stampEmitAgentID(emit, "agent-1")
+	wrapped("token", map[string]any{"text": "hi"})
+	if gotEvent != "token" || gotData["text"] != "hi" || gotData["agent_id"] != "agent-1" {
+		t.Fatalf("expected stamped token, got event=%s data=%#v", gotEvent, gotData)
+	}
+	// Do not overwrite an existing agent_id.
+	wrapped("token", map[string]any{"text": "x", "agent_id": "other"})
+	if gotData["agent_id"] != "other" {
+		t.Fatalf("should preserve existing agent_id, got %#v", gotData)
+	}
+}
+
+func containsAll(s string, parts ...string) bool {
+	for _, p := range parts {
+		if !strings.Contains(s, p) {
+			return false
+		}
+	}
+	return true
 }
