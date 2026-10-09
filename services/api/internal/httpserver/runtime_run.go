@@ -59,7 +59,7 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 	if err != nil {
 		return nil, err
 	}
-	history := historyForRuntime(msgs)
+	history := historyForRuntime(msgs, agentID, speakerNamesForHistory(s.db, msgs, agentID, ""))
 
 	var llmPayload map[string]any
 	conn, err := s.db.ResolveEffectiveLLM(userID)

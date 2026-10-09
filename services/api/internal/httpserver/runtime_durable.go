@@ -146,3 +146,18 @@ func (s *Server) handleConversationApprove(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// shouldSteerBusyHarness reports whether a new user message should be injected
+// into an already-busy durable harness thread.
+//
+// Same agent (DM, or @same member in a group) → steer/inbox.
+// Different @-target while another member is busy → false (start a new run).
+// Empty activeAgentID keeps legacy/DM busy-steer working when agent was not stamped.
+func shouldSteerBusyHarness(activeAgentID, targetAgentID string) bool {
+	active := strings.TrimSpace(activeAgentID)
+	target := strings.TrimSpace(targetAgentID)
+	if active == "" || target == "" {
+		return true
+	}
+	return active == target
+}

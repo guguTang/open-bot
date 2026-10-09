@@ -42,3 +42,31 @@ func TestMentionIncludesEveryone(t *testing.T) {
 		t.Fatal("should not match")
 	}
 }
+
+func TestResolveMentionedAgentsExactWinsOverSubstring(t *testing.T) {
+	// AlphaBot listed first; exact name "Bot" must win over substring Contains.
+	members := []string{"alpha-bot", "bot"}
+	agents := []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaBot"},
+		{ID: "bot", Name: "Bot"},
+	}
+	got := resolveMentionedAgents([]string{"Bot"}, members, agents)
+	if len(got) != 1 || got[0] != "bot" {
+		t.Fatalf("exact name should win, got %#v", got)
+	}
+	// Substring that matches two names without an exact hit: only unique contains resolves.
+	got2 := resolveMentionedAgents([]string{"Helper"}, members, []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaHelper"},
+		{ID: "bot", Name: "BetaHelper"},
+	})
+	if len(got2) != 0 {
+		t.Fatalf("ambiguous substring should not resolve, got %#v", got2)
+	}
+	got3 := resolveMentionedAgents([]string{"Helper"}, members, []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaHelper"},
+		{ID: "bot", Name: "Bot"},
+	})
+	if len(got3) != 1 || got3[0] != "alpha-bot" {
+		t.Fatalf("unique substring should resolve, got %#v", got3)
+	}
+}

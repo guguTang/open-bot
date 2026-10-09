@@ -301,13 +301,16 @@ function escapeRegExp(s: string): string {
 
 function matchAgentByMentionToken(tok: string, list: Agent[]): Agent | undefined {
   const lower = tok.toLowerCase();
-  return list.find(
-    (a) =>
-      a.id.toLowerCase() === lower ||
-      a.name.toLowerCase() === lower ||
-      a.name.toLowerCase().includes(lower) ||
-      a.id.toLowerCase().startsWith(lower),
-  );
+  // Exact id/name before prefix/substring so overlapping names do not steal the hit.
+  const exactId = list.find((a) => a.id.toLowerCase() === lower);
+  if (exactId) return exactId;
+  const exactName = list.find((a) => a.name.toLowerCase() === lower);
+  if (exactName) return exactName;
+  const idPrefix = list.find((a) => a.id.toLowerCase().startsWith(lower));
+  if (idPrefix) return idPrefix;
+  const namePrefix = list.find((a) => a.name.toLowerCase().startsWith(lower));
+  if (namePrefix) return namePrefix;
+  return list.find((a) => a.name.toLowerCase().includes(lower));
 }
 
 /** First @Bot in text (skips @everyone / @routine: / @mcp:). */
@@ -2447,13 +2450,7 @@ export default function App() {
           everyone = true;
           continue;
         }
-        const hit = groupMentionMembers.find(
-          (a) =>
-            a.id.toLowerCase() === lower ||
-            a.name.toLowerCase() === lower ||
-            a.name.toLowerCase().includes(lower) ||
-            a.id.toLowerCase().startsWith(lower),
-        );
+        const hit = matchAgentByMentionToken(tok, groupMentionMembers);
         if (hit && !seen.has(hit.id)) {
           seen.add(hit.id);
           ids.push(hit.id);

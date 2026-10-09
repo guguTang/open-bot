@@ -86,7 +86,7 @@ func TestHistoryForRuntimeIncludesHostConfirm(t *testing.T) {
 		{Role: "assistant", Content: "被拒绝了"},
 		{Role: "user", Content: "再试一次"},
 	}
-	out := historyForRuntime(msgs)
+	out := historyForRuntime(msgs, "", nil)
 	if len(out) != 4 {
 		t.Fatalf("len=%d %#v", len(out), out)
 	}

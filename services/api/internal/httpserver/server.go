@@ -1232,6 +1232,8 @@ type sendBody struct {
 	PersistOnly bool `json:"persist_only"`
 	// HandoffContext is injected into runtime history (not stored) when @-handing off from another bot thread.
 	HandoffContext []runtimeMsg `json:"handoff_context"`
+	// WhenBusy: follow_up (default) | steer | reject — used when a durable run is already active.
+	WhenBusy string `json:"when_busy"`
 }
 
 type runtimeMsg struct {
@@ -1475,6 +1477,55 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
+
+	// Busy durable run: place inbox (follow_up/steer/reject) instead of a parallel run.
+	// Group channels share one conversation_id — only steer when the busy thread's
+	// agent is this turn's owner; @another member starts a normal new run.
+	if runtimeDurableEnabled() {
+		_, activeReq, activeStatus, activeAgentID, aerr := s.db.ActiveHarnessThreadForConversation(conv.ID)
+		if aerr == nil && strings.TrimSpace(activeReq) != "" && activeStatus != "" &&
+			shouldSteerBusyHarness(activeAgentID, targetAgents[0]) {
+			mode := strings.TrimSpace(body.WhenBusy)
+			if mode == "" {
+				mode = "follow_up"
+			}
+			if mode == "reject" {
+				emit("error", map[string]string{"message": "busy_rejected"})
+				emit("done", map[string]any{"ok": false, "error": "busy_rejected", "when_busy": "reject"})
+				return
+			}
+			out, code, serr := s.postRuntimeJSON(runCtx, "/v1/runs/steer", map[string]any{
+				"conversation_id": conv.ID,
+				"request_id":      activeReq,
+				"text":            storedContent,
+				"mode":            mode,
+				"when_busy":       mode,
+			})
+			if serr != nil {
+				emit("error", map[string]string{"message": serr.Error()})
+				emit("done", map[string]any{"ok": false})
+				return
+			}
+			if code < 200 || code >= 300 {
+				msg := "steer_failed"
+				if e, ok := out["error"].(string); ok && e != "" {
+					msg = e
+				}
+				emit("error", map[string]string{"message": msg})
+				emit("done", map[string]any{"ok": false, "when_busy": mode})
+				return
+			}
+			emit("meta", map[string]any{
+				"phase":      "inbox_queued",
+				"when_busy":  mode,
+				"request_id": activeReq,
+			})
+			emit("inbox_updated", map[string]any{"when_busy": mode, "request_id": activeReq})
+			emit("done", map[string]any{"ok": true, "inbox": true, "when_busy": mode, "request_id": activeReq})
+			return
+		}
+	}
+
 	cancelled := false
 	for i, agentID := range targetAgents {
 		if err := runCtx.Err(); err != nil {
@@ -1505,13 +1556,14 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		var history []runtimeMsg
 		runtimeContent := storedContent
+		agentNames := speakerNamesForHistory(s.db, msgs, agentID, agentName)
 		if threadRootID != "" {
 			// Quote injection is model-only and done by the runtime from
 			// reply_to_content (apply_reply_quote); do not also prefix here or
 			// the model would see the quote twice. Stored content stays raw.
-			history = historyForThreadRuntime(msgs, threadRootID)
+			history = historyForThreadRuntime(msgs, threadRootID, agentID, agentNames)
 		} else {
-			history = historyForRuntime(msgs)
+			history = historyForRuntime(msgs, agentID, agentNames)
 		}
 		if len(body.HandoffContext) > 0 {
 			history = mergeHandoffContext(history, body.HandoffContext)

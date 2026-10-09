@@ -233,8 +233,10 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		return "", "", err
 	}
 	systemPrompt := ""
+	agentName := ""
 	if agent, aerr := s.db.GetAgent(task.UserID, task.AgentID); aerr == nil {
 		systemPrompt = agent.SystemPrompt
+		agentName = agent.Name
 	}
 	instruction := fmt.Sprintf(
 		"你有一条尚未交付的后台任务，必须在本轮用工具真正做完，不能只回复承诺或「稍后」。\n目标：\n%s\n完成后：用简短中文报告结果；若改了文件请给出可打开的链接。若做不到，说明卡在哪一步。",
@@ -265,7 +267,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		"user_id":         task.UserID,
 		"channel_id":      conv.ChannelID,
 		"system_prompt":   systemPrompt,
-		"messages":        historyForRuntime(msgs),
+		"messages":        historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
 		"enabled_skills":  enabledSkills,
 		"max_tool_rounds": 16,
 		"request_id":      task.ID,

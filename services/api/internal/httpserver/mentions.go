@@ -37,7 +37,7 @@ func parseMentionTokens(content string) []string {
 }
 
 // resolveMentionedAgents maps @tokens / explicit ids to channel member agent ids.
-// Preference: exact agent id, then case-insensitive name, then id prefix.
+// Preference: exact agent id, then case-insensitive name, then id/name prefix, then unique name substring.
 func resolveMentionedAgents(tokens []string, members []string, agents []*db.Agent) []string {
 	if len(tokens) == 0 || len(members) == 0 {
 		return nil
@@ -103,7 +103,9 @@ func resolveMentionedAgents(tokens []string, members []string, agents []*db.Agen
 			}
 			continue
 		}
-		// Fuzzy: name contains or id prefix
+		// Fuzzy after exact id/name failed: prefer id prefix, then name prefix,
+		// then a unique name substring — avoid first-hit Contains stealing another member.
+		var idPrefix, namePrefix, nameContains []string
 		for _, a := range agents {
 			if a == nil {
 				continue
@@ -111,10 +113,28 @@ func resolveMentionedAgents(tokens []string, members []string, agents []*db.Agen
 			if _, ok := memberSet[a.ID]; !ok {
 				continue
 			}
-			if strings.HasPrefix(strings.ToLower(a.ID), lower) ||
-				strings.Contains(strings.ToLower(a.Name), lower) {
-				add(a.ID)
+			lid := strings.ToLower(a.ID)
+			lname := strings.ToLower(strings.TrimSpace(a.Name))
+			switch {
+			case strings.HasPrefix(lid, lower):
+				idPrefix = append(idPrefix, a.ID)
+			case lname != "" && strings.HasPrefix(lname, lower):
+				namePrefix = append(namePrefix, a.ID)
+			case lname != "" && strings.Contains(lname, lower):
+				nameContains = append(nameContains, a.ID)
 			}
+		}
+		switch {
+		case len(idPrefix) > 0:
+			for _, id := range idPrefix {
+				add(id)
+			}
+		case len(namePrefix) > 0:
+			for _, id := range namePrefix {
+				add(id)
+			}
+		case len(nameContains) == 1:
+			add(nameContains[0])
 		}
 	}
 	return out
