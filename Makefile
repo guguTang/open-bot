@@ -91,8 +91,31 @@ dev-runtime:
 
 # API (air hot reload, dev-api-air) + agent-runtime (uvicorn --reload) in one terminal.
 # Does not start web, admin, or the desktop app. Ctrl+C stops both.
+# FREE_PORTS=1 时先关掉占用 API_PORT / RUNTIME_PORT 的监听进程，再启动。
+# 例: make dev-backend FREE_PORTS=1
 dev-backend:
 	@set -m; \
+	case "$(FREE_PORTS)" in \
+	  1|true|yes|on) \
+	    echo "dev-backend: freeing :$(API_PORT) and :$(RUNTIME_PORT)"; \
+	    $(MAKE) --no-print-directory stop-api stop-runtime; \
+	    i=0; \
+	    while [ $$i -lt 25 ]; do \
+	      left=""; \
+	      for port in $(API_PORT) $(RUNTIME_PORT); do \
+	        p=$$(lsof -tiTCP:$$port -sTCP:LISTEN 2>/dev/null || true); \
+	        if [ -n "$$p" ]; then left="$$left $$p"; fi; \
+	      done; \
+	      left=$$(echo $$left | xargs); \
+	      if [ -z "$$left" ]; then break; fi; \
+	      if [ $$i -eq 15 ]; then \
+	        echo "dev-backend: ports still busy, kill -9 $$left"; \
+	        kill -9 $$left 2>/dev/null || true; \
+	      fi; \
+	      i=$$((i+1)); \
+	      sleep 0.1; \
+	    done ;; \
+	esac; \
 	cleanup() { \
 	  trap - INT TERM EXIT; \
 	  kill -TERM -$$pid_api -$$pid_rt 2>/dev/null || true; \
