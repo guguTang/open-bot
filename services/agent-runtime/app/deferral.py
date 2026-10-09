@@ -24,7 +24,8 @@ HOST_LIST_TOOLS = frozenset({
 # Fed back into the same run. Not shown to the user and not matched against
 # the model's previous sentence.
 CONTINUE_WORK = (
-    "未完成：立刻调工具做完并给可打开链接；无需改文件则一句答完，勿说稍后。"
+    "未完成：立刻调工具做完并给可打开链接；过程勿啰嗦解说；"
+    "无需改文件则一句答完，勿说稍后。"
 )
 
 CONTINUE_HOST_DELETE = (

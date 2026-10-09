@@ -80,6 +80,34 @@ def early_ack_visible(text: str, *, max_chars: int = _EARLY_ACK_MAX) -> str:
     return brief
 
 
+# Project first early ack, then at most every N tool-LLM rounds (阶段性进展).
+STAGE_PROJECT_EVERY = 4
+
+
+def should_project_tool_partial(
+    *,
+    already_projected: bool,
+    tool_llm_rounds: int,
+    every: int = STAGE_PROJECT_EVERY,
+) -> bool:
+    """Whether this tool-turn assistant_partial should hit chat.
+
+    - First visible ack: always project (brief early ack).
+    - Later turns: project only every ``every`` tool-LLM rounds so the user
+      gets occasional short stage updates, not a monologue per tool call.
+    ``tool_llm_rounds`` is 1-based count of LLM turns that emitted tool_calls
+    in this run (including the current one).
+    """
+    if tool_llm_rounds < 1:
+        return False
+    if not already_projected:
+        return True
+    if every <= 0:
+        return False
+    # After the first ack (round 1), next projections at 1+every, 1+2*every, …
+    return tool_llm_rounds > 1 and (tool_llm_rounds - 1) % every == 0
+
+
 async def try_auto_defer(
     *,
     tool_handler: ToolHandler | None,

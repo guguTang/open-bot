@@ -42,6 +42,8 @@ class AgentState(TypedDict):
     needs_finalize: bool
     needs_continue: bool  # inject CONTINUE_WORK / host nudge then re-llm
     work_continued: bool  # one-shot continue nudge already applied
+    early_ack_projected: bool  # first mid-task ack already shown in chat
+    tool_llm_rounds: int  # LLM turns that emitted tool_calls (for stage throttle)
     reset_seq: int  # model context starts after this journal seq (0 = none)
     compaction_retries: int
     extension_names: list[str]
@@ -80,6 +82,8 @@ def initial_state(
         "needs_finalize": False,
         "needs_continue": False,
         "work_continued": False,
+        "early_ack_projected": False,
+        "tool_llm_rounds": 0,
         "reset_seq": 0,
         "compaction_retries": 0,
         "extension_names": [],

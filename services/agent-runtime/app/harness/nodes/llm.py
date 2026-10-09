@@ -25,7 +25,7 @@ from ...tool_markup import (
     strip_tool_markup,
     to_openai_tool_calls,
 )
-from ..long_task import continue_nudge, early_ack_visible, try_auto_defer
+from ..long_task import continue_nudge, early_ack_visible, should_project_tool_partial, try_auto_defer
 from ..state import AgentState
 from .. import tracing
 
@@ -240,28 +240,39 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 gen_obs,
                 output=lf.truncate({"content": content, "tool_calls": len(tool_calls)}),
             )
+            tool_llm_rounds = int(state.get("tool_llm_rounds") or 0) + 1
+            already_projected = bool(state.get("early_ack_projected"))
+            projected_now = False
             if journal is not None:
                 await journal.commit_tool_intent(tool_calls)
                 ack = early_ack_visible(
                     postprocess_text(strip_think(strip_tool_markup(content_str)), profile)
                 )
                 if ack and not _is_group_pass(ack):
-                    # Project early so the user sees an ack soon (not journal-only).
+                    # First short ack + occasional 阶段性进展; not every tool monologue.
+                    do_project = should_project_tool_partial(
+                        already_projected=already_projected,
+                        tool_llm_rounds=tool_llm_rounds,
+                    )
                     await journal.append(
                         "assistant_partial",
                         {"role": "assistant", "content": ack},
-                        project=True,
+                        project=do_project,
                         role="assistant",
                         content=ack,
                     )
-                    await journal.put_live({"phase": "assistant_partial", "len": len(ack)}, force=True)
-                    if on_status is not None:
-                        await on_status(
-                            {
-                                "phase": "thinking",
-                                "label": "正在做…",
-                            }
+                    if do_project:
+                        projected_now = True
+                        await journal.put_live(
+                            {"phase": "assistant_partial", "len": len(ack)}, force=True
                         )
+                        if on_status is not None:
+                            await on_status(
+                                {
+                                    "phase": "thinking",
+                                    "label": "正在做…",
+                                }
+                            )
                 elif content_str.strip():
                     await journal.append(
                         "assistant_partial",
@@ -278,6 +289,8 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 "follow_up_queue": [],
                 "needs_compaction": False,
                 "needs_continue": False,
+                "tool_llm_rounds": tool_llm_rounds,
+                "early_ack_projected": already_projected or projected_now,
             }
 
         final = postprocess_text(strip_think(strip_tool_markup(content_str)), profile)

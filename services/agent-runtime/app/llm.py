@@ -479,7 +479,8 @@ SYSTEM_PERSONA_BASE = (
     "工具失败时根据错误换一条再调，不要重复同一条命令；不要编造工具结果或文件名。"
     "需要操作电脑、SSH 或查本机文件时，先 load_skill 加载对应技能，再按说明执行。"
     "结果若在等待则尚未执行；denied 即用户拒绝——不要声称已跑完。"
-    "给用户的回复用中文，短，只讲结果；不要提 sandbox/Docker/容器或内部路径，不要假装调用工具。"
+    "给用户的回复用中文，短；不要提 sandbox/Docker/容器或内部路径，不要假装调用工具。"
+    "调用工具时正文默认可空或一句短进展，勿逐步解说每一步；阶段性进展可偶发短句；完成后再给结果。"
 )
 
 # Never leak internal mechanism words into user-visible reply text.
@@ -1089,9 +1090,10 @@ def build_system_prompt(
             or "list_machines" in names
         ):
             tool_bits.append(
-                "长任务：确认限一句，再 defer_work(goal=…) 后台同一会话交付；"
+                "长任务：首句确认限一句；调工具时正文默认可空或一句阶段性进展，"
+                "勿逐步解说每一步；完成后再给结果。"
+                "需要后台时 defer_work(goal=…) 同一会话交付；"
                 "例行用 create/update/pause/resume/delete/list_routines。"
-                "工具前若有确认，限一句，勿冗长铺垫。"
             )
         if any(n.startswith("sandbox_") for n in names):
             tool_bits.append(

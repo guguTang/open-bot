@@ -66,6 +66,8 @@ async def test_early_ack_projects_with_mock(monkeypatch: pytest.MonkeyPatch) -> 
         },
     )
     assert out.get("pending_tool_calls")
+    assert out.get("early_ack_projected") is True
+    assert out.get("tool_llm_rounds") == 1
     journal.append.assert_awaited()
     kwargs = journal.append.await_args
     assert kwargs.args[0] == "assistant_partial"
@@ -368,6 +370,8 @@ def test_system_prompt_long_task_for_host_only() -> None:
     )
     assert "defer_work" in prompt
     assert "长任务" in prompt
+    assert "阶段性进展" in prompt
+    assert "勿逐步解说" in prompt
     assert "sandbox_* 仅在内部" not in prompt  # host-only: no sandbox opacity block
 
 
@@ -404,3 +408,139 @@ def test_early_ack_visible_truncates_long_preamble():
     assert out2.endswith("…")
     assert len(out2) == 80
 
+
+@pytest.mark.asyncio
+async def test_later_tool_partial_stays_journal_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After the first early ack, mid-loop tool narration must not project every turn."""
+    from app.harness.nodes import llm as llm_mod
+    from app.harness.state import initial_state
+    from app.llm import LLMOverride
+
+    journal = MagicMock()
+    journal.commit_tool_intent = AsyncMock()
+    journal.append = AsyncMock(return_value={"ok": True})
+    journal.put_live = AsyncMock()
+    journal.put_usage = AsyncMock()
+
+    async def fake_chat(*_a, **_k):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "接下来我继续读第二个文件并整理要点，说明如下……",
+                        "tool_calls": [
+                            {
+                                "id": "c2",
+                                "type": "function",
+                                "function": {
+                                    "name": "host_shell",
+                                    "arguments": '{"command":"cat b"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(llm_mod, "chat_completion", AsyncMock(side_effect=fake_chat))
+    monkeypatch.setattr(
+        llm_mod, "openai_config", lambda override=None: ("sk", "http://127.0.0.1:9/v1", "gpt-4o")
+    )
+
+    st = initial_state(messages=[{"role": "user", "content": "分析代码"}])
+    st["early_ack_projected"] = True
+    st["tool_llm_rounds"] = 1  # second tool-LLM turn → not a stage slot
+    out = await llm_mod.llm_node(
+        st,
+        {
+            "configurable": {
+                "api_key": "sk",
+                "override": LLMOverride(enable_tools=True, model="gpt-4o"),
+                "journal": journal,
+            }
+        },
+    )
+    assert out.get("pending_tool_calls")
+    assert out.get("tool_llm_rounds") == 2
+    assert out.get("early_ack_projected") is True
+    kwargs = journal.append.await_args
+    assert kwargs.args[0] == "assistant_partial"
+    assert kwargs.kwargs.get("project") is False
+    journal.put_live.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stage_update_projects_every_n_tool_rounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Occasional 阶段性进展 still projects (not total silence until done)."""
+    from app.harness.long_task import STAGE_PROJECT_EVERY
+    from app.harness.nodes import llm as llm_mod
+    from app.harness.state import initial_state
+    from app.llm import LLMOverride
+
+    journal = MagicMock()
+    journal.commit_tool_intent = AsyncMock()
+    journal.append = AsyncMock(return_value={"ok": True})
+    journal.put_live = AsyncMock()
+    journal.put_usage = AsyncMock()
+
+    async def fake_chat(*_a, **_k):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "已定位入口，继续查调用链。",
+                        "tool_calls": [
+                            {
+                                "id": "c5",
+                                "type": "function",
+                                "function": {
+                                    "name": "host_shell",
+                                    "arguments": '{"command":"rg main"}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(llm_mod, "chat_completion", AsyncMock(side_effect=fake_chat))
+    monkeypatch.setattr(
+        llm_mod, "openai_config", lambda override=None: ("sk", "http://127.0.0.1:9/v1", "gpt-4o")
+    )
+
+    # tool_llm_rounds becomes STAGE_PROJECT_EVERY + 1 → (n-1) % EVERY == 0
+    st = initial_state(messages=[{"role": "user", "content": "分析"}])
+    st["early_ack_projected"] = True
+    st["tool_llm_rounds"] = STAGE_PROJECT_EVERY  # next call → EVERY+1
+    out = await llm_mod.llm_node(
+        st,
+        {
+            "configurable": {
+                "api_key": "sk",
+                "override": LLMOverride(enable_tools=True, model="gpt-4o"),
+                "journal": journal,
+            }
+        },
+    )
+    assert out.get("tool_llm_rounds") == STAGE_PROJECT_EVERY + 1
+    kwargs = journal.append.await_args
+    assert kwargs.kwargs.get("project") is True
+    assert "入口" in (kwargs.kwargs.get("content") or "")
+    journal.put_live.assert_awaited()
+
+
+def test_should_project_tool_partial_throttle() -> None:
+    from app.harness.long_task import should_project_tool_partial
+
+    assert should_project_tool_partial(already_projected=False, tool_llm_rounds=1) is True
+    assert should_project_tool_partial(already_projected=True, tool_llm_rounds=2) is False
+    assert should_project_tool_partial(already_projected=True, tool_llm_rounds=3) is False
+    assert should_project_tool_partial(already_projected=True, tool_llm_rounds=4) is False
+    assert should_project_tool_partial(already_projected=True, tool_llm_rounds=5) is True
+    assert should_project_tool_partial(already_projected=True, tool_llm_rounds=9) is True
