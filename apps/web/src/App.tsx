@@ -328,6 +328,14 @@ function firstMentionedAgent(content: string, list: Agent[]): Agent | undefined 
   return undefined;
 }
 
+/** Group silence token from server PASS / empty skip (mirror isGroupPassReply). */
+function isGroupPassContent(content: string): boolean {
+  let t = (content || "").trim();
+  if (!t) return true;
+  t = t.replace(/^[`\s"'【\[（(]+|[`\s"'】\]）).。!！]+$/gu, "").trim();
+  return /^pass$/i.test(t);
+}
+
 function stripLeadingAtAgent(content: string, agent: Agent): string {
   for (const p of [agent.name, agent.id]) {
     if (!p) continue;
@@ -2474,8 +2482,10 @@ export default function App() {
       if (everyone) {
         return groupMentionMembers.map((a) => a.id);
       }
-      // Single-stage owner: first @ only (server also enforces).
-      return ids.length ? [ids[0]] : undefined;
+      // Specific @ → those agents (all of them). No @ → all members as candidates
+      // (each may PASS); server is authoritative and mirrors this.
+      if (ids.length) return ids;
+      return groupMentionMembers.map((a) => a.id);
     })();
     let sendSelection: LastActiveSelection | null = null;
     let sendHadError = false;
@@ -2558,14 +2568,17 @@ export default function App() {
                     : m,
                 );
               }
-              // Subsequent agents: seal previous bubble and open a new one.
-              const sealed = prev.map((m) =>
-                m.id === curId ? { ...m, streaming: false } : m,
-              );
+              // Drop previous PASS/empty silence bubble; otherwise seal it.
+              let base = prev;
+              if (cur && isGroupPassContent(cur.content || "")) {
+                base = prev.filter((m) => m.id !== curId);
+              } else {
+                base = prev.map((m) => (m.id === curId ? { ...m, streaming: false } : m));
+              }
               const nextId = `local-asst-${Date.now()}-${info.index ?? 0}`;
               if (run) run.assistantId = nextId;
               return [
-                ...sealed,
+                ...base,
                 {
                   id: nextId,
                   role: "assistant",
@@ -2596,6 +2609,22 @@ export default function App() {
                 setSending(false);
                 setRunLabel("正在思考…");
               }
+            }
+            if (meta.phase === "agent_skipped") {
+              const skipId = typeof meta.agent_id === "string" ? meta.agent_id : "";
+              patchConvMessages(streamConvId!, (prev) => {
+                const run = runsRef.current.get(streamConvId!);
+                const curId = run?.assistantId;
+                return prev.filter((m) => {
+                  const isSkipBubble =
+                    (skipId && m.agent_id === skipId && isGroupPassContent(m.content || "")) ||
+                    (curId && m.id === curId && isGroupPassContent(m.content || ""));
+                  if (isSkipBubble && run && run.assistantId === m.id) {
+                    run.assistantId = "";
+                  }
+                  return !isSkipBubble;
+                });
+              });
             }
             if (meta.phase === "user_saved" && typeof meta.message_id === "string") {
               stampUserSavedMessage(streamConvId!, meta.message_id, {

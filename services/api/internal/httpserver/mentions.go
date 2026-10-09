@@ -151,6 +151,100 @@ func mentionIncludesEveryone(content string) bool {
 	return false
 }
 
+// resolveGroupSendTargets picks candidate agents for a group turn.
+// DM is handled by the caller (empty channel). Rules:
+//   - @everyone/@all → all members (each should reply)
+//   - specific @Name / explicit agent_ids → those agents (all of them, not first-only)
+//   - no @ → all members are candidates; each may reply or PASS by relevance
+// Reply-to-bot is not a hard filter (history/quote still steer relevance).
+func resolveGroupSendTargets(members []string, agents []*db.Agent, explicit []string, content string, replyParent *db.Message, convAgentID string) []string {
+	_ = replyParent // reserved: soft signal via quote/history, not candidate filter
+	if len(members) == 0 {
+		if convAgentID != "" {
+			return []string{convAgentID}
+		}
+		return nil
+	}
+	memberSet := map[string]struct{}{}
+	for _, m := range members {
+		memberSet[m] = struct{}{}
+	}
+	copyMembers := func() []string {
+		out := make([]string, len(members))
+		copy(out, members)
+		return out
+	}
+
+	if mentionIncludesEveryone(content) {
+		return copyMembers()
+	}
+
+	var targets []string
+	for _, id := range dedupeStrings(explicit) {
+		if _, ok := memberSet[id]; ok {
+			targets = append(targets, id)
+		}
+	}
+	for _, id := range resolveMentionedAgents(parseMentionTokens(content), members, agents) {
+		targets = append(targets, id)
+	}
+	targets = dedupeStrings(targets)
+	if len(targets) == 0 {
+		// No @: every member is a candidate (each may PASS).
+		return copyMembers()
+	}
+	return targets
+}
+
+// groupForcedAgentSet returns agents that were explicitly addressed and should not PASS.
+// @everyone/@all → all members; otherwise each resolved @mention (not bare no-@ candidates).
+func groupForcedAgentSet(content string, members []string, agents []*db.Agent) map[string]bool {
+	out := map[string]bool{}
+	if mentionIncludesEveryone(content) {
+		for _, id := range members {
+			out[id] = true
+		}
+		return out
+	}
+	for _, id := range resolveMentionedAgents(parseMentionTokens(content), members, agents) {
+		out[id] = true
+	}
+	return out
+}
+
+// groupParticipationExtraSystem is appended in channel turns so bots can stay silent.
+// forced: this agent was @mentioned or @everyone — should reply, not PASS.
+func groupParticipationExtraSystem(forced bool) string {
+	if forced {
+		return "【群聊参与】你在群聊中，且本回合被用户点名（@你或 @everyone/@all）。请直接回复用户，不要输出 [PASS]，也不要只打招呼敷衍。"
+	}
+	return "【群聊参与】你在群聊中。同一条用户消息也会发给其他成员，各自独立决定是否发言。\n" +
+		"- 若内容与你的身份/专长相关，或用户在征求每位成员（例如让大家介绍自己、轮流表态），请正常回复。\n" +
+		"- 若明显在对别人说话、或与你无关，请只输出一行：[PASS]\n" +
+		"- 输出 [PASS] 时不要附加任何其他文字。"
+}
+
+// isGroupPassReply reports a structured silence / no-op reply from a group candidate.
+func isGroupPassReply(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return true
+	}
+	// Strip common wrappers the model may add.
+	t = strings.Trim(t, "` \t\r\n\"'")
+	t = strings.TrimPrefix(t, "【")
+	t = strings.TrimSuffix(t, "】")
+	t = strings.TrimPrefix(t, "[")
+	t = strings.TrimSuffix(t, "]")
+	t = strings.TrimPrefix(t, "（")
+	t = strings.TrimSuffix(t, "）")
+	t = strings.TrimPrefix(t, "(")
+	t = strings.TrimSuffix(t, ")")
+	t = strings.TrimSpace(t)
+	t = strings.TrimRight(t, "。.!！")
+	return strings.EqualFold(t, "PASS")
+}
+
 // dedupeStrings preserves order.
 func dedupeStrings(ids []string) []string {
 	seen := map[string]struct{}{}

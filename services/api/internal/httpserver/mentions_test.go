@@ -70,3 +70,112 @@ func TestResolveMentionedAgentsExactWinsOverSubstring(t *testing.T) {
 		t.Fatalf("unique substring should resolve, got %#v", got3)
 	}
 }
+
+
+func TestIsGroupPassReply(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"[PASS]", true},
+		{"PASS", true},
+		{"pass", true},
+		{"  [pass]  ", true},
+		{"【PASS】", true},
+		{"(PASS)", true},
+		{"", true},
+		{"你好，我是助手", false},
+		{"PASS 一下再说", false},
+	}
+	for _, c := range cases {
+		if got := isGroupPassReply(c.in); got != c.want {
+			t.Fatalf("isGroupPassReply(%q)=%v want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestResolveGroupSendTargetsNoAtAllCandidates(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	// 「大家介绍自己」and plain greetings: no @ → all candidates (each may PASS).
+	for _, content := range []string{"大家介绍自己", "你好", "今天天气怎么样"} {
+		got := resolveGroupSendTargets(members, agents, nil, content, nil, "open-bot")
+		if len(got) != 3 {
+			t.Fatalf("%q should candidacy-all, got %#v", content, got)
+		}
+	}
+}
+
+func TestResolveGroupSendTargetsSpecificAtAllMentioned(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	got := resolveGroupSendTargets(members, agents, nil, "@通用助手 介绍一下", nil, "open-bot")
+	if len(got) != 1 || got[0] != "general" {
+		t.Fatalf("@某人 should be that agent, got %#v", got)
+	}
+	// Multiple @ → all mentioned (not first-only single-stage).
+	got2 := resolveGroupSendTargets(members, agents, nil, "@通用助手 @码农助手 你们好", nil, "open-bot")
+	if len(got2) != 2 || got2[0] != "general" || got2[1] != "custom-1" {
+		t.Fatalf("multi @ should keep both, got %#v", got2)
+	}
+}
+
+func TestResolveGroupSendTargetsEveryoneUnchanged(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	got := resolveGroupSendTargets(members, agents, nil, "ping @everyone please", nil, "open-bot")
+	if len(got) != 3 {
+		t.Fatalf("@everyone expected 3, got %#v", got)
+	}
+	gotAll := resolveGroupSendTargets(members, agents, nil, "@all 介绍自己", nil, "open-bot")
+	if len(gotAll) != 3 {
+		t.Fatalf("@all expected 3, got %#v", gotAll)
+	}
+}
+
+func TestGroupForcedAgentSet(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	forced := groupForcedAgentSet("大家介绍自己", members, agents)
+	if len(forced) != 0 {
+		t.Fatalf("no @ should force none, got %#v", forced)
+	}
+	forced2 := groupForcedAgentSet("@通用助手 你好", members, agents)
+	if !forced2["general"] || forced2["open-bot"] || len(forced2) != 1 {
+		t.Fatalf("specific @ force %#v", forced2)
+	}
+	forced3 := groupForcedAgentSet("@everyone hi", members, agents)
+	if len(forced3) != 3 || !forced3["custom-1"] {
+		t.Fatalf("@everyone force all, got %#v", forced3)
+	}
+}
+
+func TestResolveGroupSendTargetsReplyParentNotHardFilter(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	parent := &db.Message{Role: "assistant", AgentID: "custom-1"}
+	got := resolveGroupSendTargets(members, agents, nil, "继续", parent, "open-bot")
+	if len(got) != 3 {
+		t.Fatalf("reply-parent without @ still all candidates, got %#v", got)
+	}
+}

@@ -1217,7 +1217,7 @@ type sendBody struct {
 	Content         string          `json:"content"`
 	LLMConnectionID string          `json:"llm_connection_id"`
 	Attachments     []AttachmentRef `json:"attachments"`
-	AgentIDs        []string        `json:"agent_ids"` // group @targets; empty = first member / conv agent
+	AgentIDs        []string        `json:"agent_ids"` // group candidates; empty = server resolves (@ / all members)
 	Client          map[string]any  `json:"client"`    // client environment envelope (platform/app/os/…)
 	// ReplyToID is set only when the user explicitly clicks「回复」(quote / mainline).
 	// Normal sends leave it empty. Bot assistant saves must never copy this onto reply_to_id;
@@ -1479,9 +1479,10 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 
 	// Busy durable run: place inbox (follow_up/steer/reject) instead of a parallel run.
-	// Group channels share one conversation_id — only steer when the busy thread's
-	// agent is this turn's owner; @another member starts a normal new run.
-	if runtimeDurableEnabled() {
+	// Group channels share one conversation_id — only steer when a single candidate
+	// owns the turn and matches the busy thread; multi-candidate group turns continue
+	// the loop (other members still get a chance) instead of short-circuiting everyone.
+	if runtimeDurableEnabled() && len(targetAgents) == 1 {
 		_, activeReq, activeStatus, activeAgentID, aerr := s.db.ActiveHarnessThreadForConversation(conv.ID)
 		if aerr == nil && strings.TrimSpace(activeReq) != "" && activeStatus != "" &&
 			shouldSteerBusyHarness(activeAgentID, targetAgents[0]) {
@@ -1527,6 +1528,16 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cancelled := false
+	var channelMembers []string
+	var channelAgents []*db.Agent
+	forcedAgents := map[string]bool{}
+	if conv.ChannelID != "" {
+		if ch, cerr := s.db.GetChannel(uid, conv.ChannelID); cerr == nil {
+			channelMembers = ch.Members
+		}
+		channelAgents, _ = s.db.ListAgents(uid)
+		forcedAgents = groupForcedAgentSet(content, channelMembers, channelAgents)
+	}
 	for i, agentID := range targetAgents {
 		if err := runCtx.Err(); err != nil {
 			cancelled = true
@@ -1541,12 +1552,22 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			systemPrompt = agent.SystemPrompt
 			agentName = agent.Name
 		}
+		// Group: each candidate may PASS when not specifically addressed.
+		if conv.ChannelID != "" && len(targetAgents) > 1 {
+			extra := groupParticipationExtraSystem(forcedAgents[agentID])
+			if strings.TrimSpace(systemPrompt) != "" {
+				systemPrompt = systemPrompt + "\n\n" + extra
+			} else {
+				systemPrompt = extra
+			}
+		}
 		emit("meta", map[string]any{
 			"phase":      "agent_start",
 			"agent_id":   agentID,
 			"agent_name": agentName,
 			"index":      i,
 			"total":      len(targetAgents),
+			"forced":     forcedAgents[agentID],
 		})
 
 		msgs, lerr := s.db.ListMessages(uid, conv.ID)
@@ -1622,10 +1643,19 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		runCancelled := runCtx.Err() != nil || isCancelErr(runErr)
+		passed := conv.ChannelID != "" && !runCancelled && isGroupPassReply(assistantText)
 		// Persist partial assistant text even when cancelled mid-stream.
 		// Empty cancel → keep a light UI/history marker so the next turn still
 		// sees the interrupted turn (keep-partial-next-turn).
-		if strings.TrimSpace(assistantText) != "" {
+		// Group PASS / empty optional silence: do not persist a bubble.
+		if passed {
+			emit("meta", map[string]any{
+				"phase":    "agent_skipped",
+				"agent_id": agentID,
+				"reason":   "pass",
+				"index":    i,
+			})
+		} else if strings.TrimSpace(assistantText) != "" {
 			// Empty reply_to_id: Bot answers are not quotes. Link via request_id (= runtime run_id).
 			s.saveAssistantThreaded(uid, conv.ID, agentID, assistantText, "", threadRootID, runID, emit)
 		} else if runCancelled {
@@ -1643,11 +1673,13 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			cancelled = true
 			break
 		}
-		emit("meta", map[string]any{
-			"phase":    "agent_done",
-			"agent_id": agentID,
-			"index":    i,
-		})
+		if !passed {
+			emit("meta", map[string]any{
+				"phase":    "agent_done",
+				"agent_id": agentID,
+				"index":    i,
+			})
+		}
 		_ = s.db.RecordUsageRun("", uid, agentID, conv.ID, "chat",
 			runUsage.PromptTokens, runUsage.CompletionTokens, runUsage.TotalTokens)
 	}
@@ -1661,10 +1693,8 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 // resolveSendTargets picks which agents should answer this turn.
 // DM: always the conversation's agent.
-// Group: explicit agent_ids and/or @mentions; if neither, first channel member (conv.AgentID).
-// Reply to a bot message with no @ defaults to that bot (Slack-style).
-// @everyone expands to all members. Otherwise only the first target owns this stage
-// (Grok-style single-stage owner); other mentions stay in the user text for context.
+// Group: see resolveGroupSendTargets — candidates are @mentions, @everyone→all, or
+// all members when no @; each optional candidate may PASS (see groupParticipationExtraSystem).
 func (s *Server) resolveSendTargets(uid string, conv *db.Conversation, explicit []string, content string, replyParent *db.Message) ([]string, error) {
 	if conv.ChannelID == "" {
 		return []string{conv.AgentID}, nil
@@ -1678,46 +1708,7 @@ func (s *Server) resolveSendTargets(uid string, conv *db.Conversation, explicit 
 		return []string{conv.AgentID}, nil
 	}
 	agents, _ := s.db.ListAgents(uid)
-	var targets []string
-	targets = append(targets, dedupeStrings(explicit)...)
-	// Keep only members
-	memberSet := map[string]struct{}{}
-	for _, m := range members {
-		memberSet[m] = struct{}{}
-	}
-	filtered := make([]string, 0, len(targets))
-	for _, id := range targets {
-		if _, ok := memberSet[id]; ok {
-			filtered = append(filtered, id)
-		}
-	}
-	targets = filtered
-	mentioned := resolveMentionedAgents(parseMentionTokens(content), members, agents)
-	for _, id := range mentioned {
-		targets = append(targets, id)
-	}
-	targets = dedupeStrings(targets)
-	if len(targets) == 0 {
-		// Reply to a bot's message → that bot owns the turn when no @.
-		if replyParent != nil && replyParent.Role == "assistant" {
-			aid := strings.TrimSpace(replyParent.AgentID)
-			if aid != "" {
-				if _, ok := memberSet[aid]; ok {
-					return []string{aid}, nil
-				}
-			}
-		}
-		// No @: first member / conversation agent
-		if conv.AgentID != "" {
-			return []string{conv.AgentID}, nil
-		}
-		return []string{members[0]}, nil
-	}
-	if mentionIncludesEveryone(content) {
-		return targets, nil
-	}
-	// Single-stage owner: first mentioned / explicit agent replies this turn.
-	return []string{targets[0]}, nil
+	return resolveGroupSendTargets(members, agents, explicit, content, replyParent, conv.AgentID), nil
 }
 
 type runtimeUsage struct {
