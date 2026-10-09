@@ -166,3 +166,11 @@ func shouldSteerBusyHarness(activeAgentID, targetAgentID string) bool {
 	}
 	return active == target
 }
+
+// shouldResumeStaleHarness reports that a busy thread is only a checkpoint
+// pause (the next node is scheduled). An approval interrupt or a live executor
+// keeps the message queued. A stale pause must continue on this request;
+// queue-and-close leaves the bot silent.
+func shouldResumeStaleHarness(approval, live bool) bool {
+	return !approval && !live
+}

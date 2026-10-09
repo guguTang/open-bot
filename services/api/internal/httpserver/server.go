@@ -1513,6 +1513,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	// Group channels share one conversation_id — only steer when a single candidate
 	// owns the turn and matches the busy thread; multi-candidate group turns continue
 	// the loop (other members still get a chance) instead of short-circuiting everyone.
+	// resumeRequestID is set when the thread is only a stale checkpoint pause: the
+	// text is queued, then this same request continues that thread so the bot replies.
+	resumeRequestID := ""
 	if runtimeDurableEnabled() && len(targetAgents) == 1 {
 		_, activeReq, activeStatus, activeAgentID, aerr := s.db.ActiveHarnessThreadForConversation(conv.ID)
 		if aerr == nil && strings.TrimSpace(activeReq) != "" && activeStatus != "" &&
@@ -1547,14 +1550,19 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 				emit("done", map[string]any{"ok": false, "when_busy": mode})
 				return
 			}
-			emit("meta", map[string]any{
-				"phase":      "inbox_queued",
-				"when_busy":  mode,
-				"request_id": activeReq,
-			})
-			emit("inbox_updated", map[string]any{"when_busy": mode, "request_id": activeReq})
-			emit("done", map[string]any{"ok": true, "inbox": true, "when_busy": mode, "request_id": activeReq})
-			return
+			approval, _ := out["approval"].(bool)
+			live, _ := out["live"].(bool)
+			if !shouldResumeStaleHarness(approval, live) {
+				emit("meta", map[string]any{
+					"phase":      "inbox_queued",
+					"when_busy":  mode,
+					"request_id": activeReq,
+				})
+				emit("inbox_updated", map[string]any{"when_busy": mode, "request_id": activeReq})
+				emit("done", map[string]any{"ok": true, "inbox": true, "when_busy": mode, "request_id": activeReq})
+				return
+			}
+			resumeRequestID = activeReq
 		}
 	}
 
@@ -1623,6 +1631,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			enabledSkills = []string{}
 		}
 		requestID := uuid.NewString()
+		if resumeRequestID != "" {
+			requestID = resumeRequestID
+		}
 		payloadMap := map[string]any{
 			"conversation_id":  id,
 			"content":          runtimeContent,

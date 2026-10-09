@@ -9,6 +9,7 @@ from typing import Any
 from .config import durable_enabled
 from .graph import get_compiled_graph
 from .journal.client import get_journal
+from .pause import is_approval_pause
 
 logger = logging.getLogger("open-bot.harness.worker")
 
@@ -27,13 +28,25 @@ async def resume_thread(thread_id: str) -> dict[str, Any]:
 
     if status in ("done", "aborted", "failed"):
         return {"ok": True, "skipped": True, "reason": status, "thread_id": thread_id}
-    if tasks:
+    if is_approval_pause(tasks):
         # Human gate — presence only, do not auto-run.
         logger.info("resume skip waiting_approval thread=%s", thread_id)
         return {
             "ok": True,
             "skipped": True,
             "reason": "waiting_approval",
+            "thread_id": thread_id,
+        }
+    if tasks:
+        # Next node is scheduled, but this process has no model credentials or
+        # tool handler. Auto-ainvoke would 401 and leave status=running, which
+        # makes every later user message queue-and-close. The next /v1/runs
+        # resumes the checkpoint.
+        logger.info("resume skip paused thread=%s next-task-without-executor", thread_id)
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "paused",
             "thread_id": thread_id,
         }
 

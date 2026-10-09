@@ -2,6 +2,19 @@ package httpserver
 
 import "testing"
 
+func TestShouldResumeStaleHarness(t *testing.T) {
+	t.Parallel()
+	if !shouldResumeStaleHarness(false, false) {
+		t.Fatal("stale pause should resume on this request")
+	}
+	if shouldResumeStaleHarness(true, false) {
+		t.Fatal("approval interrupt must stay queued")
+	}
+	if shouldResumeStaleHarness(false, true) {
+		t.Fatal("live executor must stay queued")
+	}
+}
+
 func TestShouldSteerBusyHarness(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

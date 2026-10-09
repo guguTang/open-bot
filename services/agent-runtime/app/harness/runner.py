@@ -25,6 +25,8 @@ from .frames import (
 )
 from .graph import get_compiled_graph
 from .journal import JournalSession
+from .live import mark_live, release_live
+from .pause import is_approval_pause
 from .sse import (
     compaction_event,
     inbox_updated,
@@ -105,7 +107,10 @@ async def run_durable_events(
             yield frame
         return
 
-    if resume_command is None and getattr(snap, "tasks", None):
+    tasks = getattr(snap, "tasks", None) or ()
+    # Only interrupt() payloads are an approval gate. A scheduled next node
+    # (llm/tools/…) also shows up in tasks after a crash between steps.
+    if resume_command is None and is_approval_pause(tasks):
         tracing.mark_interrupt(root_obs, "waiting_approval")
         await journal.set_status("waiting_approval")
         meta = dict(values.get("meta") or {})
@@ -130,10 +135,13 @@ async def run_durable_events(
     config["configurable"]["body"] = body
     config["configurable"]["root_obs"] = root_obs
 
+    paused_next = bool(getattr(snap, "next", None))
     if resume_command is not None:
         inp: Any = resume_command
         tracing.mark_resumed(root_obs)
-    elif values.get("prepared") or values.get("skip_recall"):
+    elif paused_next or values.get("prepared") or values.get("skip_recall"):
+        # None continues the checkpoint. A fresh initial_state would drop the
+        # in-progress tool round and the follow-ups queued onto it.
         inp = None
     else:
         inp = initial_state(
@@ -172,6 +180,7 @@ async def run_durable_events(
             else:
                 yield sse(name, payload)
 
+    mark_live(tid)
     try:
         async for update in graph.astream(inp, config, stream_mode="updates"):
             async for frame in _drain_side():
@@ -207,7 +216,7 @@ async def run_durable_events(
 
         snap = await graph.aget_state(config)
         values = getattr(snap, "values", None) or {}
-        if getattr(snap, "tasks", None):
+        if is_approval_pause(getattr(snap, "tasks", None)):
             tracing.mark_interrupt(root_obs, "waiting_approval")
             await journal.set_status("waiting_approval")
             meta = None
@@ -268,3 +277,5 @@ async def run_durable_events(
             lf.update_obs(root_obs, level="ERROR", status_message=str(exc)[:500])
         for frame in failed_done_frames(rid=rid, tid=tid, error=str(exc)):
             yield frame
+    finally:
+        release_live(tid)
