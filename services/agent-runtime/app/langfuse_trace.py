@@ -282,6 +282,24 @@ def _redact_system_enabled() -> bool:
     return _env_truthy("LANGFUSE_REDACT_SYSTEM", "0")
 
 
+
+def _flatten_message_content(content: Any) -> str:
+    """Stringify chat content that may be a plain str or content-part list."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        bits: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                bits.append(str(part.get("text") or ""))
+            else:
+                bits.append(str(part))
+        return "\n".join(b for b in bits if b)
+    return str(content)
+
+
 def _prepare_generation_input(input_messages: Any) -> Any:
     """Truncate generation input; optionally redact system role content.
 
@@ -305,7 +323,7 @@ def _prepare_generation_input(input_messages: Any) -> Any:
                 safe_in.append(
                     {
                         "role": "system",
-                        "content": f"[omitted system prompt, {len(str(content or ''))} chars]",
+                        "content": f"[omitted system prompt, {len(_flatten_message_content(content))} chars]",
                     }
                 )
             elif role == "system":
@@ -313,7 +331,7 @@ def _prepare_generation_input(input_messages: Any) -> Any:
                 sys_limit = max(256, min(limit, max(8_000, limit // 2)))
                 entry = {k: v for k, v in m.items() if k != "content"}
                 entry["role"] = "system"
-                entry["content"] = truncate(content, sys_limit)
+                entry["content"] = truncate(_flatten_message_content(content), sys_limit)
                 safe_in.append(entry)
             else:
                 entry = {k: v for k, v in m.items() if k != "content"}

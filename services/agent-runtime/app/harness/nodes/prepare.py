@@ -11,11 +11,12 @@ from ... import lessons as lessons_mod
 from ... import mem0_store
 from ...llm import (
     assemble_llm_messages,
-    build_system_prompt,
+    build_system_prompt_parts,
     chat_text,
     openai_config,
     tools_enabled,
 )
+from ...model_compat import profile_for, resolve_prompt_cache_mode
 from ...memory import build_recall_payload, scene_kind
 from ..state import AgentState
 
@@ -115,7 +116,21 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
         recall_payload["langfuse_trace_id"] = langfuse_trace_id
     memory_snippets = [r["snippet"] for r in recall_payload.get("items") or []]
 
-    system = build_system_prompt(
+    injected_lessons: list[dict[str, Any]] = []
+    lesson_block = ""
+    try:
+        injected_lessons, lesson_block = lessons_mod.active_lessons_with_block(
+            user_id, agent_id
+        )
+    except Exception:  # noqa: BLE001
+        injected_lessons = []
+        lesson_block = ""
+
+    persona_override = ""
+    if body is not None and getattr(body, "system_prompt", None):
+        persona_override = str(body.system_prompt or "").strip()
+
+    static_system, dynamic_system = build_system_prompt_parts(
         agent_id=agent_id,
         skills_catalog=skill_reg.catalog_for_prompt(enabled) if skill_reg else "",
         memory_snippets=memory_snippets,
@@ -123,21 +138,10 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
         available_tool_names=available_tool_names,
         client=client,
         machines=host_machines,
+        persona_override=persona_override or None,
+        lessons_block=lesson_block or None,
     )
-    injected_lessons: list[dict[str, Any]] = []
-    try:
-        injected_lessons, lesson_block = lessons_mod.active_lessons_with_block(
-            user_id, agent_id
-        )
-        if lesson_block:
-            system = system + "\n\n" + lesson_block
-    except Exception:  # noqa: BLE001
-        injected_lessons = []
-
-    if body is not None and getattr(body, "system_prompt", None):
-        sp = str(body.system_prompt or "").strip()
-        if sp:
-            system = sp + "\n\n" + system
+    system = "\n\n".join(p for p in (static_system, dynamic_system) if p)
 
     dialog = [m for m in history if m.get("role") in ("user", "assistant", "summary")]
     # After a reset entry, only keep messages tagged at/after reset (or trailing turns).
@@ -151,7 +155,7 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
         return await chat_text(msgs, api_key=api_key or "", override=override)
 
     llm_cw = cfg.get("llm_context_window")
-    _, _, default_model = openai_config(override)
+    _, base, default_model = openai_config(override)
     llm_model = cfg.get("llm_model") or default_model
     compacted, compact_meta = await compact_mod.compact_messages(
         dialog,
@@ -160,7 +164,16 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
         context_window=llm_cw,
         model=llm_model,
     )
-    llm_messages = assemble_llm_messages(system, compacted)
+    cache_mode = resolve_prompt_cache_mode(
+        str(llm_model or ""), str(base or ""), profile=profile_for(str(llm_model or ""), str(base or ""))
+    )
+    llm_messages = assemble_llm_messages(
+        system,
+        compacted,
+        static_system=static_system,
+        dynamic_system=dynamic_system,
+        prompt_cache_mode=cache_mode,
+    )
 
     steers = list(state.get("steer_queue") or [])
     if steers:

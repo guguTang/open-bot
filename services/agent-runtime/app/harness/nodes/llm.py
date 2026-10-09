@@ -11,6 +11,7 @@ from ...llm import (
     AutoToolChoiceUnsupported,
     TOOL_DEFS,
     chat_completion,
+    fold_tool_results_in_messages,
     is_context_length_error,
     openai_config,
     postprocess_text,
@@ -135,6 +136,9 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     _, base, model = openai_config(override)
     profile = profile_for(model, base)
     tools_on = tools_enabled(override)
+
+    # Fold oversized tool observations before this LLM round (durable path).
+    msgs = fold_tool_results_in_messages(msgs)
 
     if on_status is not None:
         await on_status({"phase": "thinking", "label": "思考中"})

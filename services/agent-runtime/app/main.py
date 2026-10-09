@@ -16,11 +16,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import compact as compact_mod
+from .model_compat import profile_for, resolve_prompt_cache_mode
 from .llm import (
     LLMOverride,
     TOOL_DEFS,
     assemble_llm_messages,
     build_system_prompt,
+    build_system_prompt_parts,
     chat_text,
     normalize_messages,
     openai_config,
@@ -617,16 +619,8 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                 recall_payload["langfuse_trace_id"] = langfuse_trace_id
             memory_snippets = [r["snippet"] for r in recall_payload["items"]]
             active_skills = skill_reg.filter_meta(enabled)
-            system = build_system_prompt(
-                agent_id=body.agent_id,
-                skills_catalog=skill_reg.catalog_for_prompt(enabled),
-                memory_snippets=memory_snippets,
-                tools_enabled=tools_on,
-                available_tool_names=available_tool_names,
-                client=client_ctx,
-                machines=host_machines,
-            )
             injected_lessons: list[dict[str, Any]] = []
+            lesson_block = ""
             try:
                 from . import lessons as lessons_mod
 
@@ -634,12 +628,26 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                     str(body.user_id or ""),
                     str(body.agent_id or "open-bot"),
                 )
-                if lesson_block:
-                    system = system + "\n\n" + lesson_block
             except Exception:  # noqa: BLE001
                 injected_lessons = []
-            if body.system_prompt and body.system_prompt.strip():
-                system = body.system_prompt.strip() + "\n\n" + system
+                lesson_block = ""
+            persona_override = (
+                body.system_prompt.strip()
+                if body.system_prompt and body.system_prompt.strip()
+                else ""
+            )
+            static_system, dynamic_system = build_system_prompt_parts(
+                agent_id=body.agent_id,
+                skills_catalog=skill_reg.catalog_for_prompt(enabled),
+                memory_snippets=memory_snippets,
+                tools_enabled=tools_on,
+                available_tool_names=available_tool_names,
+                client=client_ctx,
+                machines=host_machines,
+                persona_override=persona_override or None,
+                lessons_block=lesson_block or None,
+            )
+            system = "\n\n".join(p for p in (static_system, dynamic_system) if p)
 
             dialog = [m for m in history if m["role"] in ("user", "assistant", "summary")]
 
@@ -653,7 +661,18 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                 context_window=llm_cw,
                 model=llm_model,
             )
-            llm_messages: list[dict[str, Any]] = assemble_llm_messages(system, compacted)
+            cache_mode = resolve_prompt_cache_mode(
+                str(llm_model or ""),
+                str(base or ""),
+                profile=profile_for(str(llm_model or ""), str(base or "")),
+            )
+            llm_messages: list[dict[str, Any]] = assemble_llm_messages(
+                system,
+                compacted,
+                static_system=static_system,
+                dynamic_system=dynamic_system,
+                prompt_cache_mode=cache_mode,
+            )
             meta = {
                 "conversation_id": body.conversation_id,
                 "agent_id": body.agent_id,

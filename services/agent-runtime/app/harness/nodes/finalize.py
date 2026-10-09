@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from ... import langfuse_trace as lf
 from ...llm import (
     chat_completion,
+    fold_tool_results_in_messages,
     openai_config,
     postprocess_text,
     profile_for,
@@ -92,7 +93,7 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     if on_status is not None:
         await on_status({"phase": "thinking", "label": "整理结论"})
 
-    work_msgs = list(msgs)
+    work_msgs = fold_tool_results_in_messages(list(msgs))
     # Avoid duplicating the nudge if finalize is re-entered.
     if not any(
         m.get("role") == "user" and m.get("content") == _FINALIZE_NUDGE for m in work_msgs

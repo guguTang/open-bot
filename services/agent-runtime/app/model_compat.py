@@ -244,6 +244,76 @@ def adapt_chat_payload(
     return out
 
 
+
+# Prompt-cache modes for OpenAI-compatible gateways (Anthropic-style blocks or OpenAI key).
+# OPENBOT_PROMPT_CACHE: auto | off | 0 | blocks | key | anthropic | openai
+_PROMPT_CACHE_DISABLED = False  # set True after a live 400 rejecting cache fields
+
+
+def mark_prompt_cache_unsupported() -> None:
+    """Disable prompt-cache injection for this process after a gateway rejection."""
+    global _PROMPT_CACHE_DISABLED
+    _PROMPT_CACHE_DISABLED = True
+
+
+def prompt_cache_disabled() -> bool:
+    return _PROMPT_CACHE_DISABLED
+
+
+def resolve_prompt_cache_mode(
+    model: str = "",
+    base_url: str = "",
+    *,
+    profile: ModelProfile | None = None,
+) -> str:
+    """Return "blocks", "key", or "off".
+
+    - blocks: system content parts with cache_control (Anthropic / many Claude gateways)
+    - key: top-level prompt_cache_key (OpenAI-compatible)
+    - off: no-op
+    """
+    if _PROMPT_CACHE_DISABLED:
+        return "off"
+    raw = (os.getenv("OPENBOT_PROMPT_CACHE") or "auto").strip().lower()
+    if raw in ("0", "false", "no", "off", "none"):
+        return "off"
+    if raw in ("blocks", "anthropic", "cache_control"):
+        return "blocks"
+    if raw in ("key", "openai", "prompt_cache_key"):
+        return "key"
+    if raw not in ("", "auto", "1", "true", "yes", "on"):
+        return "off"
+
+    fam = (profile.family if profile is not None else detect_family(model, base_url))
+    u = (base_url or "").strip().lower()
+    if fam == "anthropic" or "anthropic.com" in u or "claude" in u:
+        return "blocks"
+    # OpenRouter / LiteLLM often forward Anthropic cache_control for Claude ids.
+    m = (model or "").strip().lower()
+    if "claude" in m and ("openrouter" in u or "litellm" in u or "anthropic" in u):
+        return "blocks"
+    if fam in ("openai_chat", "openai_reasoning") or "api.openai.com" in u:
+        return "key"
+    return "off"
+
+
+def is_prompt_cache_reject(message: str) -> bool:
+    """True when upstream 400 suggests cache_control / prompt_cache_key is unknown."""
+    m = (message or "").lower()
+    needles = (
+        "cache_control",
+        "prompt_cache_key",
+        "unknown field",
+        "unrecognized field",
+        "extra inputs are not permitted",
+        "additional properties",
+    )
+    if not any(n in m for n in needles):
+        return False
+    # Prefer cache-related rejections; avoid treating unrelated schema errors as cache.
+    return "cache" in m or "prompt_cache" in m
+
+
 def postprocess_text(text: str, profile: ModelProfile) -> str:
     """Post-process assistant text according to profile flags."""
     if not text:
