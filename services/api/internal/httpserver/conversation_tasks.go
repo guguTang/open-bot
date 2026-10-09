@@ -152,7 +152,7 @@ func (s *Server) executeConversationTask(task *db.ConversationTask) {
 	if conv != nil {
 		channelID = conv.ChannelID
 	}
-	s.publishTaskStatus(task.UserID, task.ConversationID, task.AgentID, channelID, "running", "正在做，做好会发在这里")
+	s.publishTaskStatus(task.UserID, task.ConversationID, task.AgentID, channelID, "running", "正在做…")
 
 	var lastErr error
 	for attempt := 1; attempt <= 2; attempt++ {
@@ -291,7 +291,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 			label, _ = m["label"].(string)
 		}
 		if strings.TrimSpace(label) == "" {
-			label = "正在做，做好会发在这里"
+			label = "正在做…"
 		}
 		s.publishTaskStatus(task.UserID, task.ConversationID, task.AgentID, conv.ChannelID, "running", label)
 	}
@@ -475,7 +475,7 @@ func (s *Server) tryShortcutTurn(userID string, conv *db.Conversation, sourceMes
 		return false
 	}
 	s.wakeTasks()
-	s.publishTaskStatus(userID, conv.ID, agentID, conv.ChannelID, "running", "正在做，做好会发在这里")
+	s.publishTaskStatus(userID, conv.ID, agentID, conv.ChannelID, "running", "正在做…")
 	emit("meta", map[string]any{"phase": "task_queued", "conversation_id": conv.ID})
 	s.speakShortcut(userID, conv, agentID, statusWaitText, emit)
 	return true

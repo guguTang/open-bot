@@ -2130,7 +2130,7 @@ export default function App() {
               );
             }
             if (meta.phase === "task_queued") {
-              noteTask(conv.id, true, "正在做，做好会发在这里");
+              noteTask(conv.id, true, "正在做…");
             }
           },
           onStatus: (data) => {
@@ -2288,7 +2288,7 @@ export default function App() {
         if (selectGen !== selectGenRef.current) return;
         apiMsgs = listed.messages;
         runActive = Boolean(listed.run_active);
-        noteTask(conv.id, Boolean(listed.task_active), listed.task_active ? "正在做，做好会发在这里" : undefined);
+        noteTask(conv.id, Boolean(listed.task_active), listed.task_active ? "正在做…" : undefined);
       } else {
         setTaskBusy(taskConvIdsRef.current.has(conv.id));
       }
@@ -2349,7 +2349,7 @@ export default function App() {
         if (selectGen !== selectGenRef.current) return;
         apiMsgs = listed.messages;
         runActive = Boolean(listed.run_active);
-        noteTask(conv.id, Boolean(listed.task_active), listed.task_active ? "正在做，做好会发在这里" : undefined);
+        noteTask(conv.id, Boolean(listed.task_active), listed.task_active ? "正在做…" : undefined);
       } else {
         setTaskBusy(taskConvIdsRef.current.has(conv.id));
       }
@@ -2432,7 +2432,7 @@ export default function App() {
           noteTask(
             targetConv.id,
             Boolean(listed.task_active),
-            listed.task_active ? "正在做，做好会发在这里" : undefined,
+            listed.task_active ? "正在做…" : undefined,
           );
           handoffConv = targetConv;
           sendContent = stripLeadingAtAgent(content, mentioned);
@@ -2735,7 +2735,7 @@ export default function App() {
               );
             }
             if (meta.phase === "task_queued") {
-              noteTask(streamConvId!, true, "正在做，做好会发在这里");
+              noteTask(streamConvId!, true, "正在做…");
             }
           },
           onStatus: (data) => {
@@ -4394,7 +4394,7 @@ export default function App() {
           {sending || taskBusy ? (
             !messages.some((m) => m.role === "assistant" && m.streaming && m.content) ? (
               <RunStatus
-                label={taskBusy && !sending ? runLabel || "正在做，做好会发在这里" : runLabel || "正在思考…"}
+                label={taskBusy && !sending ? runLabel || "正在做…" : runLabel || "正在思考…"}
                 color={resolveAvatarColor(activeAgent?.id || activeAgent?.name || "open-bot", activeAgent?.avatar_color)}
               />
             ) : null

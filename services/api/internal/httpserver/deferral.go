@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	statusWaitText  = "还在做，做好会发在这里。"
+	statusWaitText  = "还在做，好了发这里。"
 	cancelTaskText  = "已停下。"
 	taskFailText    = "这件我没做成：没有改到文件。"
 	taskTimeoutText = "这件做超时了，你可以让我接着做。"

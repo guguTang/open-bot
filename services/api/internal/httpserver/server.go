@@ -1499,7 +1499,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	// This request's agent is running until proxyRuntimeRun returns. Other
 	// devices follow that, not the wording of the reply.
 	if len(targetAgents) > 0 {
-		s.publishTaskStatus(uid, conv.ID, targetAgents[0], conv.ChannelID, "running", "正在做，做好会发在这里")
+		s.publishTaskStatus(uid, conv.ID, targetAgents[0], conv.ChannelID, "running", "正在做…")
 		defer func() {
 			open, err := s.db.OpenConversationTask(conv.ID)
 			if err == nil && open != nil {

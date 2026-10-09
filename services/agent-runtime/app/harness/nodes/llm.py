@@ -259,7 +259,7 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                         await on_status(
                             {
                                 "phase": "thinking",
-                                "label": "正在做，做好会发在这里",
+                                "label": "正在做…",
                             }
                         )
                 elif content_str.strip():
@@ -290,9 +290,9 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         if nudge:
             if on_status is not None:
                 label = (
-                    "需要先访问本机…"
+                    "先访问本机…"
                     if "host_delete" in nudge or "list_machines" in nudge or "host_ls" in nudge
-                    else "正在做，做好会发在这里"
+                    else "正在做…"
                 )
                 await on_status({"phase": "thinking", "label": label})
             msgs.append({"role": "assistant", "content": final or content or ""})

@@ -181,7 +181,7 @@ _CONTEXT_OVERFLOW_RETRIES = 2
 DEFAULT_TOOL_ROUNDS = 24
 MAX_TOOL_ROUNDS = 48
 
-DEFER_ON_EXHAUST_REPLY = "还在做，做好会发在这里。"
+DEFER_ON_EXHAUST_REPLY = "还在做，好了发这里。"
 
 
 def truncate_tool_result_for_context(
@@ -1089,9 +1089,9 @@ def build_system_prompt(
             or "list_machines" in names
         ):
             tool_bits.append(
-                "长任务：优先调用 defer_work(goal=…) 先确认再后台做完，同一会话交付；"
-                "例行任务用 create_routine/update_routine/pause_routine/resume_routine/delete_routine/list_routines"
-                "（可设 cron 与 Slack/GitHub triggers）。"
+                "长任务：确认限一句，再 defer_work(goal=…) 后台同一会话交付；"
+                "例行用 create/update/pause/resume/delete/list_routines。"
+                "工具前若有确认，限一句，勿冗长铺垫。"
             )
         if any(n.startswith("sandbox_") for n in names):
             tool_bits.append(
@@ -1748,7 +1748,7 @@ async def run_tool_loop(
                 await on_status(
                     {
                         "phase": "thinking",
-                        "label": "正在做，做好会发在这里",
+                        "label": "正在做…",
                     }
                 )
             msgs.append({"role": "assistant", "content": final or ""})
@@ -1763,7 +1763,7 @@ async def run_tool_loop(
                 await on_status(
                     {
                         "phase": "thinking",
-                        "label": "需要先访问本机…",
+                        "label": "先访问本机…",
                     }
                 )
             msgs.append({"role": "assistant", "content": final or ""})
@@ -1824,7 +1824,7 @@ async def run_tool_loop(
             await on_status(
                 {
                     "phase": "thinking",
-                    "label": "回合用尽，转到后台继续",
+                    "label": "后台继续…",
                 }
             )
         try:

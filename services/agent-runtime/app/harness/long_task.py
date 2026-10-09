@@ -18,7 +18,7 @@ from ..deferral import (
 )
 
 # Same user-facing confirm as legacy llm.DEFER_ON_EXHAUST_REPLY / Go statusWaitText.
-DEFER_CONFIRM = "还在做，做好会发在这里。"
+DEFER_CONFIRM = "还在做，好了发这里。"
 
 ToolHandler = Callable[[str, dict[str, Any]], Awaitable[str]]
 StatusFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -50,9 +50,34 @@ def continue_nudge(
     return host_followup_prompt(tools_used, messages)
 
 
-def early_ack_visible(text: str) -> str:
-    """Strip to user-facing early ack; empty means do not project."""
-    return (text or "").strip()
+# Soft cap for projected first bubble when the model preamble is long.
+_EARLY_ACK_MAX = 80
+
+
+def early_ack_visible(text: str, *, max_chars: int = _EARLY_ACK_MAX) -> str:
+    """Brief user-facing early ack; empty means do not project.
+
+    Short preambles pass through. Long ones prefer the first Chinese sentence
+    (or newline); soft-cap as last resort. Full assistant content still lives on
+    the tool-call turn — only the projected bubble is shortened.
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    brief = text
+    for sep in ("。", "！", "？", "\n"):
+        i = text.find(sep)
+        if i < 0:
+            continue
+        candidate = text[: i if sep == "\n" else i + 1].strip()
+        if candidate:
+            brief = candidate
+            break
+    if len(brief) > max_chars:
+        brief = brief[: max_chars - 1].rstrip() + "…"
+    return brief
 
 
 async def try_auto_defer(
@@ -89,7 +114,7 @@ async def try_auto_defer(
         await on_status(
             {
                 "phase": "thinking",
-                "label": "回合用尽，转到后台继续",
+                "label": "后台继续…",
             }
         )
     try:

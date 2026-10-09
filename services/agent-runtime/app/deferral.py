@@ -24,22 +24,16 @@ HOST_LIST_TOOLS = frozenset({
 # Fed back into the same run. Not shown to the user and not matched against
 # the model's previous sentence.
 CONTINUE_WORK = (
-    "这一轮还没做完。请直接调用工具把文件改完，不要只说下一步计划；"
-    "完成后在回复里给出可打开的文件链接。"
-    "如果确实不需要改文件，就用一句话回答，不要再说稍后。"
+    "未完成：立刻调工具做完并给可打开链接；无需改文件则一句答完，勿说稍后。"
 )
 
 CONTINUE_HOST_DELETE = (
-    "用户在要求删除本机/远程文件，但本轮还没有调用 host_delete 或 host_ssh_delete。"
-    "请立即调用工具（多个文件用 paths 一次删完）。"
-    "确认卡由系统弹出；不要用文字假装已发起删除、已批准或让用户去电脑上确认。"
+    "立刻调用 host_delete/host_ssh_delete（多文件用 paths）。"
+    "确认卡由系统弹出；勿用文字假装已删或已批准。"
 )
 
 CONTINUE_HOST_LIST = (
-    "用户在问本机目录/文件（如最大、最新、排行），但本轮还没有调用 "
-    "list_machines / host_shell / load_skill / host_ls（或对应 host_ssh_ls）。"
-    "请先 load_skill（如 host-file-query）再按技能说明查询；"
-    "结果为空时先改查询再下结论；禁止根据摘要或记忆编造文件名和大小。"
+    "先 list_machines/load_skill/host_ls 查本机；空结果先改查询，勿编造文件名/大小。"
 )
 
 _CONTINUE_MARKERS = frozenset({CONTINUE_WORK, CONTINUE_HOST_DELETE, CONTINUE_HOST_LIST})

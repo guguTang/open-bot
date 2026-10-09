@@ -379,3 +379,28 @@ def test_route_needs_continue_returns_llm() -> None:
     st["needs_continue"] = True
     st["status"] = "running"
     assert _route_after_llm(st) == "llm"
+
+def test_early_ack_visible_keeps_short():
+    from app.harness.long_task import early_ack_visible
+
+    assert early_ack_visible("好的，我先查一下本机目录。") == "好的，我先查一下本机目录。"
+    assert early_ack_visible("") == ""
+    assert early_ack_visible("   ") == ""
+
+
+def test_early_ack_visible_truncates_long_preamble():
+    from app.harness.long_task import early_ack_visible
+
+    long = (
+        "好的，我先看一下。"
+        + ("接下来我会详细说明每一个步骤和背景。" * 8)
+    )
+    out = early_ack_visible(long)
+    assert out == "好的，我先看一下。"
+    assert len(out) < len(long)
+
+    no_stop = "x" * 120
+    out2 = early_ack_visible(no_stop)
+    assert out2.endswith("…")
+    assert len(out2) == 80
+

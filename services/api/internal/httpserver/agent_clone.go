@@ -124,7 +124,7 @@ func (s *Server) cloneAgentFor(uid, sourceID string, body cloneAgentBody) (map[s
 			task, terr := s.db.EnqueueConversationTask(uid, res.ConversationID, newID, goal, msg.ID)
 			if terr == nil {
 				s.wakeTasks()
-				s.publishTaskStatus(uid, res.ConversationID, newID, "", "running", "正在做，做好会发在这里")
+				s.publishTaskStatus(uid, res.ConversationID, newID, "", "running", "正在做…")
 				out["follow_up_task_id"] = task.ID
 				out["follow_up_status"] = "queued"
 			} else {

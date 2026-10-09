@@ -46,7 +46,7 @@ func (s *Server) handleInternalEnqueueTask(w http.ResponseWriter, r *http.Reques
 	if conv, err := s.db.GetConversation(uid, cid); err == nil && conv != nil {
 		channelID = conv.ChannelID
 	}
-	s.publishTaskStatus(uid, cid, agentID, channelID, "running", "正在做，做好会发在这里")
+	s.publishTaskStatus(uid, cid, agentID, channelID, "running", "正在做…")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"task_id": task.ID,
