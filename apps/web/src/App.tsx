@@ -291,6 +291,8 @@ type ConvRunState = {
   abort: AbortController;
   generation: number;
   assistantId: string | null;
+  /** Parallel group: map agent_id → local streaming bubble id */
+  assistantIdsByAgent?: Record<string, string>;
   runLabel: string;
   selectionKey: string; // `agent:${id}` | `channel:${id}` for sidebar busy
 };
@@ -2004,10 +2006,21 @@ export default function App() {
     const ensureStreamingBubble = (agentId?: string, agentName?: string) => {
       const run = runsRef.current.get(conv.id);
       if (!run || run.generation !== gen) return;
+      if (!run.assistantIdsByAgent) run.assistantIdsByAgent = {};
+      if (agentId && run.assistantIdsByAgent[agentId]) {
+        const id = run.assistantIdsByAgent[agentId];
+        const cur = (messagesByConvRef.current.get(conv.id) ?? []).find((m) => m.id === id);
+        if (cur?.streaming) {
+          run.assistantId = id;
+          return;
+        }
+      }
+      // Claim unnamed streaming placeholder when present.
       if (run.assistantId) {
         const cur = (messagesByConvRef.current.get(conv.id) ?? []).find((m) => m.id === run.assistantId);
-        if (cur?.streaming) {
+        if (cur?.streaming && (!cur.agent_id || cur.agent_id === agentId)) {
           if (agentId && !cur.agent_id) {
+            run.assistantIdsByAgent[agentId] = run.assistantId;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) =>
                 m.id === run.assistantId
@@ -2019,10 +2032,12 @@ export default function App() {
           return;
         }
       }
-      const nextId = `local-asst-resume-${Date.now()}`;
+      // Parallel resume: keep other agents' streaming bubbles; add one for this agent.
+      const nextId = `local-asst-resume-${Date.now()}-${agentId || "x"}`;
       run.assistantId = nextId;
+      if (agentId) run.assistantIdsByAgent[agentId] = nextId;
       patchConvMessages(conv.id, (prev) => [
-        ...prev.filter((m) => !m.streaming),
+        ...prev,
         {
           id: nextId,
           role: "assistant" as const,
@@ -2055,10 +2070,13 @@ export default function App() {
             setRunLabelForStream(`${name} 正在回复…`);
             ensureStreamingBubble(info.agent_id, name);
           },
-          onToken: (text) => {
+          onToken: (text, info) => {
             if (!isRunCurrent()) return;
-            ensureStreamingBubble();
-            const curId = runsRef.current.get(conv.id)?.assistantId;
+            ensureStreamingBubble(info?.agent_id);
+            const run = runsRef.current.get(conv.id);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             if (!curId) return;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) => (m.id === curId ? { ...m, content: m.content + text, streaming: true } : m)),
@@ -2115,10 +2133,13 @@ export default function App() {
               setRunLabelForStream("正在思考…");
             }
           },
-          onError: (msg) => {
+          onError: (msg, info) => {
             if (!isRunCurrent()) return;
-            ensureStreamingBubble();
-            const curId = runsRef.current.get(conv.id)?.assistantId;
+            ensureStreamingBubble(info?.agent_id);
+            const run = runsRef.current.get(conv.id);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) =>
                 m.id === curId
@@ -2583,27 +2604,34 @@ export default function App() {
             setRunLabelForStream(`${name} 正在回复…`);
             patchConvMessages(streamConvId!, (prev) => {
               const run = runsRef.current.get(streamConvId!);
-              const curId = run?.assistantId;
+              if (!run) return prev;
+              if (!run.assistantIdsByAgent) run.assistantIdsByAgent = {};
+              const existingId = run.assistantIdsByAgent[info.agent_id];
+              if (existingId && prev.some((m) => m.id === existingId)) {
+                run.assistantId = existingId;
+                return prev.map((m) =>
+                  m.id === existingId
+                    ? { ...m, agent_id: info.agent_id, agent_name: name, streaming: true }
+                    : m,
+                );
+              }
+              const curId = run.assistantId;
               const cur = curId ? prev.find((m) => m.id === curId) : undefined;
               // First agent: stamp identity on the placeholder bubble.
               if (cur && !cur.content && !cur.agent_id) {
+                run.assistantIdsByAgent[info.agent_id] = curId!;
                 return prev.map((m) =>
                   m.id === curId
                     ? { ...m, agent_id: info.agent_id, agent_name: name, streaming: true }
                     : m,
                 );
               }
-              // Drop previous PASS/empty silence bubble; otherwise seal it.
-              let base = prev;
-              if (cur && isGroupPassContent(cur.content || "")) {
-                base = prev.filter((m) => m.id !== curId);
-              } else {
-                base = prev.map((m) => (m.id === curId ? { ...m, streaming: false } : m));
-              }
-              const nextId = `local-asst-${Date.now()}-${info.index ?? 0}`;
-              if (run) run.assistantId = nextId;
+              // Parallel candidates: add a new bubble; do NOT seal other agents' streams.
+              const nextId = `local-asst-${Date.now()}-${info.index ?? 0}-${info.agent_id}`;
+              run.assistantIdsByAgent[info.agent_id] = nextId;
+              run.assistantId = nextId;
               return [
-                ...base,
+                ...prev,
                 {
                   id: nextId,
                   role: "assistant",
@@ -2618,9 +2646,12 @@ export default function App() {
               ];
             });
           },
-          onToken: (text) => {
+          onToken: (text, info) => {
             if (!isRunCurrent()) return;
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            const run = runsRef.current.get(streamConvId!);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             if (!curId) return;
             patchConvMessages(streamConvId!, (prev) =>
               prev.map((m) => (m.id === curId ? { ...m, content: m.content + text } : m)),
@@ -2641,16 +2672,19 @@ export default function App() {
               // streamed tokens were not yet classified as PASS (e.g. mid-stream / wrappers).
               patchConvMessages(streamConvId!, (prev) => {
                 const run = runsRef.current.get(streamConvId!);
-                const curId = run?.assistantId;
+                const mappedId = skipId && run?.assistantIdsByAgent?.[skipId];
                 return prev.filter((m) => {
-                  const dropCurrent = Boolean(curId && m.id === curId);
+                  const dropMapped = Boolean(mappedId && m.id === mappedId);
                   const dropPassForAgent =
                     Boolean(skipId) &&
                     m.agent_id === skipId &&
-                    isGroupPassContent(m.content || "");
-                  const drop = dropCurrent || dropPassForAgent;
-                  if (drop && run && run.assistantId === m.id) {
-                    run.assistantId = "";
+                    (m.streaming || isGroupPassContent(m.content || ""));
+                  const drop = dropMapped || dropPassForAgent;
+                  if (drop && run) {
+                    if (run.assistantId === m.id) run.assistantId = "";
+                    if (skipId && run.assistantIdsByAgent?.[skipId] === m.id) {
+                      delete run.assistantIdsByAgent[skipId];
+                    }
                   }
                   return !drop;
                 });
@@ -2693,12 +2727,15 @@ export default function App() {
               setRunLabelForStream("正在思考…");
             }
           },
-          onError: (msg) => {
+          onError: (msg, info) => {
             if (!isRunCurrent()) return;
             sendHadError = true;
             setStatus(`错误：${msg}`);
             setRunLabelForStream("正在思考…");
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            const run = runsRef.current.get(streamConvId!);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             patchConvMessages(streamConvId!, (prev) =>
               prev.map((m) =>
                 m.id === curId
@@ -2709,14 +2746,11 @@ export default function App() {
           },
           onDone: () => {
             if (!isRunCurrent()) return;
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            // Parallel group: seal every streaming bubble; drop PASS silence.
             patchConvMessages(streamConvId!, (prev) =>
               prev
-                .filter(
-                  (m) =>
-                    !(curId && m.id === curId && isGroupPassContent(m.content || "")),
-                )
-                .map((m) => (m.id === curId ? { ...m, streaming: false } : m)),
+                .filter((m) => !(m.streaming && isGroupPassContent(m.content || "")))
+                .map((m) => (m.streaming ? { ...m, streaming: false } : m)),
             );
             if (!taskConvIdsRef.current.has(streamConvId!)) {
               setRunLabelForStream("正在思考…");

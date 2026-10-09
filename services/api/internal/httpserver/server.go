@@ -1538,42 +1538,40 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		channelAgents, _ = s.db.ListAgents(uid)
 		forcedAgents = groupForcedAgentSet(content, channelMembers, channelAgents)
 	}
+
+	// Snapshot history once so multi-candidate group turns share the pre-send view.
+	// Parallel candidates must not wait for / see each other's in-flight replies.
+	msgs, lerr := s.db.ListMessages(uid, conv.ID)
+	if lerr != nil {
+		emit("error", map[string]string{"message": lerr.Error()})
+		return
+	}
+
+	type groupCandidatePrep struct {
+		index      int
+		agentID    string
+		agentName  string
+		payloadMap map[string]any
+		recallCtx  *recallPersistContext
+	}
+	preps := make([]groupCandidatePrep, 0, len(targetAgents))
 	for i, agentID := range targetAgents {
-		if err := runCtx.Err(); err != nil {
-			cancelled = true
-			// Cancelled before this agent produced tokens — keep a stop marker in history.
-			// Stop marker: no reply_to_id (quotes are user「回复」only). Thread root kept if any.
-			_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(agentID, threadRootID, ""))
-			break
-		}
 		systemPrompt := ""
 		agentName := agentID
+		var selfAgent *db.Agent
 		if agent, aerr := s.db.GetAgent(uid, agentID); aerr == nil {
+			selfAgent = agent
 			systemPrompt = agent.SystemPrompt
 			agentName = agent.Name
 		}
 		// Group: each candidate may PASS when not specifically addressed.
 		if conv.ChannelID != "" && len(targetAgents) > 1 {
-			extra := groupParticipationExtraSystem(forcedAgents[agentID])
+			extra := groupParticipationExtraSystem(forcedAgents[agentID], selfAgent, channelMembers, channelAgents)
 			if strings.TrimSpace(systemPrompt) != "" {
 				systemPrompt = systemPrompt + "\n\n" + extra
 			} else {
 				systemPrompt = extra
 			}
-		}
-		emit("meta", map[string]any{
-			"phase":      "agent_start",
-			"agent_id":   agentID,
-			"agent_name": agentName,
-			"index":      i,
-			"total":      len(targetAgents),
-			"forced":     forcedAgents[agentID],
-		})
-
-		msgs, lerr := s.db.ListMessages(uid, conv.ID)
-		if lerr != nil {
-			emit("error", map[string]string{"message": lerr.Error()})
-			return
 		}
 		var history []runtimeMsg
 		runtimeContent := storedContent
@@ -1627,71 +1625,140 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		attachUserTimezone(payloadMap, s.userSettingsOrDefault(uid))
 		s.attachPreferredMachine(payloadMap, uid, agentID)
-		recallCtx := &recallPersistContext{
-			UserID:         uid,
-			AgentID:        agentID,
-			ConversationID: conv.ID,
-			MessageID:      userMsg.ID,
-			Source:         "chat",
+		preps = append(preps, groupCandidatePrep{
+			index:     i,
+			agentID:   agentID,
+			agentName: agentName,
+			payloadMap: payloadMap,
+			recallCtx: &recallPersistContext{
+				UserID:         uid,
+				AgentID:        agentID,
+				ConversationID: conv.ID,
+				MessageID:      userMsg.ID,
+				Source:         "chat",
+			},
+		})
+	}
+
+	if err := runCtx.Err(); err != nil {
+		cancelled = true
+		if len(targetAgents) > 0 {
+			// Cancelled before any candidate ran — keep a stop marker in history.
+			_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(targetAgents[0], threadRootID, ""))
 		}
-		assistantText, pendingSummary, runID, runUsage, runErr := s.proxyRuntimeRun(runCtx, emit, payloadMap, recallCtx)
-		if pendingSummary != "" {
-			sumAt := userMsg.CreatedAt.Add(-time.Millisecond)
-			_, _ = s.db.AddMessageWithOpts(conv.ID, "summary", pendingSummary, db.AddMessageOpts{
-				ThreadRootID: threadRootID,
-				At:           sumAt,
-			})
+	} else {
+		// Multi-candidate group: run concurrently (goroutines). Single-candidate
+		// (DM / one @) still goes through the same path with wg size 1.
+		// On hard runErr for one agent: continue others (parallel usefulness);
+		// emit per-agent error + failure bubble, then a single terminal done.
+		var (
+			wg           sync.WaitGroup
+			cancelledMu  sync.Mutex
+			hardErrMu    sync.Mutex
+			firstHardErr error
+		)
+		for _, prep := range preps {
+			wg.Add(1)
+			go func(prep groupCandidatePrep) {
+				defer wg.Done()
+				if runCtx.Err() != nil {
+					cancelledMu.Lock()
+					cancelled = true
+					cancelledMu.Unlock()
+					_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(prep.agentID, threadRootID, ""))
+					return
+				}
+				agentEmit := stampEmitAgentID(emit, prep.agentID)
+				agentEmit("meta", map[string]any{
+					"phase":      "agent_start",
+					"agent_id":   prep.agentID,
+					"agent_name": prep.agentName,
+					"index":      prep.index,
+					"total":      len(targetAgents),
+					"forced":     forcedAgents[prep.agentID],
+				})
+				assistantText, pendingSummary, runID, runUsage, runErr := s.proxyRuntimeRun(runCtx, agentEmit, prep.payloadMap, prep.recallCtx)
+				if pendingSummary != "" {
+					sumAt := userMsg.CreatedAt.Add(-time.Millisecond)
+					_, _ = s.db.AddMessageWithOpts(conv.ID, "summary", pendingSummary, db.AddMessageOpts{
+						ThreadRootID: threadRootID,
+						At:           sumAt,
+					})
+				}
+				runCancelled := runCtx.Err() != nil || isCancelErr(runErr)
+				// A failed run with empty tokens must NOT look like group PASS silence —
+				// that is the "直接无返回" path (bubble dropped as PASS / never persisted).
+				passed := conv.ChannelID != "" && !runCancelled && runErr == nil && isGroupPassReply(assistantText)
+				// Persist partial assistant text even when cancelled mid-stream.
+				// Empty cancel → keep a light UI/history marker so the next turn still
+				// sees the interrupted turn (keep-partial-next-turn).
+				// Group PASS / empty optional silence: do not persist a bubble.
+				if passed {
+					// Durable journal may have already projected PASS via commit_assistant(project=True).
+					// Remove that row so silence never survives refresh / listMessages.
+					s.dropProjectedGroupPass(conv.ID, runID)
+					agentEmit("meta", map[string]any{
+						"phase":    "agent_skipped",
+						"agent_id": prep.agentID,
+						"reason":   "pass",
+						"index":    prep.index,
+					})
+				} else if strings.TrimSpace(assistantText) != "" {
+					// Empty reply_to_id: Bot answers are not quotes. Link via request_id (= runtime run_id).
+					s.saveAssistantThreaded(uid, conv.ID, prep.agentID, assistantText, "", threadRootID, runID, agentEmit)
+				} else if runCancelled {
+					_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(prep.agentID, threadRootID, runID))
+				} else if runErr != nil {
+					// Persist a visible failure bubble (same family as 「（已停止）」) so refresh
+					// and other clients still see the turn instead of silent empty.
+					s.saveAssistantThreaded(uid, conv.ID, prep.agentID, formatAssistantRunFailure(runErr), "", threadRootID, runID, agentEmit)
+				}
+				if runErr != nil {
+					if runCancelled {
+						cancelledMu.Lock()
+						cancelled = true
+						cancelledMu.Unlock()
+						return
+					}
+					// Continue sibling candidates; do not emit terminal done here.
+					agentEmit("error", map[string]any{
+						"message":  runErr.Error(),
+						"agent_id": prep.agentID,
+					})
+					hardErrMu.Lock()
+					if firstHardErr == nil {
+						firstHardErr = runErr
+					}
+					hardErrMu.Unlock()
+					return
+				}
+				if runCancelled {
+					cancelledMu.Lock()
+					cancelled = true
+					cancelledMu.Unlock()
+					return
+				}
+				if !passed {
+					agentEmit("meta", map[string]any{
+						"phase":    "agent_done",
+						"agent_id": prep.agentID,
+						"index":    prep.index,
+					})
+				}
+				_ = s.db.RecordUsageRun("", uid, prep.agentID, conv.ID, "chat",
+					runUsage.PromptTokens, runUsage.CompletionTokens, runUsage.TotalTokens)
+			}(prep)
 		}
-		runCancelled := runCtx.Err() != nil || isCancelErr(runErr)
-		// A failed run with empty tokens must NOT look like group PASS silence —
-		// that is the "直接无返回" path (bubble dropped as PASS / never persisted).
-		passed := conv.ChannelID != "" && !runCancelled && runErr == nil && isGroupPassReply(assistantText)
-		// Persist partial assistant text even when cancelled mid-stream.
-		// Empty cancel → keep a light UI/history marker so the next turn still
-		// sees the interrupted turn (keep-partial-next-turn).
-		// Group PASS / empty optional silence: do not persist a bubble.
-		if passed {
-			// Durable journal may have already projected PASS via commit_assistant(project=True).
-			// Remove that row so silence never survives refresh / listMessages.
-			s.dropProjectedGroupPass(conv.ID, runID)
-			emit("meta", map[string]any{
-				"phase":    "agent_skipped",
-				"agent_id": agentID,
-				"reason":   "pass",
-				"index":    i,
-			})
-		} else if strings.TrimSpace(assistantText) != "" {
-			// Empty reply_to_id: Bot answers are not quotes. Link via request_id (= runtime run_id).
-			s.saveAssistantThreaded(uid, conv.ID, agentID, assistantText, "", threadRootID, runID, emit)
-		} else if runCancelled {
-			_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(agentID, threadRootID, runID))
-		} else if runErr != nil {
-			// Persist a visible failure bubble (same family as 「（已停止）」) so refresh
-			// and other clients still see the turn instead of silent empty.
-			s.saveAssistantThreaded(uid, conv.ID, agentID, formatAssistantRunFailure(runErr), "", threadRootID, runID, emit)
-		}
-		if runErr != nil {
-			if runCancelled {
-				cancelled = true
-				break
-			}
-			emit("error", map[string]string{"message": runErr.Error()})
-			emit("done", map[string]any{"ok": false, "error": runErr.Error()})
+		wg.Wait()
+		if cancelled {
+			emit("meta", map[string]any{"phase": "cancelled"})
+			emit("done", map[string]any{"ok": false, "cancelled": true})
 			return
 		}
-		if runCancelled {
-			cancelled = true
-			break
+		if firstHardErr != nil {
+			emit("done", map[string]any{"ok": false, "error": firstHardErr.Error(), "partial": true})
+			return
 		}
-		if !passed {
-			emit("meta", map[string]any{
-				"phase":    "agent_done",
-				"agent_id": agentID,
-				"index":    i,
-			})
-		}
-		_ = s.db.RecordUsageRun("", uid, agentID, conv.ID, "chat",
-			runUsage.PromptTokens, runUsage.CompletionTokens, runUsage.TotalTokens)
 	}
 	if cancelled {
 		emit("meta", map[string]any{"phase": "cancelled"})
@@ -1699,6 +1766,46 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	emit("done", map[string]any{"ok": true})
+}
+
+// stampEmitAgentID wraps an SSE emit so token/status/error/meta frames carry agent_id
+// for parallel group candidates (client routes bubbles by agent_id).
+func stampEmitAgentID(emit func(event string, data any), agentID string) func(event string, data any) {
+	if emit == nil {
+		return nil
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return emit
+	}
+	return func(event string, data any) {
+		switch event {
+		case "token", "status", "error", "meta":
+			switch m := data.(type) {
+			case map[string]any:
+				cp := make(map[string]any, len(m)+1)
+				for k, v := range m {
+					cp[k] = v
+				}
+				if _, ok := cp["agent_id"]; !ok {
+					cp["agent_id"] = agentID
+				}
+				emit(event, cp)
+				return
+			case map[string]string:
+				cp := make(map[string]any, len(m)+1)
+				for k, v := range m {
+					cp[k] = v
+				}
+				if _, ok := cp["agent_id"]; !ok {
+					cp["agent_id"] = agentID
+				}
+				emit(event, cp)
+				return
+			}
+		}
+		emit(event, data)
+	}
 }
 
 // resolveSendTargets picks which agents should answer this turn.

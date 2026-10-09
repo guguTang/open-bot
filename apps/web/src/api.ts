@@ -784,11 +784,15 @@ export type StatusEvent = {
   [key: string]: unknown;
 };
 
+export type StreamTokenInfo = { agent_id?: string };
+export type StreamErrorInfo = { agent_id?: string };
+
 export type StreamHandlers = {
-  onToken: (text: string) => void;
+  /** text plus optional agent_id so parallel group candidates route to the right bubble */
+  onToken: (text: string, info?: StreamTokenInfo) => void;
   onMeta?: (data: Record<string, unknown>) => void;
   onStatus?: (data: StatusEvent) => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, info?: StreamErrorInfo) => void;
   onDone?: () => void;
   /** Group multi-agent: called when a new bot starts streaming. */
   onAgentStart?: (info: { agent_id: string; agent_name?: string; index?: number; total?: number }) => void;
@@ -941,7 +945,11 @@ async function readSSEStream(
           data = { raw: dataStr };
         }
         if (eventName === "token" && typeof data.text === "string") {
-          handlers.onToken(data.text);
+          const tokenInfo: StreamTokenInfo = {};
+          if (typeof data.agent_id === "string" && data.agent_id) {
+            tokenInfo.agent_id = data.agent_id;
+          }
+          handlers.onToken(data.text, tokenInfo);
         } else if (eventName === "meta") {
           if (data.phase === "agent_start" && typeof data.agent_id === "string") {
             handlers.onAgentStart?.({
@@ -965,7 +973,11 @@ async function readSSEStream(
               : typeof data.raw === "string"
                 ? data.raw
                 : JSON.stringify(data);
-          handlers.onError?.(msg);
+          const errInfo: StreamErrorInfo = {};
+          if (typeof data.agent_id === "string" && data.agent_id) {
+            errInfo.agent_id = data.agent_id;
+          }
+          handlers.onError?.(msg, errInfo);
         } else if (eventName === "done") {
           sawDone = true;
           handlers.onDone?.();

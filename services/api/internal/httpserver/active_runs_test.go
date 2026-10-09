@@ -158,3 +158,35 @@ func TestActiveRunsSubscribeCatchupAndPublish(t *testing.T) {
 		t.Fatal("expected inactive after unregister")
 	}
 }
+
+func TestActiveRunsParallelAgentCatchup(t *testing.T) {
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h := newRunHandle(cancel)
+
+	h.Publish("meta", map[string]any{"phase": "agent_start", "agent_id": "a2", "agent_name": "Writer"})
+	h.Publish("meta", map[string]any{"phase": "agent_start", "agent_id": "a1", "agent_name": "Coder"})
+	h.Publish("token", map[string]any{"text": "code", "agent_id": "a1"})
+	h.Publish("token", map[string]any{"text": "poem", "agent_id": "a2"})
+
+	_, catchup, ok := h.Subscribe()
+	if !ok {
+		t.Fatal("subscribe")
+	}
+	var starts, tokens []string
+	for _, ev := range catchup {
+		m, _ := ev.Data.(map[string]any)
+		if ev.Event == "meta" && m["phase"] == "agent_start" {
+			starts = append(starts, m["agent_id"].(string))
+		}
+		if ev.Event == "token" {
+			tokens = append(tokens, m["agent_id"].(string)+":"+m["text"].(string))
+		}
+	}
+	if len(starts) != 2 || starts[0] != "a1" || starts[1] != "a2" {
+		t.Fatalf("expected sorted agent_start a1,a2 got %#v", starts)
+	}
+	if len(tokens) != 2 || tokens[0] != "a1:code" || tokens[1] != "a2:poem" {
+		t.Fatalf("expected per-agent tokens, got %#v", tokens)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -13,8 +14,10 @@ import (
 // newSSEEmitter writes SSE to the initiating client when still connected and
 // always fans out to runHandle subscribers (for refresh / reconnect).
 // Client disconnect never cancels the run — only handle.cancel does.
+// Writes are serialized with writeMu so parallel group candidates can emit safely.
 func newSSEEmitter(w http.ResponseWriter, flusher http.Flusher, clientCtx context.Context, handle *runHandle) func(event string, data any) {
 	var clientGone atomic.Bool
+	var writeMu sync.Mutex
 	go func() {
 		<-clientCtx.Done()
 		clientGone.Store(true)
@@ -23,6 +26,8 @@ func newSSEEmitter(w http.ResponseWriter, flusher http.Flusher, clientCtx contex
 		if handle != nil {
 			handle.Publish(event, data)
 		}
+		writeMu.Lock()
+		defer writeMu.Unlock()
 		if clientGone.Load() || w == nil || flusher == nil {
 			return
 		}
