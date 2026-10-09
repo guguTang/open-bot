@@ -56,6 +56,7 @@ import {
   updateAgent,
   subscribeConversationEvents,
   cancelConversationRun,
+  approveConversationRun,
   chatEventsWebSocketUrl,
   mergeIncomingMessage,
   STOP_MARKER_TEXT,
@@ -500,6 +501,12 @@ export default function App() {
   taskConvIdsRef.current = taskConvIds;
   const [, setStatus] = useState(""); // chat chrome status bar removed; keep setter for clear/error paths
   const [runLabel, setRunLabel] = useState("正在思考…");
+  /** Durable HITL: request_id awaiting tool approval. */
+  const [approvalGate, setApprovalGate] = useState<{
+    conversationId: string;
+    requestId: string;
+  } | null>(null);
+  const lastRequestIdRef = useRef<string>("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
@@ -1216,6 +1223,17 @@ export default function App() {
             // Five-state whitelist; empty → idle, unknown → working (v2.1 product rule).
             const st: BotPresenceStatus = normalizePresenceStatus(evt.status);
             setPresenceByAgent((prev) => ({ ...prev, [evt.agent_id]: st }));
+            if (st === "awaiting_approval") {
+              const rid = lastRequestIdRef.current;
+              const cid = conversationRef.current?.id;
+              if (rid && cid) {
+                setApprovalGate({ conversationId: cid, requestId: rid });
+              }
+            } else if (st === "idle" || st === "thinking" || st === "working") {
+              setApprovalGate((prev) =>
+                prev && conversationRef.current?.id === prev.conversationId ? null : prev,
+              );
+            }
           }
           return;
         }
@@ -2659,6 +2677,17 @@ export default function App() {
           },
           onMeta: (meta) => {
             if (!isRunCurrent()) return;
+            if (typeof meta.request_id === "string" && meta.request_id) {
+              lastRequestIdRef.current = meta.request_id;
+            } else if (typeof meta.run_id === "string" && meta.run_id) {
+              lastRequestIdRef.current = meta.run_id;
+            }
+            if (meta.waiting_approval && streamConvId && lastRequestIdRef.current) {
+              setApprovalGate({
+                conversationId: streamConvId,
+                requestId: lastRequestIdRef.current,
+              });
+            }
             if (meta.phase === "cancelled") {
               sealStreamingMessagesForConv(streamConvId!, true);
               if (isViewingStream()) {
@@ -2713,6 +2742,18 @@ export default function App() {
             if (!isRunCurrent()) return;
             const phase = String(data.phase || "");
             const tool = typeof data.tool === "string" ? data.tool : "";
+            if (phase === "waiting_approval") {
+              setRunLabelForStream(
+                typeof data.label === "string" && data.label.trim()
+                  ? data.label
+                  : "等待确认后继续",
+              );
+              const rid = lastRequestIdRef.current;
+              if (rid && streamConvId) {
+                setApprovalGate({ conversationId: streamConvId, requestId: rid });
+              }
+              return;
+            }
             if (typeof data.label === "string" && data.label.trim()) {
               if (phase === "tool" && tool) {
                 setRunLabelForStream(`${data.label} · ${tool}`);
@@ -2744,15 +2785,42 @@ export default function App() {
               ),
             );
           },
-          onDone: () => {
+          onDone: (data) => {
             if (!isRunCurrent()) return;
-            // Parallel group: seal every streaming bubble; drop PASS silence.
+            const doneFailed =
+              data?.ok === false &&
+              !data?.waiting_approval &&
+              !data?.cancelled &&
+              typeof data?.error === "string" &&
+              Boolean((data.error as string).trim());
+            const failText =
+              doneFailed && typeof data?.error === "string"
+                ? `（失败）${(data.error as string).trim()}`
+                : "";
+            // Parallel group: seal every streaming bubble; drop PASS silence
+            // (keep empty streaming bubble when doneFailed so failure text can show).
             patchConvMessages(streamConvId!, (prev) =>
               prev
-                .filter((m) => !(m.streaming && isGroupPassContent(m.content || "")))
-                .map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+                .filter((m) => {
+                  if (!(m.streaming && isGroupPassContent(m.content || ""))) return true;
+                  return Boolean(doneFailed);
+                })
+                .map((m) => {
+                  if (!m.streaming) return m;
+                  const content =
+                    !(m.content || "").trim() && failText ? failText : m.content;
+                  return { ...m, streaming: false, content };
+                }),
             );
-            if (!taskConvIdsRef.current.has(streamConvId!)) {
+            if (data?.waiting_approval && streamConvId) {
+              const rid =
+                (typeof data.request_id === "string" && data.request_id) ||
+                lastRequestIdRef.current;
+              if (rid) {
+                setApprovalGate({ conversationId: streamConvId, requestId: rid });
+                setRunLabelForStream("等待确认后继续");
+              }
+            } else if (!taskConvIdsRef.current.has(streamConvId!)) {
               setRunLabelForStream("正在思考…");
             }
             void refreshConversations();
@@ -4372,6 +4440,54 @@ export default function App() {
         ) : null}
 
         <div className="composer-wrap">
+          {approvalGate &&
+          conversation?.id === approvalGate.conversationId ? (
+            <div className="approval-gate-card" role="status">
+              <span className="approval-gate-text">工具需要你确认后才能继续</span>
+              <div className="approval-gate-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const gate = approvalGate;
+                    void approveConversationRun(
+                      gate.conversationId,
+                      gate.requestId,
+                      false,
+                      "user_rejected",
+                    )
+                      .then(() => setApprovalGate(null))
+                      .catch((err) =>
+                        setStatus(`拒绝失败：${err instanceof Error ? err.message : String(err)}`),
+                      );
+                  }}
+                >
+                  拒绝
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    const gate = approvalGate;
+                    void approveConversationRun(
+                      gate.conversationId,
+                      gate.requestId,
+                      true,
+                    )
+                      .then(() => {
+                        setApprovalGate(null);
+                        setRunLabel("正在继续…");
+                      })
+                      .catch((err) =>
+                        setStatus(`批准失败：${err instanceof Error ? err.message : String(err)}`),
+                      );
+                  }}
+                >
+                  批准
+                </button>
+              </div>
+            </div>
+          ) : null}
           {showScrollBottom ? (
             <button
               type="button"

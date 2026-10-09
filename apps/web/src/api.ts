@@ -781,6 +781,8 @@ export type StatusEvent = {
   phase?: string;
   label?: string;
   tool?: string;
+  thread_id?: string;
+  waiting_approval?: boolean;
   [key: string]: unknown;
 };
 
@@ -793,7 +795,7 @@ export type StreamHandlers = {
   onMeta?: (data: Record<string, unknown>) => void;
   onStatus?: (data: StatusEvent) => void;
   onError?: (message: string, info?: StreamErrorInfo) => void;
-  onDone?: () => void;
+  onDone?: (data?: Record<string, unknown>) => void;
   /** Group multi-agent: called when a new bot starts streaming. */
   onAgentStart?: (info: { agent_id: string; agent_name?: string; index?: number; total?: number }) => void;
   /** Conversation SSE `bot_online` (agent-global green dot; independent of bot_presence). */
@@ -916,6 +918,38 @@ export async function cancelConversationRun(conversationId: string): Promise<voi
   }
 }
 
+/** Queue follow_up / steer / reject on a busy durable run. */
+export async function steerConversationRun(
+  conversationId: string,
+  requestId: string,
+  text: string,
+  mode: "follow_up" | "steer" | "reject" = "follow_up",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/steer`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId, text, mode, when_busy: mode }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** Resume a waiting_approval interrupt. */
+export async function approveConversationRun(
+  conversationId: string,
+  requestId: string,
+  approve: boolean,
+  reason = "",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/approve`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId, approve, reason }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
 async function readSSEStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
@@ -980,7 +1014,7 @@ async function readSSEStream(
           handlers.onError?.(msg, errInfo);
         } else if (eventName === "done") {
           sawDone = true;
-          handlers.onDone?.();
+          handlers.onDone?.(data);
         }
       } else if (line === "") {
         eventName = "message";

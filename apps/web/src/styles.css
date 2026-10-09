@@ -1158,6 +1158,28 @@ button {
   gap: 8px;
 }
 
+.approval-gate-card {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+.approval-gate-text {
+  font-size: 13px;
+  color: var(--text);
+}
+.approval-gate-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .scroll-bottom-btn {
   width: 36px;
   height: 36px;
