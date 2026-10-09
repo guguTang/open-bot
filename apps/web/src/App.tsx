@@ -1389,6 +1389,14 @@ export default function App() {
     return { who, text: parent.content || "" };
   };
 
+  /** Group only: name above assistant bubbles; DM keeps current look. */
+  const speakerNameFor = (m: UiMessage): string | undefined => {
+    if (!conversation?.channel_id) return undefined;
+    if (m.role !== "assistant") return undefined;
+    const name = (m.agent_name || agentNameById.get(m.agent_id || "") || "").trim();
+    return name || undefined;
+  };
+
   const beginReplyTo = (m: UiMessage) => {
     const who =
       m.role === "assistant"
@@ -4195,6 +4203,7 @@ export default function App() {
               key={m.id}
               message={m}
               agentId={m.agent_id || agentId}
+              speakerName={speakerNameFor(m)}
               onHostDecide={m.role === "host_confirm" ? (ok) => settleHostConfirm(m, ok) : undefined}
               replyQuote={quoteFor(m)}
               replyCount={replyCountByRoot.get(m.id) || 0}
@@ -4244,6 +4253,7 @@ export default function App() {
                   key={`thread-${m.id}`}
                   message={m}
                   agentId={m.agent_id || agentId}
+                  speakerName={speakerNameFor(m)}
                   dense
                   replyQuote={quoteFor(m)}
                   onReply={beginReplyTo}
