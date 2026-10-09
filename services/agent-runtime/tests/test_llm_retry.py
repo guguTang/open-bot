@@ -33,6 +33,18 @@ def _ok(cond: bool, msg: str) -> None:
 def test_retryable_classifier() -> None:
     _ok(is_retryable_llm_error(RuntimeError("upstream HTTP 429: slow down")), "429 retryable")
     _ok(is_retryable_llm_error(RuntimeError("upstream HTTP 503: unavailable")), "503 retryable")
+    _ok(
+        not is_retryable_llm_error(
+            RuntimeError(
+                "upstream HTTP 502: downstream request canceled before upstream response headers: context canceled"
+            )
+        ),
+        "cancel-flavored 502 not retryable",
+    )
+    _ok(
+        not is_retryable_llm_error(RuntimeError("upstream HTTP 502: context canceled")),
+        "502 context canceled not retryable",
+    )
     _ok(is_retryable_llm_error(RuntimeError("upstream HTTP 408: timeout")), "408 retryable")
     _ok(is_retryable_llm_error(RuntimeError("empty LLM completion (no choices)")), "empty choices retryable")
     _ok(is_retryable_llm_error(RuntimeError("LLM request timed out: ReadTimeout")), "timeout msg retryable")

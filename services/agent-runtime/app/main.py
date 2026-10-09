@@ -1377,8 +1377,13 @@ async def openai_path(
                     else "",
                 },
             ):
+                # Desktop/Tauri SSE drop (app background, AbortController on the
+                # initiating POST) must not cancel durable work. Go already keeps
+                # runCtx alive; draining without CancelledError lets journal finish
+                # and clients rejoin via GET .../events. Explicit Stop still aborts
+                # the Go→runtime HTTP request (ASGI cancel).
                 if request is not None and await request.is_disconnected():
-                    raise asyncio.CancelledError()
+                    continue
                 yield chunk
         finally:
             reset_tool_handler(token)
@@ -1426,19 +1431,22 @@ async def openai_path(
                 )
             )
             try:
+                client_gone = False
                 while not loop_task.done():
                     if request is not None and await request.is_disconnected():
-                        loop_task.cancel()
-                        with contextlib.suppress(asyncio.CancelledError):
-                            await loop_task
-                        raise asyncio.CancelledError()
+                        # Match Go policy: client hangup ≠ cancel. Keep the tool
+                        # loop alive; only stop writing SSE frames.
+                        client_gone = True
                     try:
                         payload = await asyncio.wait_for(status_q.get(), timeout=0.08)
-                        yield sse("status", payload)
+                        if not client_gone:
+                            yield sse("status", payload)
                     except asyncio.TimeoutError:
                         await asyncio.sleep(0)
                 while not status_q.empty():
-                    yield sse("status", status_q.get_nowait())
+                    payload = status_q.get_nowait()
+                    if not client_gone:
+                        yield sse("status", payload)
                 final, used_tools, usage_details = await loop_task
             except asyncio.CancelledError:
                 if not loop_task.done():
@@ -1463,8 +1471,7 @@ async def openai_path(
                 async for text in stream_chat_tokens(
                     llm_messages, api_key=api_key, override=override
                 ):
-                    if request is not None and await request.is_disconnected():
-                        raise asyncio.CancelledError()
+                    # Client disconnect does not cancel; tokens still accumulate for persist.
                     assistant_parts.append(text)
                 streamed = "".join(assistant_parts)
                 streamed = strip_think(strip_tool_markup(streamed))

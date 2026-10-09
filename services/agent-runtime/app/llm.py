@@ -1276,12 +1276,30 @@ def _upstream_http_status(message: str) -> int | None:
         return None
 
 
+def _is_cancel_flavored_upstream(message: str) -> bool:
+    """True when an upstream/gateway body is client-cancel noise, not a transient 5xx.
+
+    Gateways (Caddy/Go reverse proxies in front of model APIs) often answer 502 with
+    "downstream request canceled … context canceled" when *their* downstream aborted
+    before upstream headers. Retrying that burns another canceled attempt.
+    """
+    folded = (message or "").lower()
+    if "context canceled" in folded or "context cancelled" in folded:
+        return True
+    if "downstream request canceled" in folded or "downstream request cancelled" in folded:
+        return True
+    if "request canceled" in folded or "request cancelled" in folded:
+        return True
+    return False
+
+
 def is_retryable_llm_error(exc: BaseException) -> bool:
     """True for transient LLM/transport failures worth another attempt.
 
     Retries: timeout, connection reset/network, 429, 5xx, empty choices.
-    Does not retry: CancelledError, auth/bad-request 4xx, AutoToolChoiceUnsupported,
-    context-length overflow (compaction owns that path).
+    Does not retry: CancelledError, cancel-flavored upstream 5xx bodies,
+    auth/bad-request 4xx, AutoToolChoiceUnsupported, context-length overflow
+    (compaction owns that path).
     """
     if isinstance(exc, asyncio.CancelledError):
         return False
@@ -1300,6 +1318,8 @@ def is_retryable_llm_error(exc: BaseException) -> bool:
         return False
     msg = str(exc)
     if is_context_length_error(msg):
+        return False
+    if _is_cancel_flavored_upstream(msg):
         return False
     if "LLM request timed out" in msg or "LLM connection error" in msg:
         return True
@@ -1322,7 +1342,7 @@ async def _chat_completion_once(
 ) -> dict[str, Any]:
     """One HTTP POST (plus optional reasoning_effort payload tweak). May mutate payload."""
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
             resp = await client.post(url, headers=headers, json=payload)
             if resp.status_code >= 300:
                 body = resp.text[:2000]
@@ -1862,7 +1882,7 @@ async def stream_chat_tokens(
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
         async with client.stream("POST", url, headers=headers, json=payload) as resp:
             if resp.status_code >= 300:
                 err = (await resp.aread()).decode("utf-8", errors="replace")

@@ -2047,7 +2047,16 @@ func isCancelErr(err error) bool {
 		return true
 	}
 	// net/http often wraps disconnect as url.Error / OpError with context canceled.
+	// Do NOT treat upstream LLM gateway bodies (e.g. HTTP 502 "downstream request
+	// canceled before upstream response headers: context canceled") as *our* run
+	// cancel — those are proxy/gateway errors and should surface as failures (or be
+	// filtered in runtime retries), not as 「（已停止）」.
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "upstream http") ||
+		strings.Contains(msg, "downstream request canceled") ||
+		strings.Contains(msg, "downstream request cancelled") {
+		return false
+	}
 	return strings.Contains(msg, "context canceled") || strings.Contains(msg, "request canceled")
 }
 
