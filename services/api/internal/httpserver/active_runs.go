@@ -34,12 +34,14 @@ type runHandle struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	mu        sync.Mutex
-	subs      map[*runSub]struct{}
-	partial   string
-	agentID   string
-	agentName string
-	closed    bool
+	mu             sync.Mutex
+	subs           map[*runSub]struct{}
+	partial        string // legacy single-agent catchup text
+	partialByAgent map[string]string
+	agentNames     map[string]string
+	agentID        string
+	agentName      string
+	closed         bool
 }
 
 func newActiveRuns() *activeRuns {
@@ -94,6 +96,7 @@ func waitHandleDone(h *runHandle, timeout time.Duration) {
 
 // Publish fans an SSE frame out to resume subscribers and updates the
 // catch-up snapshot (current agent + partial assistant text).
+// Tokens may carry agent_id so parallel group candidates keep separate partials.
 func (h *runHandle) Publish(event string, data any) {
 	if h == nil {
 		return
@@ -107,18 +110,43 @@ func (h *runHandle) Publish(event string, data any) {
 	case "token":
 		if m, ok := data.(map[string]any); ok {
 			if t, ok := m["text"].(string); ok {
+				aid, _ := m["agent_id"].(string)
+				if aid == "" {
+					aid = h.agentID
+				}
+				if aid != "" {
+					if h.partialByAgent == nil {
+						h.partialByAgent = map[string]string{}
+					}
+					h.partialByAgent[aid] += t
+				}
 				h.partial += t
 			}
 		}
 	case "meta":
 		if m, ok := data.(map[string]any); ok {
 			if phase, _ := m["phase"].(string); phase == "agent_start" {
-				h.partial = ""
-				if id, ok := m["agent_id"].(string); ok {
+				id, _ := m["agent_id"].(string)
+				name, _ := m["agent_name"].(string)
+				if id != "" {
 					h.agentID = id
-				}
-				if name, ok := m["agent_name"].(string); ok {
-					h.agentName = name
+					if h.partialByAgent == nil {
+						h.partialByAgent = map[string]string{}
+					}
+					h.partialByAgent[id] = ""
+					if name != "" {
+						if h.agentNames == nil {
+							h.agentNames = map[string]string{}
+						}
+						h.agentNames[id] = name
+						h.agentName = name
+					}
+					// Sequential single-active catchup: reset legacy buffer on switch.
+					if len(h.partialByAgent) <= 1 {
+						h.partial = ""
+					}
+				} else {
+					h.partial = ""
 				}
 			}
 		}
@@ -151,21 +179,61 @@ func (h *runHandle) Subscribe() (sub *runSub, catchup []sseEvent, ok bool) {
 		Event: "meta",
 		Data:  map[string]any{"phase": "resumed", "active": true},
 	})
-	if h.agentID != "" {
-		catchup = append(catchup, sseEvent{
-			Event: "meta",
-			Data: map[string]any{
-				"phase":      "agent_start",
-				"agent_id":   h.agentID,
-				"agent_name": h.agentName,
-			},
-		})
-	}
-	if h.partial != "" {
-		catchup = append(catchup, sseEvent{
-			Event: "token",
-			Data:  map[string]any{"text": h.partial},
-		})
+	// Parallel group: emit each in-flight agent partial with agent_id.
+	if len(h.partialByAgent) > 1 {
+		ids := make([]string, 0, len(h.partialByAgent))
+		for id := range h.partialByAgent {
+			ids = append(ids, id)
+		}
+		// Stable order for tests / UI.
+		for i := 0; i < len(ids); i++ {
+			for j := i + 1; j < len(ids); j++ {
+				if ids[j] < ids[i] {
+					ids[i], ids[j] = ids[j], ids[i]
+				}
+			}
+		}
+		for _, id := range ids {
+			name := ""
+			if h.agentNames != nil {
+				name = h.agentNames[id]
+			}
+			catchup = append(catchup, sseEvent{
+				Event: "meta",
+				Data: map[string]any{
+					"phase":      "agent_start",
+					"agent_id":   id,
+					"agent_name": name,
+				},
+			})
+			if text := h.partialByAgent[id]; text != "" {
+				catchup = append(catchup, sseEvent{
+					Event: "token",
+					Data:  map[string]any{"text": text, "agent_id": id},
+				})
+			}
+		}
+	} else {
+		if h.agentID != "" {
+			catchup = append(catchup, sseEvent{
+				Event: "meta",
+				Data: map[string]any{
+					"phase":      "agent_start",
+					"agent_id":   h.agentID,
+					"agent_name": h.agentName,
+				},
+			})
+		}
+		if h.partial != "" {
+			data := map[string]any{"text": h.partial}
+			if h.agentID != "" {
+				data["agent_id"] = h.agentID
+			}
+			catchup = append(catchup, sseEvent{
+				Event: "token",
+				Data:  data,
+			})
+		}
 	}
 	return sub, catchup, true
 }

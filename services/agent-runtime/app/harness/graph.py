@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
 
+from .nodes.compact import compact_node
 from .nodes.finish import finish_node
 from .nodes.llm import llm_node
 from .nodes.prepare import prepare_node
@@ -15,16 +16,26 @@ from .state import AgentState
 _compiled: Any | None = None
 
 
-def _route_after_llm(state: AgentState) -> Literal["tools", "finish"]:
+def _route_after_llm(state: AgentState) -> Literal["tools", "compact", "finish"]:
+    if state.get("needs_compaction"):
+        return "compact"
     if state.get("pending_tool_calls"):
         return "tools"
     return "finish"
 
 
-def _route_after_tools(state: AgentState) -> Literal["llm", "finish"]:
+def _route_after_tools(state: AgentState) -> Literal["llm", "compact", "finish"]:
     if str(state.get("status") or "") in ("aborted", "failed"):
         return "finish"
+    if state.get("needs_compaction"):
+        return "compact"
     if int(state.get("round") or 0) >= int(state.get("max_rounds") or 12):
+        return "finish"
+    return "llm"
+
+
+def _route_after_compact(state: AgentState) -> Literal["llm", "finish"]:
+    if str(state.get("status") or "") in ("aborted", "failed"):
         return "finish"
     return "llm"
 
@@ -34,11 +45,25 @@ def build_graph() -> Any:
     g.add_node("prepare", prepare_node)
     g.add_node("llm", llm_node)
     g.add_node("tools", tools_node)
+    g.add_node("compact", compact_node)
     g.add_node("finish", finish_node)
     g.add_edge(START, "prepare")
     g.add_edge("prepare", "llm")
-    g.add_conditional_edges("llm", _route_after_llm, {"tools": "tools", "finish": "finish"})
-    g.add_conditional_edges("tools", _route_after_tools, {"llm": "llm", "finish": "finish"})
+    g.add_conditional_edges(
+        "llm",
+        _route_after_llm,
+        {"tools": "tools", "compact": "compact", "finish": "finish"},
+    )
+    g.add_conditional_edges(
+        "tools",
+        _route_after_tools,
+        {"llm": "llm", "compact": "compact", "finish": "finish"},
+    )
+    g.add_conditional_edges(
+        "compact",
+        _route_after_compact,
+        {"llm": "llm", "finish": "finish"},
+    )
     g.add_edge("finish", END)
     return g
 

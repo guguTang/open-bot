@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import os
 import re
@@ -1226,6 +1227,144 @@ def _raw_usage_from_response(data: dict[str, Any] | None) -> Any | None:
     return usage
 
 
+logger = logging.getLogger(__name__)
+
+# Transient LLM failures: limited attempts + exponential backoff (group fan-out safe).
+# Override with OPENBOT_LLM_MAX_ATTEMPTS (1–5). Default 3 total tries.
+_LLM_RETRY_DEFAULT_ATTEMPTS = 3
+_LLM_RETRY_BASE_DELAY_S = 0.4
+
+
+def _llm_max_attempts() -> int:
+    raw = (os.getenv("OPENBOT_LLM_MAX_ATTEMPTS") or "").strip()
+    if not raw:
+        return _LLM_RETRY_DEFAULT_ATTEMPTS
+    try:
+        n = int(raw)
+    except ValueError:
+        return _LLM_RETRY_DEFAULT_ATTEMPTS
+    return max(1, min(n, 5))
+
+
+def _llm_retry_delay_s(attempt: int) -> float:
+    """Backoff before the next try; attempt is 1-based index of the failed try."""
+    return _LLM_RETRY_BASE_DELAY_S * (2 ** max(0, attempt - 1))
+
+
+def _upstream_http_status(message: str) -> int | None:
+    m = (message or "").strip()
+    if not m.startswith("upstream HTTP "):
+        return None
+    rest = m[len("upstream HTTP ") :]
+    digits: list[str] = []
+    for ch in rest:
+        if ch.isdigit():
+            digits.append(ch)
+        else:
+            break
+    if not digits:
+        return None
+    try:
+        return int("".join(digits))
+    except ValueError:
+        return None
+
+
+def is_retryable_llm_error(exc: BaseException) -> bool:
+    """True for transient LLM/transport failures worth another attempt.
+
+    Retries: timeout, connection reset/network, 429, 5xx, empty choices.
+    Does not retry: CancelledError, auth/bad-request 4xx, AutoToolChoiceUnsupported,
+    context-length overflow (compaction owns that path).
+    """
+    if isinstance(exc, asyncio.CancelledError):
+        return False
+    if isinstance(exc, AutoToolChoiceUnsupported):
+        return False
+    if isinstance(
+        exc,
+        (
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+        ),
+    ):
+        return True
+    if not isinstance(exc, RuntimeError):
+        return False
+    msg = str(exc)
+    if is_context_length_error(msg):
+        return False
+    if "LLM request timed out" in msg or "LLM connection error" in msg:
+        return True
+    if "empty LLM completion" in msg:
+        return True
+    status = _upstream_http_status(msg)
+    if status is None:
+        return False
+    if status == 429 or status == 408 or status >= 500:
+        return True
+    return False
+
+
+async def _chat_completion_once(
+    *,
+    tools: list[dict[str, Any]] | None,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    url: str,
+) -> dict[str, Any]:
+    """One HTTP POST (plus optional reasoning_effort payload tweak). May mutate payload."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code >= 300:
+                body = resp.text[:2000]
+                # Some gateways inject a non-none default; retry once with none + tools.
+                if (
+                    tools
+                    and resp.status_code == 400
+                    and "reasoning_effort" in body
+                    and payload.get("reasoning_effort") != "none"
+                ):
+                    payload.update({"reasoning_effort": "none"})
+                    resp2 = await client.post(url, headers=headers, json=payload)
+                    if resp2.status_code >= 300:
+                        body2 = resp2.text[:2000]
+                        if (
+                            tools
+                            and resp2.status_code == 400
+                            and is_auto_tool_choice_unsupported(body2)
+                        ):
+                            raise AutoToolChoiceUnsupported(
+                                f"upstream HTTP {resp2.status_code}: {body2}"
+                            )
+                        raise RuntimeError(
+                            f"upstream HTTP {resp2.status_code}: {body2}"
+                        )
+                    data2 = resp2.json()
+                    if not (isinstance(data2, dict) and (data2.get("choices") or [])):
+                        raise RuntimeError("empty LLM completion (no choices)")
+                    return data2
+                if (
+                    tools
+                    and resp.status_code == 400
+                    and is_auto_tool_choice_unsupported(body)
+                ):
+                    raise AutoToolChoiceUnsupported(
+                        f"upstream HTTP {resp.status_code}: {body}"
+                    )
+                raise RuntimeError(f"upstream HTTP {resp.status_code}: {body}")
+            data = resp.json()
+            if not (isinstance(data, dict) and (data.get("choices") or [])):
+                raise RuntimeError("empty LLM completion (no choices)")
+            return data
+    except httpx.TimeoutException as exc:
+        raise RuntimeError(f"LLM request timed out: {exc}") from exc
+    except (httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+        raise RuntimeError(f"LLM connection error: {exc}") from exc
+
+
 async def chat_completion(
     messages: list[dict[str, Any]],
     *,
@@ -1251,43 +1390,52 @@ async def chat_completion(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0)) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        if resp.status_code >= 300:
-            body = resp.text[:2000]
-            # Some gateways inject a non-none default; retry once with none + tools.
-            if (
-                tools
-                and resp.status_code == 400
-                and "reasoning_effort" in body
-                and payload.get("reasoning_effort") != "none"
-            ):
-                payload = {**payload, "reasoning_effort": "none"}
-                resp2 = await client.post(url, headers=headers, json=payload)
-                if resp2.status_code >= 300:
-                    body2 = resp2.text[:2000]
-                    if (
-                        tools
-                        and resp2.status_code == 400
-                        and is_auto_tool_choice_unsupported(body2)
-                    ):
-                        raise AutoToolChoiceUnsupported(
-                            f"upstream HTTP {resp2.status_code}: {body2}"
-                        )
-                    raise RuntimeError(
-                        f"upstream HTTP {resp2.status_code}: {body2}"
-                    )
-                return resp2.json()
-            if (
-                tools
-                and resp.status_code == 400
-                and is_auto_tool_choice_unsupported(body)
-            ):
-                raise AutoToolChoiceUnsupported(
-                    f"upstream HTTP {resp.status_code}: {body}"
+    max_attempts = _llm_max_attempts()
+    last_err: BaseException | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            data = await _chat_completion_once(
+                tools=tools,
+                payload=payload,
+                headers=headers,
+                url=url,
+            )
+            if attempt > 1:
+                logger.info(
+                    "LLM chat_completion succeeded on attempt %d/%d model=%s",
+                    attempt,
+                    max_attempts,
+                    model,
                 )
-            raise RuntimeError(f"upstream HTTP {resp.status_code}: {body}")
-        return resp.json()
+            return data
+        except asyncio.CancelledError:
+            raise
+        except AutoToolChoiceUnsupported:
+            raise
+        except Exception as exc:
+            if not is_retryable_llm_error(exc):
+                raise
+            last_err = exc
+            if attempt >= max_attempts:
+                logger.warning(
+                    "LLM chat_completion failed after %d attempts model=%s err=%s",
+                    max_attempts,
+                    model,
+                    exc,
+                )
+                break
+            delay = _llm_retry_delay_s(attempt)
+            logger.warning(
+                "LLM chat_completion attempt %d/%d failed model=%s err=%s; retrying in %.2fs",
+                attempt,
+                max_attempts,
+                model,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    assert last_err is not None
+    raise last_err
 
 
 async def chat_text(

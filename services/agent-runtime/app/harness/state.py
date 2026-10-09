@@ -38,6 +38,10 @@ class AgentState(TypedDict):
     memory_snippets: list[str]
     system_prompt: str
     replay_results: dict[str, str]  # tool_call_id -> prior result (safe replay)
+    needs_compaction: bool
+    reset_seq: int  # model context starts after this journal seq (0 = none)
+    compaction_retries: int
+    extension_names: list[str]
 
 
 def initial_state(
@@ -69,6 +73,10 @@ def initial_state(
         "memory_snippets": [],
         "system_prompt": "",
         "replay_results": {},
+        "needs_compaction": False,
+        "reset_seq": 0,
+        "compaction_retries": 0,
+        "extension_names": [],
     }
 
 

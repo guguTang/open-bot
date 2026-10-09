@@ -233,8 +233,10 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		return "", "", err
 	}
 	systemPrompt := ""
+	agentName := ""
 	if agent, aerr := s.db.GetAgent(task.UserID, task.AgentID); aerr == nil {
 		systemPrompt = agent.SystemPrompt
+		agentName = agent.Name
 	}
 	instruction := fmt.Sprintf(
 		"你有一条尚未交付的后台任务，必须在本轮用工具真正做完，不能只回复承诺或「稍后」。\n目标：\n%s\n完成后：用简短中文报告结果；若改了文件请给出可打开的链接。若做不到，说明卡在哪一步。",
@@ -258,6 +260,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 	if enabledSkills == nil {
 		enabledSkills = []string{}
 	}
+	// Background durable thread: request_id = task.ID aligns with defer_work child thread.
 	payloadMap := map[string]any{
 		"conversation_id": task.ConversationID,
 		"content":         instruction,
@@ -265,10 +268,12 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		"user_id":         task.UserID,
 		"channel_id":      conv.ChannelID,
 		"system_prompt":   systemPrompt,
-		"messages":        historyForRuntime(msgs),
+		"messages":        historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
 		"enabled_skills":  enabledSkills,
 		"max_tool_rounds": 16,
 		"request_id":      task.ID,
+		"background":      true,
+		"owner_task":      task.ID,
 	}
 	if llmPayload != nil {
 		payloadMap["llm"] = llmPayload
@@ -344,6 +349,24 @@ func botAssistantMessageOpts(agentID, threadRootID, requestID string) db.AddMess
 	}
 }
 
+
+// dropProjectedGroupPass deletes an assistant row already projected for this
+// runtime request_id when the turn is classified as group PASS / silence.
+func (s *Server) dropProjectedGroupPass(conversationID, requestID string) {
+	rid := strings.TrimSpace(requestID)
+	cid := strings.TrimSpace(conversationID)
+	if rid == "" || cid == "" || s.db == nil {
+		return
+	}
+	existing, err := s.db.FindAssistantByRequestID(cid, rid)
+	if err != nil || existing == nil {
+		return
+	}
+	if err := s.db.DeleteMessage(cid, existing.ID); err != nil {
+		log.Printf("drop projected PASS conv=%s req=%s: %v", cid, rid, err)
+	}
+}
+
 func (s *Server) saveAssistant(userID, conversationID, agentID, text string, emit func(event string, data any)) *db.Message {
 	return s.saveAssistantThreaded(userID, conversationID, agentID, text, "", "", "", emit)
 }
@@ -358,31 +381,51 @@ func (s *Server) saveAssistantThreaded(userID, conversationID, agentID, text, re
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
+	// Hard guard: never persist group silence tokens (even if caller forgot to skip).
+	if db.ContentIsGroupPass(text) {
+		return nil
+	}
+	rid := strings.TrimSpace(requestID)
+	// Durable harness may already have projected this turn via journal
+	// commit_assistant(project=True). Reuse that row so one user turn cannot
+	// produce two identical assistant messages in DB/UI.
+	if rid != "" {
+		if existing, err := s.db.FindAssistantByRequestID(conversationID, rid); err == nil && existing != nil {
+			s.emitAssistantSaved(emit, conversationID, existing)
+			s.publishConversationMessage(userID, existing)
+			return existing
+		}
+	}
 	msg, err := s.db.AddMessageWithOpts(conversationID, "assistant", text, db.AddMessageOpts{
 		AgentID:      agentID,
 		ReplyToID:    strings.TrimSpace(replyToID),
 		ThreadRootID: strings.TrimSpace(threadRootID),
-		RequestID:    strings.TrimSpace(requestID),
+		RequestID:    rid,
 	})
 	if err != nil {
 		log.Printf("save assistant conv=%s: %v", conversationID, err)
 		return nil
 	}
-	if emit != nil {
-		meta := map[string]any{
-			"phase":           "message_saved",
-			"message_id":      msg.ID,
-			"conversation_id": conversationID,
-			"reply_to_id":     msg.ReplyToID,
-			"thread_root_id":  msg.ThreadRootID,
-		}
-		if msg.RequestID != "" {
-			meta["request_id"] = msg.RequestID
-		}
-		emit("meta", meta)
-	}
+	s.emitAssistantSaved(emit, conversationID, msg)
 	s.publishConversationMessage(userID, msg)
 	return msg
+}
+
+func (s *Server) emitAssistantSaved(emit func(event string, data any), conversationID string, msg *db.Message) {
+	if emit == nil || msg == nil {
+		return
+	}
+	meta := map[string]any{
+		"phase":           "message_saved",
+		"message_id":      msg.ID,
+		"conversation_id": conversationID,
+		"reply_to_id":     msg.ReplyToID,
+		"thread_root_id":  msg.ThreadRootID,
+	}
+	if msg.RequestID != "" {
+		meta["request_id"] = msg.RequestID
+	}
+	emit("meta", meta)
 }
 
 // cancelTasksAndNotify stops queued and running work for this conversation.

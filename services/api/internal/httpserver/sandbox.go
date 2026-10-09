@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,11 +123,34 @@ func (s *Server) handleEnsureSandbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) doEnsureSandbox(w http.ResponseWriter, r *http.Request, uid, agentID, modeOverride string, desktop bool) {
+	row, inst, err := s.ensureSandboxInstance(r.Context(), uid, agentID, modeOverride, desktop)
+	if err != nil {
+		if desktop {
+			msg := err.Error()
+			hint := "请确认 Docker 已启动，并执行 make sandbox-image-desktop；或在 .env 配置可用的 SANDBOX_DESKTOP_IMAGE / SANDBOX_DESKTOP_PORT"
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg, "hint": hint})
+			return
+		}
+		if writeSandboxDockerErr(w, err) {
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	out := sandboxPublic(row)
+	out["agent_id"] = agentID
+	if inst != nil {
+		out["restored_from"] = inst.RestoredFrom
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// ensureSandboxInstance creates/starts the per-user runtime env and persists DB status.
+func (s *Server) ensureSandboxInstance(ctx context.Context, uid, agentID, modeOverride string, desktop bool) (*db.Sandbox, *sandbox.Instance, error) {
 	mgr := s.sandboxMgr()
 	row, err := s.db.GetOrCreateSandbox(uid, mgr.Cfg.Image)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, nil, err
 	}
 	mode := s.resolveComputerMode(uid, agentID, modeOverride)
 	row.Status = db.SandboxStatusCreating
@@ -134,7 +158,7 @@ func (s *Server) doEnsureSandbox(w http.ResponseWriter, r *http.Request, uid, ag
 	row.ComputerMode = string(mode)
 	_ = s.db.UpdateSandbox(row)
 
-	inst, err := mgr.Ensure(r.Context(), sandbox.EnsureRequest{
+	inst, err := mgr.Ensure(ctx, sandbox.EnsureRequest{
 		UserID:  uid,
 		AgentID: agentID,
 		Mode:    mode,
@@ -154,17 +178,7 @@ func (s *Server) doEnsureSandbox(w http.ResponseWriter, r *http.Request, uid, ag
 		row.Status = db.SandboxStatusError
 		row.LastError = err.Error()
 		_ = s.db.UpdateSandbox(row)
-		if desktop {
-			msg := err.Error()
-			hint := "请确认 Docker 已启动，并执行 make sandbox-image-desktop；或在 .env 配置可用的 SANDBOX_DESKTOP_IMAGE / SANDBOX_DESKTOP_PORT"
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": msg, "hint": hint})
-			return
-		}
-		if writeSandboxDockerErr(w, err) {
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return row, inst, err
 	}
 	row.ContainerID = inst.ContainerID
 	row.WorkdirHost = inst.WorkdirHost
@@ -178,13 +192,23 @@ func (s *Server) doEnsureSandbox(w http.ResponseWriter, r *http.Request, uid, ag
 	row.Status = db.SandboxStatusRunning
 	row.LastError = ""
 	if err := s.db.UpdateSandbox(row); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return row, inst, err
+	}
+	return row, inst, nil
+}
+
+// provisionUserSandbox creates the default per-user runtime env after account creation.
+// Runs in the background and never blocks signup; Docker failures are soft-failed into sandboxes.last_error.
+func (s *Server) provisionUserSandbox(userID string) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
 		return
 	}
-	out := sandboxPublic(row)
-	out["agent_id"] = agentID
-	out["restored_from"] = inst.RestoredFrom
-	writeJSON(w, http.StatusOK, out)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		_, _, _ = s.ensureSandboxInstance(ctx, userID, "", "", false)
+	}()
 }
 
 func (s *Server) handleStopSandbox(w http.ResponseWriter, r *http.Request) {

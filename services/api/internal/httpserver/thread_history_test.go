@@ -15,7 +15,7 @@ func TestHistoryForRuntimeIgnoresThreadReplies(t *testing.T) {
 		{ID: "a2", Role: "assistant", Content: "线程回答", AgentID: "bot-a", ReplyToID: "u2", ThreadRootID: "a1"},
 		{ID: "u3", Role: "user", Content: "主线继续"},
 	}
-	out := historyForRuntime(msgs)
+	out := historyForRuntime(msgs, "", nil)
 	if len(out) != 3 {
 		t.Fatalf("main timeline should exclude thread msgs, got %#v", out)
 	}
@@ -33,7 +33,7 @@ func TestHistoryForThreadRuntimeIncludesRootAndOptionalMainSummary(t *testing.T)
 		{ID: "a2", Role: "assistant", Content: "8080", AgentID: "bot-a", ReplyToID: "u2", ThreadRootID: "a1"},
 		{ID: "u3", Role: "user", Content: "再确认下", ReplyToID: "a2", ThreadRootID: "a1"},
 	}
-	out := historyForThreadRuntime(msgs, "a1")
+	out := historyForThreadRuntime(msgs, "a1", "", nil)
 	if len(out) < 4 {
 		t.Fatalf("expected summary+root+thread, got %#v", out)
 	}
@@ -101,5 +101,48 @@ func TestResolveSendTargetsReplyDefaultsToBot(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "open-bot" {
 		t.Fatalf("DM should still use conv agent, got %#v", got)
+	}
+}
+
+func TestHistoryForRuntimeLabelsOtherAgents(t *testing.T) {
+	msgs := []db.Message{
+		{ID: "u1", Role: "user", Content: "@A 你好"},
+		{ID: "a1", Role: "assistant", Content: "我是A", AgentID: "bot-a"},
+		{ID: "u2", Role: "user", Content: "@B 接着说"},
+		{ID: "a2", Role: "assistant", Content: "我是B", AgentID: "bot-b"},
+	}
+	names := map[string]string{"bot-a": "助手A", "bot-b": "助手B"}
+	out := historyForRuntime(msgs, "bot-b", names)
+	if len(out) != 4 {
+		t.Fatalf("len=%d %#v", len(out), out)
+	}
+	// A's assistant must not be bare assistant as B's voice.
+	if out[1].Role != "user" || !strings.Contains(out[1].Content, "【助手A】") || !strings.Contains(out[1].Content, "我是A") {
+		t.Fatalf("expected labeled other-agent turn, got %#v", out[1])
+	}
+	if out[3].Role != "assistant" || out[3].Content != "我是B" {
+		t.Fatalf("same-agent assistant should stay assistant, got %#v", out[3])
+	}
+}
+
+func TestHistoryForThreadRuntimeLabelsOtherAgents(t *testing.T) {
+	msgs := []db.Message{
+		{ID: "r1", Role: "assistant", Content: "根回复A", AgentID: "bot-a"},
+		{ID: "u2", Role: "user", Content: "@B 追问", ReplyToID: "r1", ThreadRootID: "r1"},
+		{ID: "a2", Role: "assistant", Content: "线程里B", AgentID: "bot-b", ReplyToID: "u2", ThreadRootID: "r1"},
+	}
+	names := map[string]string{"bot-a": "助手A", "bot-b": "助手B"}
+	out := historyForThreadRuntime(msgs, "r1", "bot-b", names)
+	foundLabeled := false
+	for _, m := range out {
+		if m.Role == "user" && strings.Contains(m.Content, "【助手A】") {
+			foundLabeled = true
+		}
+		if m.Role == "assistant" && m.Content == "根回复A" {
+			t.Fatalf("other-agent root must not stay bare assistant: %#v", out)
+		}
+	}
+	if !foundLabeled {
+		t.Fatalf("expected labeled A in thread history: %#v", out)
 	}
 }

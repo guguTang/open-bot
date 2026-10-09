@@ -17,8 +17,14 @@ def _cfg(config: dict[str, Any] | RunnableConfig) -> dict[str, Any]:
 
 async def finish_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     cfg = _cfg(config)
+    journal = cfg.get("journal")
     status = str(state.get("status") or "done")
     if status in ("aborted", "failed", "interrupted"):
+        if journal is not None:
+            await journal.set_status(status)
+            await journal.put_usage(
+                state.get("usage") if isinstance(state.get("usage"), dict) else None
+            )
         return {"status": status}
 
     user_id = str(cfg.get("user_id") or "").strip()
@@ -44,4 +50,20 @@ async def finish_node(state: AgentState, config: RunnableConfig) -> dict[str, An
     meta = dict(state.get("meta") or {})
     meta["tools_used"] = list(state.get("tools_used") or [])
     meta["durable"] = True
+    if journal is not None:
+        await journal.set_status("done")
+        await journal.put_usage(
+            state.get("usage") if isinstance(state.get("usage"), dict) else None
+        )
+        await journal.append(
+            "finish",
+            {"status": "done", "tools_used": meta["tools_used"]},
+            project=False,
+        )
+        # Drain follow-ups: signal inbox so next submit can start a new run.
+        follow = list(state.get("follow_up_queue") or [])
+        if follow:
+            await journal.put_inbox(
+                [{"text": t, "when_busy": "follow_up", "pending_next_run": True} for t in follow]
+            )
     return {"status": "done", "meta": meta}

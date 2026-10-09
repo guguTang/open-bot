@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tangxin/open-bot/services/api/internal/db"
@@ -41,4 +42,213 @@ func TestMentionIncludesEveryone(t *testing.T) {
 	if mentionIncludesEveryone("ping @open-bot") {
 		t.Fatal("should not match")
 	}
+}
+
+func TestResolveMentionedAgentsExactWinsOverSubstring(t *testing.T) {
+	// AlphaBot listed first; exact name "Bot" must win over substring Contains.
+	members := []string{"alpha-bot", "bot"}
+	agents := []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaBot"},
+		{ID: "bot", Name: "Bot"},
+	}
+	got := resolveMentionedAgents([]string{"Bot"}, members, agents)
+	if len(got) != 1 || got[0] != "bot" {
+		t.Fatalf("exact name should win, got %#v", got)
+	}
+	// Substring that matches two names without an exact hit: only unique contains resolves.
+	got2 := resolveMentionedAgents([]string{"Helper"}, members, []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaHelper"},
+		{ID: "bot", Name: "BetaHelper"},
+	})
+	if len(got2) != 0 {
+		t.Fatalf("ambiguous substring should not resolve, got %#v", got2)
+	}
+	got3 := resolveMentionedAgents([]string{"Helper"}, members, []*db.Agent{
+		{ID: "alpha-bot", Name: "AlphaHelper"},
+		{ID: "bot", Name: "Bot"},
+	})
+	if len(got3) != 1 || got3[0] != "alpha-bot" {
+		t.Fatalf("unique substring should resolve, got %#v", got3)
+	}
+}
+
+
+func TestIsGroupPassReply(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"[PASS]", true},
+		{"PASS", true},
+		{"pass", true},
+		{"  [pass]  ", true},
+		{"【PASS】", true},
+		{"(PASS)", true},
+		{"（PASS）", true},
+		{"", true},
+		{"   ", true},
+		{"`[PASS]`", true},
+		{"**[PASS]**", true},
+		{"*[PASS]*", true},
+		{"[PASS].", true},
+		{"[PASS]!", true},
+		{"[PASS]。", true},
+		{"「PASS」", true},
+		{"Pass", true},
+		{"你好，我是助手", false},
+		{"PASS 一下再说", false},
+		{"I will PASS this", false},
+		{"[PASS] 顺便说一句", false},
+	}
+	for _, c := range cases {
+		if got := isGroupPassReply(c.in); got != c.want {
+			t.Fatalf("isGroupPassReply(%q)=%v want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestResolveGroupSendTargetsNoAtAllCandidates(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	// 「大家介绍自己」and plain greetings: no @ → all candidates (each may PASS).
+	for _, content := range []string{"大家介绍自己", "你好", "今天天气怎么样"} {
+		got := resolveGroupSendTargets(members, agents, nil, content, nil, "open-bot")
+		if len(got) != 3 {
+			t.Fatalf("%q should candidacy-all, got %#v", content, got)
+		}
+	}
+}
+
+func TestResolveGroupSendTargetsSpecificAtAllMentioned(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	got := resolveGroupSendTargets(members, agents, nil, "@通用助手 介绍一下", nil, "open-bot")
+	if len(got) != 1 || got[0] != "general" {
+		t.Fatalf("@某人 should be that agent, got %#v", got)
+	}
+	// Multiple @ → all mentioned (not first-only single-stage).
+	got2 := resolveGroupSendTargets(members, agents, nil, "@通用助手 @码农助手 你们好", nil, "open-bot")
+	if len(got2) != 2 || got2[0] != "general" || got2[1] != "custom-1" {
+		t.Fatalf("multi @ should keep both, got %#v", got2)
+	}
+}
+
+func TestResolveGroupSendTargetsEveryoneUnchanged(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	got := resolveGroupSendTargets(members, agents, nil, "ping @everyone please", nil, "open-bot")
+	if len(got) != 3 {
+		t.Fatalf("@everyone expected 3, got %#v", got)
+	}
+	gotAll := resolveGroupSendTargets(members, agents, nil, "@all 介绍自己", nil, "open-bot")
+	if len(gotAll) != 3 {
+		t.Fatalf("@all expected 3, got %#v", gotAll)
+	}
+}
+
+func TestGroupForcedAgentSet(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	forced := groupForcedAgentSet("大家介绍自己", members, agents)
+	if len(forced) != 0 {
+		t.Fatalf("no @ should force none, got %#v", forced)
+	}
+	forced2 := groupForcedAgentSet("@通用助手 你好", members, agents)
+	if !forced2["general"] || forced2["open-bot"] || len(forced2) != 1 {
+		t.Fatalf("specific @ force %#v", forced2)
+	}
+	forced3 := groupForcedAgentSet("@everyone hi", members, agents)
+	if len(forced3) != 3 || !forced3["custom-1"] {
+		t.Fatalf("@everyone force all, got %#v", forced3)
+	}
+}
+
+func TestResolveGroupSendTargetsReplyParentNotHardFilter(t *testing.T) {
+	members := []string{"open-bot", "general", "custom-1"}
+	agents := []*db.Agent{
+		{ID: "open-bot", Name: "open-bot"},
+		{ID: "general", Name: "通用助手"},
+		{ID: "custom-1", Name: "码农助手"},
+	}
+	parent := &db.Message{Role: "assistant", AgentID: "custom-1"}
+	got := resolveGroupSendTargets(members, agents, nil, "继续", parent, "open-bot")
+	if len(got) != 3 {
+		t.Fatalf("reply-parent without @ still all candidates, got %#v", got)
+	}
+}
+
+func TestGroupParticipationExtraSystem(t *testing.T) {
+	members := []string{"coding", "writing"}
+	agents := []*db.Agent{
+		{ID: "coding", Name: "码农助手", Description: "负责写代码与排障"},
+		{ID: "writing", Name: "写手", Description: "负责写东西与改稿"},
+	}
+	forced := groupParticipationExtraSystem(true, agents[0], members, agents)
+	if !containsAll(forced, "点名", "不要输出 [PASS]") {
+		t.Fatalf("forced prompt weak: %q", forced)
+	}
+	if containsAll(forced, "群成员") {
+		t.Fatalf("forced prompt should not need roster, got %q", forced)
+	}
+
+	coding := groupParticipationExtraSystem(false, agents[0], members, agents)
+	writing := groupParticipationExtraSystem(false, agents[1], members, agents)
+	for _, prompt := range []string{coding, writing} {
+		if !containsAll(prompt, "[PASS]", "群成员", "写诗/文案", "并行") {
+			t.Fatalf("non-forced missing PASS/roster cues: %q", prompt)
+		}
+	}
+	if !containsAll(coding, "码农助手", "负责写代码与排障", "写手") {
+		t.Fatalf("coding prompt should name self + peers: %q", coding)
+	}
+	if !containsAll(writing, "写手", "负责写东西与改稿", "码农助手") {
+		t.Fatalf("writing prompt should name self + peers: %q", writing)
+	}
+	if !containsAll(coding, "（你）") || !containsAll(writing, "（你）") {
+		t.Fatalf("roster should mark self")
+	}
+}
+
+func TestStampEmitAgentID(t *testing.T) {
+	var gotEvent string
+	var gotData map[string]any
+	emit := func(event string, data any) {
+		gotEvent = event
+		gotData = data.(map[string]any)
+	}
+	wrapped := stampEmitAgentID(emit, "agent-1")
+	wrapped("token", map[string]any{"text": "hi"})
+	if gotEvent != "token" || gotData["text"] != "hi" || gotData["agent_id"] != "agent-1" {
+		t.Fatalf("expected stamped token, got event=%s data=%#v", gotEvent, gotData)
+	}
+	// Do not overwrite an existing agent_id.
+	wrapped("token", map[string]any{"text": "x", "agent_id": "other"})
+	if gotData["agent_id"] != "other" {
+		t.Fatalf("should preserve existing agent_id, got %#v", gotData)
+	}
+}
+
+func containsAll(s string, parts ...string) bool {
+	for _, p := range parts {
+		if !strings.Contains(s, p) {
+			return false
+		}
+	}
+	return true
 }

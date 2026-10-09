@@ -10,6 +10,7 @@ from langgraph.types import interrupt
 
 from ...client_env import tool_display_label
 from ..config import require_approval_tools
+from ..registry import get_registry
 from ..replay import interrupted_result, policy_for
 from ..state import AgentState
 
@@ -34,13 +35,17 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     cfg = _cfg(config)
     handler = cfg.get("tool_handler")
     on_status = cfg.get("on_status")
+    on_event = cfg.get("on_event")
+    journal = cfg.get("journal")
     tool_calls = list(state.get("pending_tool_calls") or [])
     msgs = list(state.get("messages") or [])
     used = list(state.get("tools_used") or [])
     replay_results = dict(state.get("replay_results") or {})
     approval_needed = require_approval_tools()
+    registry = get_registry()
+    if state.get("extension_names"):
+        registry.select(list(state.get("extension_names") or []))
 
-    # Human approval gate for configured tools.
     needing = [
         tc
         for tc in tool_calls
@@ -50,6 +55,21 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         names = [
             str((tc.get("function") or {}).get("name") or "") for tc in needing
         ]
+        if journal is not None:
+            await journal.set_status("waiting_approval")
+            await journal.append(
+                "approval_gate",
+                {"tools": names},
+                project=False,
+            )
+        if on_status is not None:
+            await on_status(
+                {
+                    "phase": "waiting_approval",
+                    "label": "等待确认后继续",
+                    "tools": names,
+                }
+            )
         decision = interrupt(
             {
                 "type": "tool_approval",
@@ -58,7 +78,6 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 "reason": "dangerous_or_sensitive_tool",
             }
         )
-        # Resume payload: {"approve": true} or {"approve": false, "reason": "..."}
         approved = True
         if isinstance(decision, dict):
             approved = bool(decision.get("approve", True))
@@ -83,8 +102,11 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                     }
                 )
                 used.append(name)
-            # Still run non-approval tools in this batch.
+                if journal is not None:
+                    await journal.commit_tool_result(tc_id, name, body)
             tool_calls = [tc for tc in tool_calls if tc not in needing]
+        elif journal is not None:
+            await journal.set_status("running")
 
     for tc in tool_calls:
         fn = tc.get("function") or {}
@@ -93,7 +115,6 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         args = _parse_args(fn.get("arguments"))
         policy = policy_for(name)
 
-        # Crash mid-tool: if we already stored a result for this id, reuse it.
         if tc_id and tc_id in replay_results:
             content = replay_results[tc_id]
             msgs.append(
@@ -108,8 +129,13 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 used.append(name)
             continue
 
-        # Mark intent before execute (checkpoint boundary via node end).
-        # If process dies here, replay policy decides on resume.
+        if journal is not None:
+            await journal.append(
+                "tool_intent",
+                {"tool_call_id": tc_id, "name": name, "arguments": args},
+                project=False,
+            )
+
         if on_status is not None:
             await on_status(
                 {
@@ -118,19 +144,29 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                     "tool": name,
                 }
             )
+        if on_event is not None:
+            await on_event(
+                "tool_execution_start",
+                {"tool": name, "tool_call_id": tc_id},
+            )
+
+        await registry.run_hooks("beforeTool", name=name, args=args, tool_call_id=tc_id)
 
         content = ""
         try:
             if handler is None:
                 content = json.dumps({"error": "no tool_handler"}, ensure_ascii=False)
             else:
-                # Handler (openai_path) already opens Langfuse tool observation.
                 content = await handler(name, args)
         except Exception as exc:  # noqa: BLE001
             if policy == "interrupted":
                 content = interrupted_result(name, partial=str(exc))
             else:
                 content = json.dumps({"error": str(exc)}, ensure_ascii=False)
+
+        await registry.run_hooks(
+            "afterTool", name=name, args=args, content=content, tool_call_id=tc_id
+        )
 
         if tc_id:
             replay_results[tc_id] = content
@@ -144,6 +180,17 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         )
         if name:
             used.append(name)
+        if journal is not None:
+            await journal.commit_tool_result(tc_id, name, content)
+            await journal.put_live(
+                {"phase": "tool", "tool": name, "tool_call_id": tc_id},
+                force=False,
+            )
+        if on_event is not None:
+            await on_event(
+                "tool_execution_end",
+                {"tool": name, "tool_call_id": tc_id, "ok": True},
+            )
 
     return {
         "messages": msgs,

@@ -37,6 +37,11 @@ type Props = {
   message: ChatMessageData;
   /** Fallback selected bot when message.agent_id is missing. */
   agentId?: string;
+  /**
+   * Group chat only: bot display name above the assistant bubble.
+   * Omit in DM / single-bot so chrome stays unchanged.
+   */
+  speakerName?: string;
   onHostDecide?: (ok: boolean) => void;
   /** Quoted parent preview when rendering a reply. */
   replyQuote?: { who: string; text: string } | null;
@@ -104,6 +109,7 @@ function resolveHandoff(message: ChatMessageData): HandoffPayload | null {
 export function ChatMessage({
   message,
   agentId,
+  speakerName,
   onHostDecide,
   replyQuote,
   replyCount = 0,
@@ -118,6 +124,7 @@ export function ChatMessage({
   const isUser = message.role === "user";
   const isSummary = message.role === "summary";
   const time = formatMessageTime(message.created_at);
+  const speakerLabel = (speakerName || "").trim();
   const timeEl = time ? (
     <time className="chat-time" dateTime={message.created_at}>
       {time}
@@ -407,6 +414,11 @@ export function ChatMessage({
       {...touchHandlers}
     >
       <div className="bubble-stack bubble-stack-assistant">
+        {speakerLabel ? (
+          <div className="msg-speaker-name" title={speakerLabel}>
+            {speakerLabel}
+          </div>
+        ) : null}
         <div className="bubble bubble-assistant">
           {quoteEl}
           {isSummary ? <div className="msg-role">摘要</div> : null}

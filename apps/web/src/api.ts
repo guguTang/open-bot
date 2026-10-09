@@ -781,15 +781,21 @@ export type StatusEvent = {
   phase?: string;
   label?: string;
   tool?: string;
+  thread_id?: string;
+  waiting_approval?: boolean;
   [key: string]: unknown;
 };
 
+export type StreamTokenInfo = { agent_id?: string };
+export type StreamErrorInfo = { agent_id?: string };
+
 export type StreamHandlers = {
-  onToken: (text: string) => void;
+  /** text plus optional agent_id so parallel group candidates route to the right bubble */
+  onToken: (text: string, info?: StreamTokenInfo) => void;
   onMeta?: (data: Record<string, unknown>) => void;
   onStatus?: (data: StatusEvent) => void;
-  onError?: (message: string) => void;
-  onDone?: () => void;
+  onError?: (message: string, info?: StreamErrorInfo) => void;
+  onDone?: (data?: Record<string, unknown>) => void;
   /** Group multi-agent: called when a new bot starts streaming. */
   onAgentStart?: (info: { agent_id: string; agent_name?: string; index?: number; total?: number }) => void;
   /** Conversation SSE `bot_online` (agent-global green dot; independent of bot_presence). */
@@ -912,6 +918,38 @@ export async function cancelConversationRun(conversationId: string): Promise<voi
   }
 }
 
+/** Queue follow_up / steer / reject on a busy durable run. */
+export async function steerConversationRun(
+  conversationId: string,
+  requestId: string,
+  text: string,
+  mode: "follow_up" | "steer" | "reject" = "follow_up",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/steer`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId, text, mode, when_busy: mode }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** Resume a waiting_approval interrupt. */
+export async function approveConversationRun(
+  conversationId: string,
+  requestId: string,
+  approve: boolean,
+  reason = "",
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/approve`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ request_id: requestId, approve, reason }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
 async function readSSEStream(
   body: ReadableStream<Uint8Array>,
   handlers: StreamHandlers,
@@ -941,7 +979,11 @@ async function readSSEStream(
           data = { raw: dataStr };
         }
         if (eventName === "token" && typeof data.text === "string") {
-          handlers.onToken(data.text);
+          const tokenInfo: StreamTokenInfo = {};
+          if (typeof data.agent_id === "string" && data.agent_id) {
+            tokenInfo.agent_id = data.agent_id;
+          }
+          handlers.onToken(data.text, tokenInfo);
         } else if (eventName === "meta") {
           if (data.phase === "agent_start" && typeof data.agent_id === "string") {
             handlers.onAgentStart?.({
@@ -965,10 +1007,14 @@ async function readSSEStream(
               : typeof data.raw === "string"
                 ? data.raw
                 : JSON.stringify(data);
-          handlers.onError?.(msg);
+          const errInfo: StreamErrorInfo = {};
+          if (typeof data.agent_id === "string" && data.agent_id) {
+            errInfo.agent_id = data.agent_id;
+          }
+          handlers.onError?.(msg, errInfo);
         } else if (eventName === "done") {
           sawDone = true;
-          handlers.onDone?.();
+          handlers.onDone?.(data);
         }
       } else if (line === "") {
         eventName = "message";

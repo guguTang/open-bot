@@ -56,6 +56,7 @@ import {
   updateAgent,
   subscribeConversationEvents,
   cancelConversationRun,
+  approveConversationRun,
   chatEventsWebSocketUrl,
   mergeIncomingMessage,
   STOP_MARKER_TEXT,
@@ -291,6 +292,8 @@ type ConvRunState = {
   abort: AbortController;
   generation: number;
   assistantId: string | null;
+  /** Parallel group: map agent_id → local streaming bubble id */
+  assistantIdsByAgent?: Record<string, string>;
   runLabel: string;
   selectionKey: string; // `agent:${id}` | `channel:${id}` for sidebar busy
 };
@@ -301,13 +304,16 @@ function escapeRegExp(s: string): string {
 
 function matchAgentByMentionToken(tok: string, list: Agent[]): Agent | undefined {
   const lower = tok.toLowerCase();
-  return list.find(
-    (a) =>
-      a.id.toLowerCase() === lower ||
-      a.name.toLowerCase() === lower ||
-      a.name.toLowerCase().includes(lower) ||
-      a.id.toLowerCase().startsWith(lower),
-  );
+  // Exact id/name before prefix/substring so overlapping names do not steal the hit.
+  const exactId = list.find((a) => a.id.toLowerCase() === lower);
+  if (exactId) return exactId;
+  const exactName = list.find((a) => a.name.toLowerCase() === lower);
+  if (exactName) return exactName;
+  const idPrefix = list.find((a) => a.id.toLowerCase().startsWith(lower));
+  if (idPrefix) return idPrefix;
+  const namePrefix = list.find((a) => a.name.toLowerCase().startsWith(lower));
+  if (namePrefix) return namePrefix;
+  return list.find((a) => a.name.toLowerCase().includes(lower));
 }
 
 /** First @Bot in text (skips @everyone / @routine: / @mcp:). */
@@ -323,6 +329,35 @@ function firstMentionedAgent(content: string, list: Agent[]): Agent | undefined 
     if (hit) return hit;
   }
   return undefined;
+}
+
+/** Group silence token from server PASS / empty skip (mirror isGroupPassReply). */
+function isGroupPassContent(content: string): boolean {
+  let t = (content || "").trim();
+  if (!t) return true;
+  // Peel wrappers iteratively: markdown, ASCII/CJK brackets, trailing punct.
+  for (let i = 0; i < 8; i++) {
+    const prev = t;
+    t = t.trim().replace(/^[`\s"'*_~]+|[`\s"'*_~]+$/gu, "").trim();
+    const pairs: [string, string][] = [
+      ["[", "]"],
+      ["【", "】"],
+      ["（", "）"],
+      ["(", ")"],
+      ["「", "」"],
+      ["『", "』"],
+      ["<", ">"],
+      ["《", "》"],
+    ];
+    for (const [a, b] of pairs) {
+      if (t.startsWith(a) && t.endsWith(b) && t.length >= a.length + b.length) {
+        t = t.slice(a.length, t.length - b.length).trim();
+      }
+    }
+    t = t.replace(/[。.!！…]+$/u, "").trim();
+    if (t === prev) break;
+  }
+  return /^pass$/i.test(t);
 }
 
 function stripLeadingAtAgent(content: string, agent: Agent): string {
@@ -466,6 +501,12 @@ export default function App() {
   taskConvIdsRef.current = taskConvIds;
   const [, setStatus] = useState(""); // chat chrome status bar removed; keep setter for clear/error paths
   const [runLabel, setRunLabel] = useState("正在思考…");
+  /** Durable HITL: request_id awaiting tool approval. */
+  const [approvalGate, setApprovalGate] = useState<{
+    conversationId: string;
+    requestId: string;
+  } | null>(null);
+  const lastRequestIdRef = useRef<string>("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
@@ -1182,6 +1223,17 @@ export default function App() {
             // Five-state whitelist; empty → idle, unknown → working (v2.1 product rule).
             const st: BotPresenceStatus = normalizePresenceStatus(evt.status);
             setPresenceByAgent((prev) => ({ ...prev, [evt.agent_id]: st }));
+            if (st === "awaiting_approval") {
+              const rid = lastRequestIdRef.current;
+              const cid = conversationRef.current?.id;
+              if (rid && cid) {
+                setApprovalGate({ conversationId: cid, requestId: rid });
+              }
+            } else if (st === "idle" || st === "thinking" || st === "working") {
+              setApprovalGate((prev) =>
+                prev && conversationRef.current?.id === prev.conversationId ? null : prev,
+              );
+            }
           }
           return;
         }
@@ -1318,8 +1370,15 @@ export default function App() {
     [messages],
   );
 
+  // Bot onboarding card + welcome bubbles are DM/new-bot only — never for group channels.
   const showOnboarding = Boolean(
-    authed && selectionHydrated && !hasChatMessages && !onboardingDismissed && !sending && !chatSwitchPending,
+    authed &&
+      selectionHydrated &&
+      !conversation?.channel_id &&
+      !hasChatMessages &&
+      !onboardingDismissed &&
+      !sending &&
+      !chatSwitchPending,
   );
 
 
@@ -1377,6 +1436,14 @@ export default function App() {
         ? parent.agent_name || agentNameById.get(parent.agent_id || "") || parent.agent_id || "助手"
         : "你";
     return { who, text: parent.content || "" };
+  };
+
+  /** Group only: name above assistant bubbles; DM keeps current look. */
+  const speakerNameFor = (m: UiMessage): string | undefined => {
+    if (!conversation?.channel_id) return undefined;
+    if (m.role !== "assistant") return undefined;
+    const name = (m.agent_name || agentNameById.get(m.agent_id || "") || "").trim();
+    return name || undefined;
   };
 
   const beginReplyTo = (m: UiMessage) => {
@@ -1855,7 +1922,9 @@ export default function App() {
 
   const sealStreamingMessagesForConv = (convId: string, markStopped: boolean) => {
     patchConvMessages(convId, (prev) =>
-      prev.map((m) => {
+      prev
+        .filter((m) => !(m.streaming && isGroupPassContent(m.content || "")))
+        .map((m) => {
         if (!m.streaming) return m;
         const empty = !(m.content && m.content.trim());
         if (empty && markStopped) {
@@ -1905,6 +1974,8 @@ export default function App() {
     };
     return msgs
       .filter((m) => m.role !== "summary")
+      // Drop any silence tokens that leaked into storage (journal race / old rows).
+      .filter((m) => !(m.role === "assistant" && isGroupPassContent(m.content || "")))
       .map((m) => ({
         ...m,
         agent_name: m.agent_id ? nameOf(m.agent_id) : undefined,
@@ -1953,10 +2024,21 @@ export default function App() {
     const ensureStreamingBubble = (agentId?: string, agentName?: string) => {
       const run = runsRef.current.get(conv.id);
       if (!run || run.generation !== gen) return;
+      if (!run.assistantIdsByAgent) run.assistantIdsByAgent = {};
+      if (agentId && run.assistantIdsByAgent[agentId]) {
+        const id = run.assistantIdsByAgent[agentId];
+        const cur = (messagesByConvRef.current.get(conv.id) ?? []).find((m) => m.id === id);
+        if (cur?.streaming) {
+          run.assistantId = id;
+          return;
+        }
+      }
+      // Claim unnamed streaming placeholder when present.
       if (run.assistantId) {
         const cur = (messagesByConvRef.current.get(conv.id) ?? []).find((m) => m.id === run.assistantId);
-        if (cur?.streaming) {
+        if (cur?.streaming && (!cur.agent_id || cur.agent_id === agentId)) {
           if (agentId && !cur.agent_id) {
+            run.assistantIdsByAgent[agentId] = run.assistantId;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) =>
                 m.id === run.assistantId
@@ -1968,10 +2050,12 @@ export default function App() {
           return;
         }
       }
-      const nextId = `local-asst-resume-${Date.now()}`;
+      // Parallel resume: keep other agents' streaming bubbles; add one for this agent.
+      const nextId = `local-asst-resume-${Date.now()}-${agentId || "x"}`;
       run.assistantId = nextId;
+      if (agentId) run.assistantIdsByAgent[agentId] = nextId;
       patchConvMessages(conv.id, (prev) => [
-        ...prev.filter((m) => !m.streaming),
+        ...prev,
         {
           id: nextId,
           role: "assistant" as const,
@@ -2004,10 +2088,13 @@ export default function App() {
             setRunLabelForStream(`${name} 正在回复…`);
             ensureStreamingBubble(info.agent_id, name);
           },
-          onToken: (text) => {
+          onToken: (text, info) => {
             if (!isRunCurrent()) return;
-            ensureStreamingBubble();
-            const curId = runsRef.current.get(conv.id)?.assistantId;
+            ensureStreamingBubble(info?.agent_id);
+            const run = runsRef.current.get(conv.id);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             if (!curId) return;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) => (m.id === curId ? { ...m, content: m.content + text, streaming: true } : m)),
@@ -2064,10 +2151,13 @@ export default function App() {
               setRunLabelForStream("正在思考…");
             }
           },
-          onError: (msg) => {
+          onError: (msg, info) => {
             if (!isRunCurrent()) return;
-            ensureStreamingBubble();
-            const curId = runsRef.current.get(conv.id)?.assistantId;
+            ensureStreamingBubble(info?.agent_id);
+            const run = runsRef.current.get(conv.id);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             patchConvMessages(conv.id, (prev) =>
               prev.map((m) =>
                 m.id === curId
@@ -2447,13 +2537,7 @@ export default function App() {
           everyone = true;
           continue;
         }
-        const hit = groupMentionMembers.find(
-          (a) =>
-            a.id.toLowerCase() === lower ||
-            a.name.toLowerCase() === lower ||
-            a.name.toLowerCase().includes(lower) ||
-            a.id.toLowerCase().startsWith(lower),
-        );
+        const hit = matchAgentByMentionToken(tok, groupMentionMembers);
         if (hit && !seen.has(hit.id)) {
           seen.add(hit.id);
           ids.push(hit.id);
@@ -2462,8 +2546,10 @@ export default function App() {
       if (everyone) {
         return groupMentionMembers.map((a) => a.id);
       }
-      // Single-stage owner: first @ only (server also enforces).
-      return ids.length ? [ids[0]] : undefined;
+      // Specific @ → those agents (all of them). No @ → all members as candidates
+      // (each may PASS); server is authoritative and mirrors this.
+      if (ids.length) return ids;
+      return groupMentionMembers.map((a) => a.id);
     })();
     let sendSelection: LastActiveSelection | null = null;
     let sendHadError = false;
@@ -2536,24 +2622,34 @@ export default function App() {
             setRunLabelForStream(`${name} 正在回复…`);
             patchConvMessages(streamConvId!, (prev) => {
               const run = runsRef.current.get(streamConvId!);
-              const curId = run?.assistantId;
+              if (!run) return prev;
+              if (!run.assistantIdsByAgent) run.assistantIdsByAgent = {};
+              const existingId = run.assistantIdsByAgent[info.agent_id];
+              if (existingId && prev.some((m) => m.id === existingId)) {
+                run.assistantId = existingId;
+                return prev.map((m) =>
+                  m.id === existingId
+                    ? { ...m, agent_id: info.agent_id, agent_name: name, streaming: true }
+                    : m,
+                );
+              }
+              const curId = run.assistantId;
               const cur = curId ? prev.find((m) => m.id === curId) : undefined;
               // First agent: stamp identity on the placeholder bubble.
               if (cur && !cur.content && !cur.agent_id) {
+                run.assistantIdsByAgent[info.agent_id] = curId!;
                 return prev.map((m) =>
                   m.id === curId
                     ? { ...m, agent_id: info.agent_id, agent_name: name, streaming: true }
                     : m,
                 );
               }
-              // Subsequent agents: seal previous bubble and open a new one.
-              const sealed = prev.map((m) =>
-                m.id === curId ? { ...m, streaming: false } : m,
-              );
-              const nextId = `local-asst-${Date.now()}-${info.index ?? 0}`;
-              if (run) run.assistantId = nextId;
+              // Parallel candidates: add a new bubble; do NOT seal other agents' streams.
+              const nextId = `local-asst-${Date.now()}-${info.index ?? 0}-${info.agent_id}`;
+              run.assistantIdsByAgent[info.agent_id] = nextId;
+              run.assistantId = nextId;
               return [
-                ...sealed,
+                ...prev,
                 {
                   id: nextId,
                   role: "assistant",
@@ -2568,9 +2664,12 @@ export default function App() {
               ];
             });
           },
-          onToken: (text) => {
+          onToken: (text, info) => {
             if (!isRunCurrent()) return;
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            const run = runsRef.current.get(streamConvId!);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             if (!curId) return;
             patchConvMessages(streamConvId!, (prev) =>
               prev.map((m) => (m.id === curId ? { ...m, content: m.content + text } : m)),
@@ -2578,12 +2677,47 @@ export default function App() {
           },
           onMeta: (meta) => {
             if (!isRunCurrent()) return;
+            if (typeof meta.request_id === "string" && meta.request_id) {
+              lastRequestIdRef.current = meta.request_id;
+            } else if (typeof meta.run_id === "string" && meta.run_id) {
+              lastRequestIdRef.current = meta.run_id;
+            }
+            if (meta.waiting_approval && streamConvId && lastRequestIdRef.current) {
+              setApprovalGate({
+                conversationId: streamConvId,
+                requestId: lastRequestIdRef.current,
+              });
+            }
             if (meta.phase === "cancelled") {
               sealStreamingMessagesForConv(streamConvId!, true);
               if (isViewingStream()) {
                 setSending(false);
                 setRunLabel("正在思考…");
               }
+            }
+            if (meta.phase === "agent_skipped") {
+              const skipId = typeof meta.agent_id === "string" ? meta.agent_id : "";
+              // Server is authoritative: drop the in-flight bubble for this agent even if
+              // streamed tokens were not yet classified as PASS (e.g. mid-stream / wrappers).
+              patchConvMessages(streamConvId!, (prev) => {
+                const run = runsRef.current.get(streamConvId!);
+                const mappedId = skipId && run?.assistantIdsByAgent?.[skipId];
+                return prev.filter((m) => {
+                  const dropMapped = Boolean(mappedId && m.id === mappedId);
+                  const dropPassForAgent =
+                    Boolean(skipId) &&
+                    m.agent_id === skipId &&
+                    (m.streaming || isGroupPassContent(m.content || ""));
+                  const drop = dropMapped || dropPassForAgent;
+                  if (drop && run) {
+                    if (run.assistantId === m.id) run.assistantId = "";
+                    if (skipId && run.assistantIdsByAgent?.[skipId] === m.id) {
+                      delete run.assistantIdsByAgent[skipId];
+                    }
+                  }
+                  return !drop;
+                });
+              });
             }
             if (meta.phase === "user_saved" && typeof meta.message_id === "string") {
               stampUserSavedMessage(streamConvId!, meta.message_id, {
@@ -2608,6 +2742,18 @@ export default function App() {
             if (!isRunCurrent()) return;
             const phase = String(data.phase || "");
             const tool = typeof data.tool === "string" ? data.tool : "";
+            if (phase === "waiting_approval") {
+              setRunLabelForStream(
+                typeof data.label === "string" && data.label.trim()
+                  ? data.label
+                  : "等待确认后继续",
+              );
+              const rid = lastRequestIdRef.current;
+              if (rid && streamConvId) {
+                setApprovalGate({ conversationId: streamConvId, requestId: rid });
+              }
+              return;
+            }
             if (typeof data.label === "string" && data.label.trim()) {
               if (phase === "tool" && tool) {
                 setRunLabelForStream(`${data.label} · ${tool}`);
@@ -2622,12 +2768,15 @@ export default function App() {
               setRunLabelForStream("正在思考…");
             }
           },
-          onError: (msg) => {
+          onError: (msg, info) => {
             if (!isRunCurrent()) return;
             sendHadError = true;
             setStatus(`错误：${msg}`);
             setRunLabelForStream("正在思考…");
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            const run = runsRef.current.get(streamConvId!);
+            const agentId = info?.agent_id;
+            const curId =
+              (agentId && run?.assistantIdsByAgent?.[agentId]) || run?.assistantId || null;
             patchConvMessages(streamConvId!, (prev) =>
               prev.map((m) =>
                 m.id === curId
@@ -2636,13 +2785,42 @@ export default function App() {
               ),
             );
           },
-          onDone: () => {
+          onDone: (data) => {
             if (!isRunCurrent()) return;
-            const curId = runsRef.current.get(streamConvId!)?.assistantId;
+            const doneFailed =
+              data?.ok === false &&
+              !data?.waiting_approval &&
+              !data?.cancelled &&
+              typeof data?.error === "string" &&
+              Boolean((data.error as string).trim());
+            const failText =
+              doneFailed && typeof data?.error === "string"
+                ? `（失败）${(data.error as string).trim()}`
+                : "";
+            // Parallel group: seal every streaming bubble; drop PASS silence
+            // (keep empty streaming bubble when doneFailed so failure text can show).
             patchConvMessages(streamConvId!, (prev) =>
-              prev.map((m) => (m.id === curId ? { ...m, streaming: false } : m)),
+              prev
+                .filter((m) => {
+                  if (!(m.streaming && isGroupPassContent(m.content || ""))) return true;
+                  return Boolean(doneFailed);
+                })
+                .map((m) => {
+                  if (!m.streaming) return m;
+                  const content =
+                    !(m.content || "").trim() && failText ? failText : m.content;
+                  return { ...m, streaming: false, content };
+                }),
             );
-            if (!taskConvIdsRef.current.has(streamConvId!)) {
+            if (data?.waiting_approval && streamConvId) {
+              const rid =
+                (typeof data.request_id === "string" && data.request_id) ||
+                lastRequestIdRef.current;
+              if (rid) {
+                setApprovalGate({ conversationId: streamConvId, requestId: rid });
+                setRunLabelForStream("等待确认后继续");
+              }
+            } else if (!taskConvIdsRef.current.has(streamConvId!)) {
               setRunLabelForStream("正在思考…");
             }
             void refreshConversations();
@@ -4191,6 +4369,7 @@ export default function App() {
               key={m.id}
               message={m}
               agentId={m.agent_id || agentId}
+              speakerName={speakerNameFor(m)}
               onHostDecide={m.role === "host_confirm" ? (ok) => settleHostConfirm(m, ok) : undefined}
               replyQuote={quoteFor(m)}
               replyCount={replyCountByRoot.get(m.id) || 0}
@@ -4240,6 +4419,7 @@ export default function App() {
                   key={`thread-${m.id}`}
                   message={m}
                   agentId={m.agent_id || agentId}
+                  speakerName={speakerNameFor(m)}
                   dense
                   replyQuote={quoteFor(m)}
                   onReply={beginReplyTo}
@@ -4260,6 +4440,54 @@ export default function App() {
         ) : null}
 
         <div className="composer-wrap">
+          {approvalGate &&
+          conversation?.id === approvalGate.conversationId ? (
+            <div className="approval-gate-card" role="status">
+              <span className="approval-gate-text">工具需要你确认后才能继续</span>
+              <div className="approval-gate-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const gate = approvalGate;
+                    void approveConversationRun(
+                      gate.conversationId,
+                      gate.requestId,
+                      false,
+                      "user_rejected",
+                    )
+                      .then(() => setApprovalGate(null))
+                      .catch((err) =>
+                        setStatus(`拒绝失败：${err instanceof Error ? err.message : String(err)}`),
+                      );
+                  }}
+                >
+                  拒绝
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    const gate = approvalGate;
+                    void approveConversationRun(
+                      gate.conversationId,
+                      gate.requestId,
+                      true,
+                    )
+                      .then(() => {
+                        setApprovalGate(null);
+                        setRunLabel("正在继续…");
+                      })
+                      .catch((err) =>
+                        setStatus(`批准失败：${err instanceof Error ? err.message : String(err)}`),
+                      );
+                  }}
+                >
+                  批准
+                </button>
+              </div>
+            </div>
+          ) : null}
           {showScrollBottom ? (
             <button
               type="button"

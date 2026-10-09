@@ -59,7 +59,8 @@ func (s *Server) postRuntimeJSON(ctx context.Context, path string, body any) (ma
 type durableSteerBody struct {
 	RequestID string `json:"request_id"`
 	Text      string `json:"text"`
-	Mode      string `json:"mode"`
+	Mode      string `json:"mode"` // follow_up | steer | reject (when_busy)
+	WhenBusy  string `json:"when_busy"`
 }
 
 type durableApproveBody struct {
@@ -89,6 +90,9 @@ func (s *Server) handleConversationSteer(w http.ResponseWriter, r *http.Request)
 	}
 	mode := strings.TrimSpace(body.Mode)
 	if mode == "" {
+		mode = strings.TrimSpace(body.WhenBusy)
+	}
+	if mode == "" {
 		mode = "follow_up"
 	}
 	out, code, err := s.postRuntimeJSON(r.Context(), "/v1/runs/steer", map[string]any{
@@ -96,6 +100,7 @@ func (s *Server) handleConversationSteer(w http.ResponseWriter, r *http.Request)
 		"request_id":      body.RequestID,
 		"text":            body.Text,
 		"mode":            mode,
+		"when_busy":       mode,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
@@ -145,4 +150,19 @@ func (s *Server) handleConversationApprove(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// shouldSteerBusyHarness reports whether a new user message should be injected
+// into an already-busy durable harness thread.
+//
+// Same agent (DM, or @same member in a group) → steer/inbox.
+// Different @-target while another member is busy → false (start a new run).
+// Empty activeAgentID keeps legacy/DM busy-steer working when agent was not stamped.
+func shouldSteerBusyHarness(activeAgentID, targetAgentID string) bool {
+	active := strings.TrimSpace(activeAgentID)
+	target := strings.TrimSpace(targetAgentID)
+	if active == "" || target == "" {
+		return true
+	}
+	return active == target
 }

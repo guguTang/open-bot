@@ -59,20 +59,21 @@ func lastMainSummary(msgs []db.Message) string {
 
 // historyForRuntime builds model history for a normal (non-thread) turn:
 // main timeline only, from the last summary onward.
-func historyForRuntime(msgs []db.Message) []runtimeMsg {
-	return historyForRuntimeScoped(filterMainTimeline(msgs), false)
+// currentAgentID + agentNames attribute other bots' assistant turns in groups.
+func historyForRuntime(msgs []db.Message, currentAgentID string, agentNames map[string]string) []runtimeMsg {
+	return historyForRuntimeScoped(filterMainTimeline(msgs), false, currentAgentID, agentNames)
 }
 
 // historyForThreadRuntime builds history for a thread reply:
 // optional main-timeline summary + thread root + thread messages
 // (with per-thread summary truncation when the thread is long).
-func historyForThreadRuntime(msgs []db.Message, threadRootID string) []runtimeMsg {
+func historyForThreadRuntime(msgs []db.Message, threadRootID, currentAgentID string, agentNames map[string]string) []runtimeMsg {
 	rootID := strings.TrimSpace(threadRootID)
 	if rootID == "" {
-		return historyForRuntime(msgs)
+		return historyForRuntime(msgs, currentAgentID, agentNames)
 	}
 	thread := filterThreadMessages(msgs, rootID)
-	scoped := historyForRuntimeScoped(thread, true)
+	scoped := historyForRuntimeScoped(thread, true, currentAgentID, agentNames)
 	if sum := lastMainSummary(msgs); sum != "" {
 		out := make([]runtimeMsg, 0, len(scoped)+1)
 		out = append(out, runtimeMsg{Role: "summary", Content: sum})
@@ -84,7 +85,9 @@ func historyForThreadRuntime(msgs []db.Message, threadRootID string) []runtimeMs
 
 // historyForRuntimeScoped converts a pre-filtered message slice into runtime
 // turns, cutting from the last summary and optionally compacting long threads.
-func historyForRuntimeScoped(msgs []db.Message, compactThread bool) []runtimeMsg {
+// When currentAgentID is set, assistant messages from other agents are rewritten
+// as labeled user turns so the target bot does not treat them as its own voice.
+func historyForRuntimeScoped(msgs []db.Message, compactThread bool, currentAgentID string, agentNames map[string]string) []runtimeMsg {
 	lastSummary := -1
 	for i, m := range msgs {
 		if m.Role == "summary" {
@@ -99,6 +102,7 @@ func historyForRuntimeScoped(msgs []db.Message, compactThread bool) []runtimeMsg
 	if compactThread {
 		slice = compactThreadSlice(slice)
 	}
+	current := strings.TrimSpace(currentAgentID)
 	out := make([]runtimeMsg, 0, len(slice))
 	for _, m := range slice {
 		switch m.Role {
@@ -110,6 +114,19 @@ func historyForRuntimeScoped(msgs []db.Message, compactThread bool) []runtimeMsg
 					continue
 				}
 			}
+			if m.Role == "assistant" && current != "" {
+				speaker := strings.TrimSpace(m.AgentID)
+				if speaker != "" && speaker != current {
+					label := speaker
+					if agentNames != nil {
+						if n := strings.TrimSpace(agentNames[speaker]); n != "" {
+							label = n
+						}
+					}
+					out = append(out, runtimeMsg{Role: "user", Content: formatOtherAgentHistoryNote(label, content)})
+					continue
+				}
+			}
 			out = append(out, runtimeMsg{Role: m.Role, Content: content})
 		case "host_confirm":
 			if note := hostConfirmRuntimeNote(m.Content); note != "" {
@@ -118,6 +135,41 @@ func historyForRuntimeScoped(msgs []db.Message, compactThread bool) []runtimeMsg
 		}
 	}
 	return out
+}
+
+// formatOtherAgentHistoryNote labels another member's prior reply for the model.
+func formatOtherAgentHistoryNote(agentLabel, content string) string {
+	label := strings.TrimSpace(agentLabel)
+	if label == "" {
+		label = "助手"
+	}
+	return "【" + label + "】" + content
+}
+
+// speakerNamesForHistory builds id→name for attributing multi-bot history.
+func speakerNamesForHistory(database *db.DB, msgs []db.Message, currentAgentID, currentAgentName string) map[string]string {
+	ids := make([]string, 0, len(msgs)+1)
+	if id := strings.TrimSpace(currentAgentID); id != "" {
+		ids = append(ids, id)
+	}
+	for _, m := range msgs {
+		if id := strings.TrimSpace(m.AgentID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	var names map[string]string
+	if database != nil {
+		names = database.LookupAgentNames(ids)
+	}
+	if names == nil {
+		names = map[string]string{}
+	}
+	if id := strings.TrimSpace(currentAgentID); id != "" {
+		if n := strings.TrimSpace(currentAgentName); n != "" {
+			names[id] = n
+		}
+	}
+	return names
 }
 
 // compactThreadSlice keeps the last summary (if any) plus a recent window so

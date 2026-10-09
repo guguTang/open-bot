@@ -53,7 +53,7 @@ from . import langfuse_trace as lf
 from .presence import PresencePublisher
 from .reply_quote import apply_reply_quote
 from .tool_dispatch import bind_tool_handler, reset_tool_handler
-from .harness import durable_enabled, run_durable_events
+from .harness import durable_enabled, run_durable_events, start_resume_worker, stop_resume_worker
 from .harness.config import thread_id_for
 from .harness.checkpointer import get_checkpointer, close_checkpointer
 
@@ -111,6 +111,10 @@ class RunRequest(BaseModel):
     reply_context: str | None = None
     # Idempotent durable run key (LangGraph thread suffix). Go may send request_id.
     request_id: str | None = None
+    # Background / child-thread flags (defer_work / conversation_tasks).
+    background: bool = False
+    owner_task: str | None = None
+    owner_thread_id: str | None = None
 
 
 class MemoryCreate(BaseModel):
@@ -208,10 +212,12 @@ async def _startup() -> None:
             await get_checkpointer()
         except Exception:  # noqa: BLE001
             pass
+        start_resume_worker()
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    await stop_resume_worker()
     await close_checkpointer()
 
 
@@ -1152,17 +1158,36 @@ async def openai_path(
             return json.dumps(result, ensure_ascii=False)
         if name == "defer_work":
             from . import openbot_api as obapi
+            from .harness.child import spawn_child_thread
+            from .harness.config import thread_id_for as _tid_for
 
             try:
-                return json.dumps(
-                    obapi.defer_work(
-                        str(user_id or ""),
-                        str(conversation_id or ""),
-                        str(args.get("goal") or ""),
-                        agent_id=str(agent_id or "") or None,
-                    ),
-                    ensure_ascii=False,
+                parent_tid = ""
+                if conversation_id and durable_run_id:
+                    parent_tid = _tid_for(
+                        conversation_id=str(conversation_id),
+                        request_id=str(durable_run_id),
+                    )
+                child = None
+                if parent_tid and durable_enabled():
+                    child = await spawn_child_thread(
+                        conversation_id=str(conversation_id or ""),
+                        parent_thread_id=parent_tid,
+                        user_id=str(user_id or ""),
+                        agent_id=str(agent_id or ""),
+                        background=True,
+                        owner_task=str(args.get("goal") or "")[:200],
+                    )
+                out = obapi.defer_work(
+                    str(user_id or ""),
+                    str(conversation_id or ""),
+                    str(args.get("goal") or ""),
+                    agent_id=str(agent_id or "") or None,
                 )
+                if isinstance(out, dict) and child:
+                    out["background_thread_id"] = child.get("thread_id")
+                    out["background_request_id"] = child.get("request_id")
+                return json.dumps(out, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "list_routines":
@@ -1337,6 +1362,19 @@ async def openai_path(
                     "tools_on": tools_on if durable_tools_on is None else durable_tools_on,
                     "llm_context_window": durable_llm_cw,
                     "llm_model": durable_llm_model or model_name,
+                    "background": bool(
+                        getattr(durable_body, "background", False) if durable_body else False
+                    ),
+                    "owner_task": str(
+                        getattr(durable_body, "owner_task", "") or ""
+                    )
+                    if durable_body
+                    else "",
+                    "owner_thread_id": str(
+                        getattr(durable_body, "owner_thread_id", "") or ""
+                    )
+                    if durable_body
+                    else "",
                 },
             ):
                 if request is not None and await request.is_disconnected():
@@ -1346,6 +1384,7 @@ async def openai_path(
             reset_tool_handler(token)
         return
 
+    # DEPRECATED: RUNTIME_DURABLE=0 fallback. Prefer LangGraph harness + journal.
     presence = PresencePublisher(
         conversation_id,
         agent_id,
@@ -1509,7 +1548,8 @@ class SteerRequest(BaseModel):
     conversation_id: str = Field(..., min_length=1)
     request_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1)
-    mode: str = Field(default="follow_up")  # follow_up | steer
+    mode: str = Field(default="follow_up")  # follow_up | steer | reject
+    when_busy: str | None = None
 
 
 class AbortRequest(BaseModel):
@@ -1529,7 +1569,14 @@ async def runs_steer(body: SteerRequest) -> dict:
     from .harness import steer as steer_mod
 
     tid = thread_id_for(conversation_id=body.conversation_id, request_id=body.request_id)
-    return await steer_mod.steer_thread(tid, text=body.text, mode=body.mode)
+    mode = (body.when_busy or body.mode or "follow_up").strip()
+    return await steer_mod.steer_thread(
+        tid,
+        text=body.text,
+        mode=mode,
+        conversation_id=body.conversation_id,
+        request_id=body.request_id,
+    )
 
 
 @app.post("/v1/runs/abort")

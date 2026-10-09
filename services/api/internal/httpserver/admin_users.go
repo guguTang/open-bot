@@ -95,6 +95,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.provisionUserSandbox(u.ID)
 	s.writeAudit(admin.OrgID, admin.ID, "user.create", "user", u.ID, map[string]any{
 		"username": u.Username,
 		"role":     u.Role,
