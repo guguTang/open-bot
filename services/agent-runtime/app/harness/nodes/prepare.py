@@ -140,6 +140,12 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
             system = sp + "\n\n" + system
 
     dialog = [m for m in history if m.get("role") in ("user", "assistant", "summary")]
+    # After a reset entry, only keep messages tagged at/after reset (or trailing turns).
+    reset_seq = int(state.get("reset_seq") or 0)
+    if reset_seq > 0:
+        kept = [m for m in dialog if int(m.get("_journal_seq") or 0) >= reset_seq]
+        if kept:
+            dialog = kept
 
     async def _summarize(msgs: list[dict[str, Any]]) -> str:
         return await chat_text(msgs, api_key=api_key or "", override=override)

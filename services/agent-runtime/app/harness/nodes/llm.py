@@ -29,6 +29,35 @@ from ..state import AgentState
 from .. import tracing
 
 
+
+def _is_group_pass(text: str) -> bool:
+    """Mirror API ContentIsGroupPass: silence sentinel must not project to messages."""
+    import re
+
+    t = (text or "").strip()
+    if not t:
+        return True
+    for _ in range(8):
+        prev = t
+        t = t.strip().strip("` \t\r\n\"'").strip("*_~").strip()
+        for a, b in (
+            ("[", "]"),
+            ("【", "】"),
+            ("（", "）"),
+            ("(", ")"),
+            ("「", "」"),
+            ("『", "』"),
+            ("<", ">"),
+            ("《", "》"),
+        ):
+            if t.startswith(a) and t.endswith(b) and len(t) >= len(a) + len(b):
+                t = t[len(a) : len(t) - len(b)].strip()
+        t = t.rstrip("。.!！…").strip()
+        if t == prev:
+            break
+    return bool(re.fullmatch(r"pass", t, flags=re.I))
+
+
 def _cfg(config: dict[str, Any]) -> dict[str, Any]:
     return (config or {}).get("configurable") or {}
 
@@ -38,10 +67,13 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     api_key = str(cfg.get("api_key") or "")
     override = cfg.get("override")
     on_status = cfg.get("on_status")
+    on_event = cfg.get("on_event")
+    journal = cfg.get("journal")
     extra_tools = list(cfg.get("extra_tools") or [])
     msgs = list(state.get("messages") or [])
     rnd = int(state.get("round") or 0) + 1
     max_rounds = int(state.get("max_rounds") or 12)
+    compaction_retries = int(state.get("compaction_retries") or 0)
 
     if rnd > max_rounds:
         return {
@@ -80,12 +112,17 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
             data = await chat_completion(msgs, api_key=api_key, tools=None, override=override)
             _accumulate(data)
             choices = data.get("choices") or []
-            final = ""
-            if choices:
-                raw = str((choices[0].get("message") or {}).get("content") or "")
-                final = postprocess_text(strip_think(strip_tool_markup(raw)), profile)
-                final = sanitize_fake_tool_narration(final)
+            if not choices:
+                raise RuntimeError("empty LLM completion (no choices)")
+            raw = str((choices[0].get("message") or {}).get("content") or "")
+            final = postprocess_text(strip_think(strip_tool_markup(raw)), profile)
+            final = sanitize_fake_tool_narration(final)
             lf.update_obs(gen_obs, output=lf.truncate(final))
+            if journal is not None and final:
+                await journal.commit_assistant(final, project=not _is_group_pass(final))
+                await journal.put_usage(usage_acc if isinstance(usage_acc, dict) else None)
+            if on_event is not None and final:
+                await on_event("message_end", {"text": final})
             return {
                 "messages": msgs,
                 "final_text": final,
@@ -94,6 +131,7 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 "round": rnd,
                 "usage": usage_acc,
                 "follow_up_queue": [],
+                "needs_compaction": False,
             }
 
         tools = list(TOOL_DEFS) + extra_tools
@@ -107,41 +145,35 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 override=override,
             )
         except AutoToolChoiceUnsupported:
-            # Fall back to text-only completion this turn; tools node may parse markup.
             data = await chat_completion(
                 msgs, api_key=api_key, tools=None, override=override
             )
         except RuntimeError as exc:
             if not is_context_length_error(str(exc)):
                 raise
-            from ... import compact as compact_mod
-
-            compacted, meta = await compact_mod.compact_messages(
-                msgs, api_key=api_key, model=model
-            )
-            if meta.get("compacted"):
-                msgs = list(compacted)
-            data = await chat_completion(
-                msgs,
-                api_key=api_key,
-                tools=tools,
-                tool_choice=choice,
-                override=override,
-            )
+            # Align pi: one compaction + retry on same thread.
+            if compaction_retries < 1:
+                if on_event is not None:
+                    await on_event("compaction_start", {"reason": "context_overflow"})
+                return {
+                    "messages": msgs,
+                    "needs_compaction": True,
+                    "compaction_retries": compaction_retries + 1,
+                    "pending_tool_calls": [],
+                    "status": "running",
+                    "round": rnd - 1,  # compact then re-llm same logical round
+                    "follow_up_queue": follow,
+                }
+            raise
 
         _accumulate(data)
+        if journal is not None and usage_acc:
+            await journal.put_usage(usage_acc if isinstance(usage_acc, dict) else None)
+
         choices = data.get("choices") or []
         if not choices:
-            lf.update_obs(gen_obs, output="")
-            return {
-                "messages": msgs,
-                "final_text": state.get("final_text") or "",
-                "pending_tool_calls": [],
-                "status": "done",
-                "round": rnd,
-                "usage": usage_acc,
-                "follow_up_queue": [],
-            }
+            # Empty completion must surface as a run failure (not silent PASS / no bubble).
+            raise RuntimeError("empty LLM completion (no choices)")
 
         msg = choices[0].get("message") or {}
         tool_calls = list(msg.get("tool_calls") or [])
@@ -168,6 +200,14 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 gen_obs,
                 output=lf.truncate({"content": content, "tool_calls": len(tool_calls)}),
             )
+            if journal is not None:
+                await journal.commit_tool_intent(tool_calls)
+                if content_str.strip():
+                    await journal.append(
+                        "assistant_partial",
+                        {"content": content_str},
+                        project=False,
+                    )
             return {
                 "messages": msgs,
                 "pending_tool_calls": tool_calls,
@@ -176,12 +216,18 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 "round": rnd,
                 "usage": usage_acc,
                 "follow_up_queue": [],
+                "needs_compaction": False,
             }
 
         final = postprocess_text(strip_think(strip_tool_markup(content_str)), profile)
         final = sanitize_fake_tool_narration(final)
         msgs.append({"role": "assistant", "content": content})
         lf.update_obs(gen_obs, output=lf.truncate(final))
+        if journal is not None and final:
+            await journal.commit_assistant(final, project=not _is_group_pass(final))
+            await journal.put_live({"phase": "assistant", "len": len(final)}, force=True)
+        if on_event is not None and final:
+            await on_event("message_end", {"text": final})
         return {
             "messages": msgs,
             "pending_tool_calls": [],
@@ -190,6 +236,7 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
             "round": rnd,
             "usage": usage_acc,
             "follow_up_queue": [],
+            "needs_compaction": False,
         }
 
 
