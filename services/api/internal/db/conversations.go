@@ -403,6 +403,28 @@ func (d *DB) RecentHostConfirms(conversationID string) ([]Message, error) {
 	return out, rows.Err()
 }
 
+// DeleteMessage removes one message row (e.g. journal-projected PASS cleaned up
+// after the HTTP path classifies the turn as group silence).
+func (d *DB) DeleteMessage(conversationID, messageID string) error {
+	conversationID = strings.TrimSpace(conversationID)
+	messageID = strings.TrimSpace(messageID)
+	if conversationID == "" || messageID == "" {
+		return ErrNotFound
+	}
+	res, err := d.SQL.Exec(
+		`DELETE FROM messages WHERE id = $1 AND conversation_id = $2`,
+		messageID, conversationID,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (d *DB) UpdateMessageContent(conversationID, messageID, content string) (*Message, error) {
 	res, err := d.SQL.Exec(
 		`UPDATE messages SET content = $1 WHERE id = $2 AND conversation_id = $3`,

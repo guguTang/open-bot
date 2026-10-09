@@ -1649,6 +1649,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		// sees the interrupted turn (keep-partial-next-turn).
 		// Group PASS / empty optional silence: do not persist a bubble.
 		if passed {
+			// Durable journal may have already projected PASS via commit_assistant(project=True).
+			// Remove that row so silence never survives refresh / listMessages.
+			s.dropProjectedGroupPass(conv.ID, runID)
 			emit("meta", map[string]any{
 				"phase":    "agent_skipped",
 				"agent_id": agentID,

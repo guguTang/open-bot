@@ -346,6 +346,24 @@ func botAssistantMessageOpts(agentID, threadRootID, requestID string) db.AddMess
 	}
 }
 
+
+// dropProjectedGroupPass deletes an assistant row already projected for this
+// runtime request_id when the turn is classified as group PASS / silence.
+func (s *Server) dropProjectedGroupPass(conversationID, requestID string) {
+	rid := strings.TrimSpace(requestID)
+	cid := strings.TrimSpace(conversationID)
+	if rid == "" || cid == "" || s.db == nil {
+		return
+	}
+	existing, err := s.db.FindAssistantByRequestID(cid, rid)
+	if err != nil || existing == nil {
+		return
+	}
+	if err := s.db.DeleteMessage(cid, existing.ID); err != nil {
+		log.Printf("drop projected PASS conv=%s req=%s: %v", cid, rid, err)
+	}
+}
+
 func (s *Server) saveAssistant(userID, conversationID, agentID, text string, emit func(event string, data any)) *db.Message {
 	return s.saveAssistantThreaded(userID, conversationID, agentID, text, "", "", "", emit)
 }
@@ -358,6 +376,10 @@ func (s *Server) saveAssistant(userID, conversationID, agentID, text string, emi
 // quote-only reply_to); non-empty only for explicit sidebar-thread posts.
 func (s *Server) saveAssistantThreaded(userID, conversationID, agentID, text, replyToID, threadRootID, requestID string, emit func(event string, data any)) *db.Message {
 	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	// Hard guard: never persist group silence tokens (even if caller forgot to skip).
+	if db.ContentIsGroupPass(text) {
 		return nil
 	}
 	rid := strings.TrimSpace(requestID)

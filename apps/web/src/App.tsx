@@ -332,7 +332,28 @@ function firstMentionedAgent(content: string, list: Agent[]): Agent | undefined 
 function isGroupPassContent(content: string): boolean {
   let t = (content || "").trim();
   if (!t) return true;
-  t = t.replace(/^[`\s"'【\[（(]+|[`\s"'】\]）).。!！]+$/gu, "").trim();
+  // Peel wrappers iteratively: markdown, ASCII/CJK brackets, trailing punct.
+  for (let i = 0; i < 8; i++) {
+    const prev = t;
+    t = t.trim().replace(/^[`\s"'*_~]+|[`\s"'*_~]+$/gu, "").trim();
+    const pairs: [string, string][] = [
+      ["[", "]"],
+      ["【", "】"],
+      ["（", "）"],
+      ["(", ")"],
+      ["「", "」"],
+      ["『", "』"],
+      ["<", ">"],
+      ["《", "》"],
+    ];
+    for (const [a, b] of pairs) {
+      if (t.startsWith(a) && t.endsWith(b) && t.length >= a.length + b.length) {
+        t = t.slice(a.length, t.length - b.length).trim();
+      }
+    }
+    t = t.replace(/[。.!！…]+$/u, "").trim();
+    if (t === prev) break;
+  }
   return /^pass$/i.test(t);
 }
 
@@ -1881,7 +1902,9 @@ export default function App() {
 
   const sealStreamingMessagesForConv = (convId: string, markStopped: boolean) => {
     patchConvMessages(convId, (prev) =>
-      prev.map((m) => {
+      prev
+        .filter((m) => !(m.streaming && isGroupPassContent(m.content || "")))
+        .map((m) => {
         if (!m.streaming) return m;
         const empty = !(m.content && m.content.trim());
         if (empty && markStopped) {
@@ -1931,6 +1954,8 @@ export default function App() {
     };
     return msgs
       .filter((m) => m.role !== "summary")
+      // Drop any silence tokens that leaked into storage (journal race / old rows).
+      .filter((m) => !(m.role === "assistant" && isGroupPassContent(m.content || "")))
       .map((m) => ({
         ...m,
         agent_name: m.agent_id ? nameOf(m.agent_id) : undefined,
@@ -2612,17 +2637,22 @@ export default function App() {
             }
             if (meta.phase === "agent_skipped") {
               const skipId = typeof meta.agent_id === "string" ? meta.agent_id : "";
+              // Server is authoritative: drop the in-flight bubble for this agent even if
+              // streamed tokens were not yet classified as PASS (e.g. mid-stream / wrappers).
               patchConvMessages(streamConvId!, (prev) => {
                 const run = runsRef.current.get(streamConvId!);
                 const curId = run?.assistantId;
                 return prev.filter((m) => {
-                  const isSkipBubble =
-                    (skipId && m.agent_id === skipId && isGroupPassContent(m.content || "")) ||
-                    (curId && m.id === curId && isGroupPassContent(m.content || ""));
-                  if (isSkipBubble && run && run.assistantId === m.id) {
+                  const dropCurrent = Boolean(curId && m.id === curId);
+                  const dropPassForAgent =
+                    Boolean(skipId) &&
+                    m.agent_id === skipId &&
+                    isGroupPassContent(m.content || "");
+                  const drop = dropCurrent || dropPassForAgent;
+                  if (drop && run && run.assistantId === m.id) {
                     run.assistantId = "";
                   }
-                  return !isSkipBubble;
+                  return !drop;
                 });
               });
             }
@@ -2681,7 +2711,12 @@ export default function App() {
             if (!isRunCurrent()) return;
             const curId = runsRef.current.get(streamConvId!)?.assistantId;
             patchConvMessages(streamConvId!, (prev) =>
-              prev.map((m) => (m.id === curId ? { ...m, streaming: false } : m)),
+              prev
+                .filter(
+                  (m) =>
+                    !(curId && m.id === curId && isGroupPassContent(m.content || "")),
+                )
+                .map((m) => (m.id === curId ? { ...m, streaming: false } : m)),
             );
             if (!taskConvIdsRef.current.has(streamConvId!)) {
               setRunLabelForStream("正在思考…");

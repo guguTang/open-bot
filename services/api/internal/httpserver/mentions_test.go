@@ -83,9 +83,21 @@ func TestIsGroupPassReply(t *testing.T) {
 		{"  [pass]  ", true},
 		{"【PASS】", true},
 		{"(PASS)", true},
+		{"（PASS）", true},
 		{"", true},
+		{"   ", true},
+		{"`[PASS]`", true},
+		{"**[PASS]**", true},
+		{"*[PASS]*", true},
+		{"[PASS].", true},
+		{"[PASS]!", true},
+		{"[PASS]。", true},
+		{"「PASS」", true},
+		{"Pass", true},
 		{"你好，我是助手", false},
 		{"PASS 一下再说", false},
+		{"I will PASS this", false},
+		{"[PASS] 顺便说一句", false},
 	}
 	for _, c := range cases {
 		if got := isGroupPassReply(c.in); got != c.want {

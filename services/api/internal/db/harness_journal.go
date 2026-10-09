@@ -186,6 +186,10 @@ func (d *DB) ProjectHarnessEntryToMessage(entryID, conversationID, role, content
 	if strings.TrimSpace(existing) != "" {
 		return existing, nil
 	}
+	// Group silence tokens must never become visible assistant rows.
+	if strings.EqualFold(strings.TrimSpace(role), "assistant") && ContentIsGroupPass(content) {
+		return "", nil
+	}
 	msg, err := d.AddMessageWithOpts(conversationID, role, content, AddMessageOpts{
 		AgentID:   agentID,
 		RequestID: requestID,

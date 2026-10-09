@@ -226,23 +226,7 @@ func groupParticipationExtraSystem(forced bool) string {
 
 // isGroupPassReply reports a structured silence / no-op reply from a group candidate.
 func isGroupPassReply(text string) bool {
-	t := strings.TrimSpace(text)
-	if t == "" {
-		return true
-	}
-	// Strip common wrappers the model may add.
-	t = strings.Trim(t, "` \t\r\n\"'")
-	t = strings.TrimPrefix(t, "【")
-	t = strings.TrimSuffix(t, "】")
-	t = strings.TrimPrefix(t, "[")
-	t = strings.TrimSuffix(t, "]")
-	t = strings.TrimPrefix(t, "（")
-	t = strings.TrimSuffix(t, "）")
-	t = strings.TrimPrefix(t, "(")
-	t = strings.TrimSuffix(t, ")")
-	t = strings.TrimSpace(t)
-	t = strings.TrimRight(t, "。.!！")
-	return strings.EqualFold(t, "PASS")
+	return db.ContentIsGroupPass(text)
 }
 
 // dedupeStrings preserves order.
