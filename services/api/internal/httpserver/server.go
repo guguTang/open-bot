@@ -1643,7 +1643,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		runCancelled := runCtx.Err() != nil || isCancelErr(runErr)
-		passed := conv.ChannelID != "" && !runCancelled && isGroupPassReply(assistantText)
+		// A failed run with empty tokens must NOT look like group PASS silence —
+		// that is the "直接无返回" path (bubble dropped as PASS / never persisted).
+		passed := conv.ChannelID != "" && !runCancelled && runErr == nil && isGroupPassReply(assistantText)
 		// Persist partial assistant text even when cancelled mid-stream.
 		// Empty cancel → keep a light UI/history marker so the next turn still
 		// sees the interrupted turn (keep-partial-next-turn).
@@ -1663,6 +1665,10 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			s.saveAssistantThreaded(uid, conv.ID, agentID, assistantText, "", threadRootID, runID, emit)
 		} else if runCancelled {
 			_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", "（已停止）", botAssistantMessageOpts(agentID, threadRootID, runID))
+		} else if runErr != nil {
+			// Persist a visible failure bubble (same family as 「（已停止）」) so refresh
+			// and other clients still see the turn instead of silent empty.
+			s.saveAssistantThreaded(uid, conv.ID, agentID, formatAssistantRunFailure(runErr), "", threadRootID, runID, emit)
 		}
 		if runErr != nil {
 			if runCancelled {
@@ -1670,6 +1676,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 			emit("error", map[string]string{"message": runErr.Error()})
+			emit("done", map[string]any{"ok": false, "error": runErr.Error()})
 			return
 		}
 		if runCancelled {
@@ -1791,6 +1798,7 @@ func (s *Server) proxyRuntimeRun(ctx context.Context, emit func(event string, da
 	var pendingSummary string
 	var runID string
 	var usage runtimeUsage
+	var streamErr error
 	reader := bufio.NewReader(resp.Body)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -1836,12 +1844,24 @@ func (s *Server) proxyRuntimeRun(ctx context.Context, emit func(event string, da
 						if emit != nil {
 							emit("error", payload)
 						}
+						// Remember SSE error even if done frame is omitted / swallowed.
+						if streamErr == nil {
+							if msg := strings.TrimSpace(asString(payload["message"])); msg != "" {
+								streamErr = fmt.Errorf("%s", msg)
+							} else {
+								streamErr = fmt.Errorf("runtime error")
+							}
+						}
 					case "done":
 						usage = usageFromDonePayload(payload)
 						if rid := runIDFromRuntimeMeta(payload); rid != "" {
 							runID = rid
 						}
-						// swallow per-agent done; outer handler emits final done
+						// Per-agent done is swallowed for the client, but ok=false must
+						// still become runErr or handleSendMessage thinks the turn succeeded.
+						if derr := runtimeDoneFailure(payload); derr != nil && streamErr == nil {
+							streamErr = derr
+						}
 					default:
 						if emit != nil && eventName != "" {
 							emit(eventName, payload)
@@ -1862,7 +1882,7 @@ func (s *Server) proxyRuntimeRun(ctx context.Context, emit func(event string, da
 			break
 		}
 	}
-	return stripThinkTags(assistant.String()), pendingSummary, runID, usage, nil
+	return stripThinkTags(assistant.String()), pendingSummary, runID, usage, streamErr
 }
 
 // runIDFromRuntimeMeta pulls the runtime run id from a meta/done payload
@@ -1890,6 +1910,45 @@ func isCancelErr(err error) bool {
 	// net/http often wraps disconnect as url.Error / OpError with context canceled.
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "context canceled") || strings.Contains(msg, "request canceled")
+}
+
+// runtimeDoneFailure extracts a failure from a runtime SSE done payload.
+// waiting_approval / cancelled are not treated as hard failures here.
+// Success may omit ok; only explicit ok=false counts as failure.
+func runtimeDoneFailure(payload map[string]any) error {
+	if payload == nil {
+		return nil
+	}
+	ok, hasOK := payload["ok"].(bool)
+	if !hasOK || ok {
+		return nil
+	}
+	if waiting, _ := payload["waiting_approval"].(bool); waiting {
+		return nil
+	}
+	if cancelled, _ := payload["cancelled"].(bool); cancelled {
+		return nil
+	}
+	errMsg := strings.TrimSpace(asString(payload["error"]))
+	if errMsg == "" {
+		errMsg = "runtime run failed"
+	}
+	return fmt.Errorf("%s", errMsg)
+}
+
+// formatAssistantRunFailure builds the persisted / client-visible failure bubble text.
+func formatAssistantRunFailure(err error) string {
+	msg := "运行失败"
+	if err != nil {
+		if t := strings.TrimSpace(err.Error()); t != "" {
+			msg = t
+		}
+	}
+	runes := []rune(msg)
+	if len(runes) > 300 {
+		msg = string(runes[:300]) + "…"
+	}
+	return "（失败）" + msg
 }
 
 func hostConfirmRuntimeNote(content string) string {

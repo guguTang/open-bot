@@ -273,11 +273,15 @@ async def run_durable_events(
         logger.exception("durable run failed thread=%s", tid)
         if root_obs is not None:
             lf.update_obs(root_obs, level="ERROR", status_message=str(exc)[:500])
+        err_msg = str(exc)[:500] or "runtime run failed"
+        # Dedicated error event: proxyRuntimeRun forwards it, and Go persists a bubble.
+        # done.ok=false alone used to be swallowed → silent empty / group PASS.
+        yield sse("error", {"message": err_msg})
         yield sse(
             "done",
             {
                 "ok": False,
-                "error": str(exc)[:500],
+                "error": err_msg,
                 "run_id": rid,
                 "thread_id": tid,
                 "durable": True,
