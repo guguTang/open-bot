@@ -183,6 +183,7 @@ func (s *Server) upsertOIDCUser(info *auth.OIDCUserInfo) (*db.User, error) {
 		}
 	}
 	s.seedDefaultLLM(u.ID)
+	s.provisionUserSandbox(u.ID)
 	if role != db.RoleMember {
 		s.writeAudit(u.OrgID, u.ID, "auth.oidc_role_sync", "user", u.ID, map[string]any{
 			"from": "", "to": role, "roles": info.Roles, "groups": info.Groups, "new_user": true,
