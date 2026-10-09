@@ -328,7 +328,7 @@ func (d *DB) ListMessages(userID, conversationID string) ([]Message, error) {
 		`SELECT id, conversation_id, role, content, COALESCE(agent_id,''),
 		        COALESCE(reply_to_id,''), COALESCE(thread_root_id,''), created_at,
 		        COALESCE(agent_message_id, ''), COALESCE(request_id, '')
-		 FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
+		 FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC, id ASC`,
 		conversationID,
 	)
 	if err != nil {

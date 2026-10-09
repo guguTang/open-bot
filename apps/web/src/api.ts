@@ -1353,6 +1353,8 @@ type MergeableMessage = Message & { streaming?: boolean; stopped?: boolean };
  *   the run that is streaming into them, and only that run's `message_saved` (stampSavedMessage)
  *   gives them a server id. Letting them absorb arbitrary messages made an interrupted turn's
  *   stop marker land on the next turn's placeholder → two 「已停止」 in the UI, one in the DB.
+ * - New rows insert before trailing streaming assistants and by created_at among sealed rows so
+ *   mid-turn projected acks/stage updates stay before the final reply (not appended after it).
  */
 export function mergeIncomingMessage<T extends MergeableMessage>(
   prev: T[],
@@ -1362,17 +1364,39 @@ export function mergeIncomingMessage<T extends MergeableMessage>(
   if (prev.some((m) => m.id === msg.id)) {
     return prev.map((m) => (m.id === msg.id ? ({ ...m, ...msg, streaming: false } as T) : m));
   }
-  // Insert point that keeps trailing streaming assistant placeholders last.
+  // Keep trailing streaming assistant placeholders last (tokens / stampSavedMessage own them).
   const beforeTrailingStreaming = () => {
     let at = prev.length;
     while (at > 0 && prev[at - 1].streaming && prev[at - 1].role === "assistant") at -= 1;
     return at;
   };
+  // Mid-turn journal projections (assistant_partial) arrive over WS while the final
+  // reply still streams into a trailing placeholder. Appending would put early ack /
+  // stage updates AFTER the final once that placeholder is stamped. Insert before
+  // trailing streams, and among sealed rows by created_at so late WS deliveries
+  // still keep chronological order (early ack → stage → final).
+  const insertKeepingStreamLast = (row: T): T[] => {
+    const streamAt = beforeTrailingStreaming();
+    const sealed = prev.slice(0, streamAt);
+    const trailing = prev.slice(streamAt);
+    const incomingAt = msg.created_at ? Date.parse(msg.created_at) : Number.NaN;
+    let insertAt = sealed.length;
+    if (!Number.isNaN(incomingAt)) {
+      for (let i = 0; i < sealed.length; i++) {
+        const raw = sealed[i].created_at;
+        const t = raw ? Date.parse(String(raw)) : Number.NaN;
+        if (!Number.isNaN(t) && t > incomingAt) {
+          insertAt = i;
+          break;
+        }
+      }
+    }
+    const next = sealed.slice();
+    next.splice(insertAt, 0, row);
+    return trailing.length ? next.concat(trailing) : next;
+  };
   if (msg.role === "host_confirm") {
-    const at = beforeTrailingStreaming();
-    const next = prev.slice();
-    next.splice(at, 0, { ...msg, streaming: false } as T);
-    return next;
+    return insertKeepingStreamLast({ ...msg, streaming: false } as T);
   }
   const adopt = (i: number) =>
     prev.map((item, j) =>
@@ -1404,14 +1428,7 @@ export function mergeIncomingMessage<T extends MergeableMessage>(
     if (!same) break;
     return adopt(i);
   }
-  if (incomingStop) {
-    // No local stop bubble (e.g. stopped from another tab): keep it above the live placeholder.
-    const at = beforeTrailingStreaming();
-    const next = prev.slice();
-    next.splice(at, 0, { ...msg, streaming: false } as T);
-    return next;
-  }
-  return [...prev, { ...msg, streaming: false } as T];
+  return insertKeepingStreamLast({ ...msg, streaming: false } as T);
 }
 
 export type AgentBusWSEvent = {
