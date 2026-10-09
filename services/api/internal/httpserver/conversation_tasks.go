@@ -260,6 +260,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 	if enabledSkills == nil {
 		enabledSkills = []string{}
 	}
+	// Background durable thread: request_id = task.ID aligns with defer_work child thread.
 	payloadMap := map[string]any{
 		"conversation_id": task.ConversationID,
 		"content":         instruction,
@@ -271,6 +272,8 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		"enabled_skills":  enabledSkills,
 		"max_tool_rounds": 16,
 		"request_id":      task.ID,
+		"background":      true,
+		"owner_task":      task.ID,
 	}
 	if llmPayload != nil {
 		payloadMap["llm"] = llmPayload

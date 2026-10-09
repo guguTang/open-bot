@@ -278,6 +278,10 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/routines/run", s.requireInternal(s.handleInternalRunRoutine))
 	mux.HandleFunc("POST /internal/conversation-tasks/enqueue", s.requireInternal(s.handleInternalEnqueueTask))
 	mux.HandleFunc("POST /internal/memory-recalls", s.requireInternal(s.handleInternalRecordMemoryRecall))
+	mux.HandleFunc("POST /internal/harness/entries", s.requireInternal(s.handleInternalHarnessEntry))
+	mux.HandleFunc("POST /internal/harness/threads", s.requireInternal(s.handleInternalHarnessThread))
+	mux.HandleFunc("POST /internal/harness/docs", s.requireInternal(s.handleInternalHarnessDoc))
+	mux.HandleFunc("GET /internal/harness/resumable", s.requireInternal(s.handleInternalHarnessResumable))
 	mux.HandleFunc("POST /internal/routines/list", s.requireInternal(s.handleInternalListRoutines))
 	mux.HandleFunc("POST /internal/routines/create", s.requireInternal(s.handleInternalCreateRoutine))
 	mux.HandleFunc("POST /internal/routines/update", s.requireInternal(s.handleInternalUpdateRoutine))
@@ -420,6 +424,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		enableTools = true
 	}
 	_, _ = s.db.CreateLLMConnection(u.ID, "默认连接", base, key, model, enableTools, true, nil)
+	s.provisionUserSandbox(u.ID)
 
 	// Refresh user after org bootstrap
 	if refreshed, err := s.db.GetUserByID(u.ID); err == nil {
@@ -1476,7 +1481,6 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			s.publishTaskStatus(uid, conv.ID, targetAgents[0], conv.ChannelID, "idle", "")
 		}()
 	}
-
 
 	// Busy durable run: place inbox (follow_up/steer/reject) instead of a parallel run.
 	// Group channels share one conversation_id — only steer when a single candidate
