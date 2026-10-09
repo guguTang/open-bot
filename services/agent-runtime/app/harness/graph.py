@@ -17,11 +17,13 @@ from .state import AgentState
 _compiled: Any | None = None
 
 
-def _route_after_llm(state: AgentState) -> Literal["tools", "compact", "finalize", "finish"]:
+def _route_after_llm(state: AgentState) -> Literal["tools", "compact", "finalize", "finish", "llm"]:
     if state.get("needs_compaction"):
         return "compact"
     if state.get("pending_tool_calls"):
         return "tools"
+    if state.get("needs_continue"):
+        return "llm"
     if state.get("needs_finalize"):
         return "finalize"
     # Cap with empty answer (should be rare; tools path usually hits finalize first).
@@ -70,7 +72,7 @@ def build_graph() -> Any:
     g.add_conditional_edges(
         "llm",
         _route_after_llm,
-        {"tools": "tools", "compact": "compact", "finalize": "finalize", "finish": "finish"},
+        {"tools": "tools", "compact": "compact", "finalize": "finalize", "finish": "finish", "llm": "llm"},
     )
     g.add_conditional_edges(
         "tools",

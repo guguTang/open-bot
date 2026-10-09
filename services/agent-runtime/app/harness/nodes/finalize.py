@@ -17,6 +17,7 @@ from ...llm import (
 )
 from ...tool_markup import strip_tool_markup
 from .. import tracing
+from ..long_task import try_auto_defer
 from ..state import AgentState
 from .llm import _is_group_pass
 
@@ -51,6 +52,38 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict[str, 
             "pending_tool_calls": [],
             "status": "done",
             "needs_finalize": False,
+            "needs_continue": False,
+        }
+
+    # Prefer background handoff when the inline turn is still unfinished.
+    used = list(state.get("tools_used") or [])
+    deferred = await try_auto_defer(
+        tool_handler=cfg.get("tool_handler"),
+        tools_used=used,
+        messages=msgs,
+        final_text="",
+        finished_cleanly=False,
+        on_status=on_status,
+    )
+    if deferred:
+        if "defer_work" not in used:
+            used.append("defer_work")
+        out_msgs = list(msgs)
+        out_msgs.append({"role": "assistant", "content": deferred})
+        if journal is not None:
+            await journal.commit_assistant(deferred, project=not _is_group_pass(deferred))
+            await journal.put_live({"phase": "assistant", "len": len(deferred)}, force=True)
+        if on_event is not None:
+            await on_event("message_end", {"text": deferred})
+        return {
+            "messages": out_msgs,
+            "final_text": deferred,
+            "pending_tool_calls": [],
+            "tools_used": used,
+            "status": "done",
+            "needs_finalize": False,
+            "needs_continue": False,
+            "needs_compaction": False,
         }
 
     _, base, model = openai_config(override)

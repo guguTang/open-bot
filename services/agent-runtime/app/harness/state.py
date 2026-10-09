@@ -40,6 +40,8 @@ class AgentState(TypedDict):
     replay_results: dict[str, str]  # tool_call_id -> prior result (safe replay)
     needs_compaction: bool
     needs_finalize: bool
+    needs_continue: bool  # inject CONTINUE_WORK / host nudge then re-llm
+    work_continued: bool  # one-shot continue nudge already applied
     reset_seq: int  # model context starts after this journal seq (0 = none)
     compaction_retries: int
     extension_names: list[str]
@@ -76,6 +78,8 @@ def initial_state(
         "replay_results": {},
         "needs_compaction": False,
         "needs_finalize": False,
+        "needs_continue": False,
+        "work_continued": False,
         "reset_seq": 0,
         "compaction_retries": 0,
         "extension_names": [],

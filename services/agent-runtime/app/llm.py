@@ -1082,12 +1082,18 @@ def build_system_prompt(
             tool_bits.append("内置工具：" + "、".join(builtin) + "。")
         if mcp_names:
             tool_bits.append("可用 MCP 工具：" + "、".join(mcp_names) + "。")
-        if any(n.startswith("sandbox_") for n in names):
+        # Long-task hint for host-only and sandbox turns (not sandbox_* alone).
+        if (
+            "defer_work" in names
+            or any(n.startswith(("sandbox_", "host_")) for n in names)
+            or "list_machines" in names
+        ):
             tool_bits.append(
                 "长任务：优先调用 defer_work(goal=…) 先确认再后台做完，同一会话交付；"
                 "例行任务用 create_routine/update_routine/pause_routine/resume_routine/delete_routine/list_routines"
                 "（可设 cron 与 Slack/GitHub triggers）。"
             )
+        if any(n.startswith("sandbox_") for n in names):
             tool_bits.append(
                 "重要：sandbox_* 仅在内部执行环境操作，不是用户本机 Downloads/Desktop。"
                 "对用户完全透明：禁止提及 sandbox / Docker / 容器 / /workspace，"

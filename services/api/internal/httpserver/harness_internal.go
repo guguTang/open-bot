@@ -92,6 +92,12 @@ func (s *Server) handleInternalHarnessEntry(w http.ResponseWriter, r *http.Reque
 					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 					return
 				}
+				// Live-notify so early projected acks (assistant_partial) appear soon.
+				if msgID != "" && strings.TrimSpace(body.UserID) != "" {
+					if msg, gerr := s.db.GetMessage(body.UserID, body.ConversationID, msgID); gerr == nil && msg != nil {
+						s.publishConversationMessage(body.UserID, msg)
+					}
+				}
 			}
 		}
 	}
