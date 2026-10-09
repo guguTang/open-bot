@@ -1,6 +1,8 @@
 # open-bot local dev helpers
 .PHONY: compose-up compose-all compose-postgres compose-down compose-langfuse compose-langfuse-down compose-casdoor compose-casdoor-down dev-api dev-api-air dev-runtime dev-backend dev-worker dev-web dev-admin dev-desktop build-desktop build-desktop-windows build-desktop-macos build-desktop-linux check-desktop \
-	build-web build-admin sync-mobile build-android build-android-debug build-android-release dev-mobile-ios open-mobile-android build-ios sandbox-image sandbox-image-desktop \
+	build-web build-admin sync-mobile build-android build-android-debug build-android-release dev-mobile-ios open-mobile-android build-ios \
+	dev-mobile-rn dev-mobile-rn-clear check-mobile-rn \
+	sandbox-image sandbox-image-desktop \
 	stop-api stop-runtime stop-web stop-worker stop-dev \
 	e2e-install e2e e2e-web e2e-admin backfill-embeddings dream-user
 
@@ -157,6 +159,19 @@ dev-mobile-ios: sync-mobile
 
 open-mobile-android: sync-mobile
 	cd apps/mobile && npx cap open android
+
+# React Native / Expo 原生移动端（apps/mobile-rn）
+# 后端需先起：make dev-runtime + make dev-api
+# 真机需先改 apps/mobile-rn/.env 的 EXPO_PUBLIC_OPENBOT_API_BASE 为局域网 IP
+dev-mobile-rn:
+	cd apps/mobile-rn && pnpm start
+
+# 改过 .env 后用这个，会清 Metro 缓存并重新注入环境变量
+dev-mobile-rn-clear:
+	cd apps/mobile-rn && pnpm start --clear
+
+check-mobile-rn:
+	cd apps/mobile-rn && pnpm typecheck && pnpm lint
 
 # Android APK builds (requires Android SDK + Gradle)
 build-android: sync-mobile
