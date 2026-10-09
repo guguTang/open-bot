@@ -1321,8 +1321,15 @@ export default function App() {
     [messages],
   );
 
+  // Bot onboarding card + welcome bubbles are DM/new-bot only — never for group channels.
   const showOnboarding = Boolean(
-    authed && selectionHydrated && !hasChatMessages && !onboardingDismissed && !sending && !chatSwitchPending,
+    authed &&
+      selectionHydrated &&
+      !conversation?.channel_id &&
+      !hasChatMessages &&
+      !onboardingDismissed &&
+      !sending &&
+      !chatSwitchPending,
   );
 
 
