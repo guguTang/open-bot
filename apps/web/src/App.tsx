@@ -3122,6 +3122,17 @@ export default function App() {
 
   const refreshSandbox = useCallback(async () => {
     const s = await getSandbox();
+    // stale error: 注册时镜像/依赖未就绪留下的错误，尝试一次自愈
+    if (s.status === "error") {
+      try {
+        const fresh = await ensureSandbox({});
+        setSandbox(fresh);
+        setSandboxMsg("已自动重试启动运行环境");
+        return;
+      } catch {
+        // 重试失败，保留原错误状态展示
+      }
+    }
     setSandbox(s);
   }, []);
 

@@ -316,6 +316,7 @@ func (m *Manager) Ensure(ctx context.Context, req EnsureRequest) (*Instance, err
 	}
 	args := []string{
 		"run", "-d",
+		"--pull", "never",
 		"--name", name,
 		"--restart", "unless-stopped",
 		"--memory", fmt.Sprintf("%dm", mem),
