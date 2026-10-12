@@ -236,6 +236,13 @@ button {
   flex: 1 1 auto;
 }
 
+.agent-item,
+.conv-item,
+.messages > .chat-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+
 .agent-item {
   text-align: left;
   border: none;
@@ -1301,11 +1308,8 @@ button {
 }
 
 .composer-stop-icon {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: #fff;
   display: block;
+  flex-shrink: 0;
 }
 
 /* ---- Modal / Auth (light) ---- */

@@ -1,3 +1,4 @@
+import { Plus, Users } from "lucide-react";
 import { useEffect } from "react";
 
 type Props = {
@@ -42,9 +43,7 @@ export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }:
           }}
         >
           <span className="action-sheet-row-leading" aria-hidden>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <Plus size={20} strokeWidth={2} aria-hidden />
           </span>
           新建 Bot
         </button>
@@ -57,11 +56,7 @@ export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }:
           }}
         >
           <span className="action-sheet-row-leading" aria-hidden>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+            <Users size={20} strokeWidth={2} aria-hidden />
           </span>
           新建群聊
         </button>

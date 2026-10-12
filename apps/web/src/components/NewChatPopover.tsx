@@ -1,3 +1,4 @@
+import { Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Agent, Machine } from "../api";
 import { listMachines } from "../api";
@@ -280,9 +281,7 @@ export function NewChatPopover({
                 }}
               >
                 <span className="new-chat-action-icon" aria-hidden>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
+                  <Plus size={18} strokeWidth={2} aria-hidden />
                 </span>
                 <span>创建新 Bot</span>
               </button>
@@ -296,11 +295,7 @@ export function NewChatPopover({
                 }}
               >
                 <span className="new-chat-action-icon" aria-hidden>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
+                  <Users size={18} strokeWidth={2} aria-hidden />
                 </span>
                 <span>创建群聊</span>
               </button>

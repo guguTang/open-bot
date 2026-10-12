@@ -7,6 +7,7 @@
  * States: pending (stream, fence unclosed) → rendering → ok | error. The renderer is only
  * called once the fence is closed (or the stream ended); see lib/mermaidFence.ts.
  */
+import { ChevronDown, Download, Maximize2, Minus, Plus, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -34,54 +35,19 @@ const FULLSCREEN_ZOOM = { min: 0.25, max: 4 };
 
 /* ---------------- icons (16px) ---------------- */
 
-function Svg16({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {children}
-    </svg>
-  );
-}
-const IconDownload = () => (
-  <Svg16>
-    <path d="M8 2.5v8M4.75 7.5 8 10.75 11.25 7.5M3 13.5h10" />
-  </Svg16>
-);
-const IconCaret = () => (
-  <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-    <path d="M1.5 3 4 5.5 6.5 3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-const IconExpand = () => (
-  <Svg16>
-    <path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10" />
-  </Svg16>
-);
-const IconClose = () => (
-  <Svg16>
-    <path d="M4 4l8 8M12 4l-8 8" />
-  </Svg16>
-);
-const IconMinus = () => (
-  <Svg16>
-    <path d="M3.5 8h9" />
-  </Svg16>
-);
-const IconPlus = () => (
-  <Svg16>
-    <path d="M8 3.5v9M3.5 8h9" />
-  </Svg16>
-);
+const diagramIcon = {
+  size: 16,
+  strokeWidth: 1.5,
+  "aria-hidden": true as const,
+  focusable: false as const,
+};
+
+const IconDownload = () => <Download {...diagramIcon} />;
+const IconCaret = () => <ChevronDown size={8} strokeWidth={1.3} aria-hidden focusable={false} />;
+const IconExpand = () => <Maximize2 {...diagramIcon} />;
+const IconClose = () => <X {...diagramIcon} />;
+const IconMinus = () => <Minus {...diagramIcon} />;
+const IconPlus = () => <Plus {...diagramIcon} />;
 
 /* ---------------- zoom ---------------- */
 

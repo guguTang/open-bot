@@ -1,3 +1,4 @@
+import { ChevronRight, X } from "lucide-react";
 import type { Agent } from "../api";
 import { AgentAvatar } from "./AgentAvatar";
 
@@ -32,11 +33,7 @@ type Props = {
 };
 
 function Chevron() {
-  return (
-    <svg className="settings-hub-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M9 6l6 6-6 6" />
-    </svg>
-  );
+  return <ChevronRight className="settings-hub-chevron" size={16} strokeWidth={2} aria-hidden />;
 }
 
 /**
@@ -62,9 +59,7 @@ export function MobileSettingsHub({
       <div className="settings-hub-top">
         <h2 className="settings-hub-title">设置</h2>
         <button type="button" className="settings-hub-close" aria-label="关闭" onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <path d="M6 6l12 12M18 6 6 18" />
-          </svg>
+          <X size={16} strokeWidth={2} aria-hidden />
         </button>
       </div>
 

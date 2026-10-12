@@ -1,3 +1,4 @@
+import { ChevronRight, Cpu, LogOut, Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { LLMConnection } from "../api";
 
@@ -9,41 +10,8 @@ type AccountMenuProps = {
   onLogout: () => void;
 };
 
-function IconModel() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-      <rect x="4" y="4" width="16" height="16" rx="3" />
-      <path d="M9 9h6v6H9z" />
-    </svg>
-  );
-}
-
-function IconGear() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
-function IconLogout() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <path d="M16 17l5-5-5-5" />
-      <path d="M21 12H9" />
-    </svg>
-  );
-}
-
-function IconChevron() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M9 6l6 6-6 6" />
-    </svg>
-  );
-}
+const rowIcon = { size: 18, strokeWidth: 1.8, "aria-hidden": true as const };
+const chevron = { size: 14, strokeWidth: 2, "aria-hidden": true as const };
 
 export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLogout }: AccountMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -137,12 +105,12 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
               onClick={() => setFlyout((v) => !v)}
             >
               <span className="account-row-icon">
-                <IconModel />
+                <Cpu {...rowIcon} />
               </span>
               <span className="account-row-label">当前模型</span>
               <span className={`account-row-meta${llm ? "" : " warn"}`}>
                 <span className="account-row-value">{modelLabel || "未配置"}</span>
-                <IconChevron />
+                <ChevronRight {...chevron} />
               </span>
             </button>
             {flyout ? (
@@ -153,7 +121,7 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
                   <button type="button" className="account-row" role="menuitem" onClick={() => closeMenu(onChangeModel)}>
                     <span className="account-row-label">更改模型</span>
                     <span className="account-row-meta">
-                      <IconChevron />
+                      <ChevronRight {...chevron} />
                     </span>
                   </button>
                 </div>
@@ -163,7 +131,7 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
 
           <button type="button" className="account-row" role="menuitem" onClick={() => closeMenu(onOpenSettings)}>
             <span className="account-row-icon">
-              <IconGear />
+              <Settings {...rowIcon} />
             </span>
             <span className="account-row-label">设置</span>
           </button>
@@ -180,7 +148,7 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
             }}
           >
             <span className="account-row-icon">
-              <IconLogout />
+              <LogOut {...rowIcon} />
             </span>
             <span className="account-row-label">退出登录</span>
           </button>

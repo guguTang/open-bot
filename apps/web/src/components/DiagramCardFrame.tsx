@@ -2,6 +2,7 @@
  * Shared diagram-card shell (pill + toolbar + body). Used by Mermaid / HTML / 图片 cards.
  * P1-A: when the card is too narrow for pill + action buttons, collapse actions into a ⋯ menu.
  */
+import { Ellipsis } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -27,20 +28,7 @@ export type DiagramOverflowItem = {
 };
 
 function IconMore() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="3" cy="8" r="1.5" />
-      <circle cx="8" cy="8" r="1.5" />
-      <circle cx="13" cy="8" r="1.5" />
-    </svg>
-  );
+  return <Ellipsis size={16} aria-hidden focusable={false} />;
 }
 
 function DiagramOverflowMenu({ items }: { items: DiagramOverflowItem[] }) {

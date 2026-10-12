@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { AttachmentMeta, HandoffPayload, MessageSource, ReactionSummary } from "../api";
 import {
   NEGATIVE_REACTION_EMOJIS,
@@ -111,7 +118,7 @@ function resolveHandoff(message: ChatMessageData): HandoffPayload | null {
   return message.handoff || null;
 }
 
-export function ChatMessage({
+function ChatMessageInner({
   message,
   agentId,
   speakerName,
@@ -452,3 +459,5 @@ export function ChatMessage({
     </div>
   );
 }
+
+export const ChatMessage = memo(ChatMessageInner);

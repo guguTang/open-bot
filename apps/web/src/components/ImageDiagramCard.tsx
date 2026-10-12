@@ -3,6 +3,7 @@
  * Auth attachment GET via ?access_token= on <img>; toolbar: copy URL · download · fullscreen.
  * No fake generated images — only real urls / attachments.
  */
+import { Download, Maximize2, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -21,39 +22,16 @@ import {
 import { copyText } from "../lib/diagramExport";
 import { DiagramCardFrame, type DiagramOverflowItem } from "./DiagramCardFrame";
 
-function Svg16({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {children}
-    </svg>
-  );
-}
-const IconDownload = () => (
-  <Svg16>
-    <path d="M8 2.5v8M4.75 7.5 8 10.75 11.25 7.5M3 13.5h10" />
-  </Svg16>
-);
-const IconExpand = () => (
-  <Svg16>
-    <path d="M2.75 6V2.75H6M10 2.75h3.25V6M13.25 10v3.25H10M6 13.25H2.75V10" />
-  </Svg16>
-);
-const IconClose = () => (
-  <Svg16>
-    <path d="M4 4l8 8M12 4l-8 8" />
-  </Svg16>
-);
+const diagramIcon = {
+  size: 16,
+  strokeWidth: 1.5,
+  "aria-hidden": true as const,
+  focusable: false as const,
+};
+
+const IconDownload = () => <Download {...diagramIcon} />;
+const IconExpand = () => <Maximize2 {...diagramIcon} />;
+const IconClose = () => <X {...diagramIcon} />;
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

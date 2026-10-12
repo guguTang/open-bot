@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type { Agent, Machine } from "../api";
 import { listMachines } from "../api";
@@ -122,11 +123,7 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
     }
   };
 
-  const closeIcon = (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path d="M6 6l12 12M18 6 6 18" />
-    </svg>
-  );
+  const closeIcon = <X size={16} strokeWidth={2} aria-hidden />;
 
   return (
     <div

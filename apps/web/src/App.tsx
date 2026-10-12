@@ -1,4 +1,13 @@
-import { FormEvent, MouseEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  MouseEvent,
+  PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { useConfirm, useDismissConfirm } from "./components/ConfirmProvider";
 import {
@@ -161,7 +170,6 @@ import {
   type ToolAllowEntry,
   type ToolFamilyId,
 } from "./lib/toolAllowlist";
-import { AccountMenu } from "./components/AccountMenu";
 import {
   SettingsPage,
   SettingsHint,
@@ -169,334 +177,67 @@ import {
   SettingsCard,
   SettingsEmpty,
 } from "./components/SettingsLayout";
-import { AgentAvatar } from "./components/AgentAvatar";
 import { FeedbackModal, type FeedbackTarget } from "./components/FeedbackModal";
 import { TrainPanel } from "./components/TrainPanel";
 import { NewChatPopover, type CreateBotInput, type NewChatMode } from "./components/NewChatPopover";
-import { normalizePresenceStatus, resolveAvatarColor, toolNameLooksLikeSearch } from "./components/avatarColor";
+import { normalizePresenceStatus } from "./components/avatarColor";
 import { BotAvatarSettings } from "./components/BotAvatarSettings";
 import { ConvActionSheet } from "./components/ConvActionSheet";
 import { CreateActionSheet } from "./components/CreateActionSheet";
 import { MobileSettingsHub, type SettingsHubNav } from "./components/MobileSettingsHub";
 import { ApiServerField } from "./components/ApiServerField";
 import { LAYOUT_NARROW_MQ, useIsTouchUi, useSheetFormUi } from "./components/useIsTouchUi";
-import { ChatMessage } from "./components/ChatMessage";
 import { BotSettingsPanel } from "./components/BotSettingsPanel";
 import { GeneralBotSettings } from "./components/GeneralBotSettings";
 import { SecretPromptModal } from "./components/SecretPromptModal";
 import { CloneAgentModal } from "./components/CloneAgentModal";
 import { GroupMembersSettings } from "./components/GroupMembersSettings";
-import { Composer, PendingFile, type ComposerMentionItem, type ComposerReplyTarget, type ComposerSkillOption } from "./components/Composer";
-import { RunStatus } from "./components/RunStatus";
+import { PendingFile, type ComposerMentionItem, type ComposerSkillOption } from "./components/Composer";
 import {
-  BotOnboardingCard,
-  ONBOARDING_WELCOME,
   isOnboardingDismissed,
   onboardingStorageKey,
   setOnboardingDismissed,
   type OnboardingOption,
 } from "./components/BotOnboardingCard";
-
-type UiMessage = Message & { streaming?: boolean; /** Legacy local stop stamp; unused — empty bubbles are dropped instead of 「（已停止）」. */ stopped?: boolean; attachments?: AttachmentMeta[]; agent_name?: string; reply_to_id?: string; thread_root_id?: string };
-type SettingsTab =
-  | "general"
-  | "bot"
-  | "llm"
-  | "skills"
-  | "mcp"
-  | "compact"
-  | "routines"
-  | "sandbox"
-  | "machines"
-  | "secrets"
-  | "review";
-
-const SETTINGS_TITLE: Record<SettingsTab, string> = {
-  general: "通用",
-  bot: "当前 Bot",
-  llm: "模型",
-  skills: "扩展能力包",
-  mcp: "插件 / MCP",
-  compact: "数据与压缩",
-  routines: "例行任务",
-  sandbox: "运行环境",
-  machines: "电脑",
-  secrets: "密钥",
-  review: "审核",
-};
-
-function accountInitials(name: string) {
-  const text = name.trim();
-  if (!text) return "?";
-  return [...text].slice(0, 2).join("");
-}
-
-function SettingsGlyph({ id }: { id: SettingsTab }) {
-  const p = {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 24 24",
-    fill: "none" as const,
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    "aria-hidden": true as const,
-  };
-  switch (id) {
-    case "general":
-      return (
-        <svg {...p}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4" />
-        </svg>
-      );
-    case "bot":
-      return (
-        <svg {...p}>
-          <circle cx="12" cy="8" r="3" />
-          <path d="M5 20c1.5-3.5 4-5 7-5s5.5 1.5 7 5" />
-        </svg>
-      );
-    case "machines":
-      return (
-        <svg {...p}>
-          <rect x="3" y="4" width="18" height="13" rx="2" />
-          <path d="M8 21h8M12 17v4" />
-        </svg>
-      );
-    case "sandbox":
-      return (
-        <svg {...p}>
-          <path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z" />
-          <path d="M4 7l8 5 8-5M9 3h6" />
-        </svg>
-      );
-    case "llm":
-      return (
-        <svg {...p}>
-          <rect x="4" y="4" width="16" height="16" rx="3" />
-          <path d="M9 9h6v6H9z" />
-        </svg>
-      );
-    case "skills":
-      return (
-        <svg {...p}>
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        </svg>
-      );
-    case "mcp":
-      return (
-        <svg {...p}>
-          <path d="M9 7v4a3 3 0 0 0 6 0V7" />
-          <path d="M8 7h1M15 7h1M12 14v6M9 20h6" />
-        </svg>
-      );
-    case "compact":
-      return (
-        <svg {...p}>
-          <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-        </svg>
-      );
-    case "routines":
-      return (
-        <svg {...p}>
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 8v5l3 2" />
-        </svg>
-      );
-    case "secrets":
-      return (
-        <svg {...p}>
-          <circle cx="8" cy="15" r="4" />
-          <path d="M11 13l9-9 2 2-2 1-1-1-2 2 1 1-2 2" />
-        </svg>
-      );
-    case "review":
-      return (
-        <svg {...p}>
-          <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
-          <path d="M9.5 12l1.8 1.8L15 10" />
-        </svg>
-      );
-  }
-}
-type LastActiveSelection = { kind: "agent" | "channel"; id: string };
-type ConvRunState = {
-  abort: AbortController;
-  generation: number;
-  assistantId: string | null;
-  /** Parallel group: map agent_id → local streaming bubble id */
-  assistantIdsByAgent?: Record<string, string>;
-  runLabel: string;
-  /** Last tool name from stream onStatus phase=tool; cleared on thinking/tool_done. §8 searching hint. */
-  activeTool: string;
-  /** Agent currently driving RunStatus / robot-heads face (from agent_start / tokens). */
-  faceAgentId?: string;
-  selectionKey: string; // `agent:${id}` | `channel:${id}` for sidebar busy
-};
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function matchAgentByMentionToken(tok: string, list: Agent[]): Agent | undefined {
-  const lower = tok.toLowerCase();
-  // Exact id/name before prefix/substring so overlapping names do not steal the hit.
-  const exactId = list.find((a) => a.id.toLowerCase() === lower);
-  if (exactId) return exactId;
-  const exactName = list.find((a) => a.name.toLowerCase() === lower);
-  if (exactName) return exactName;
-  const idPrefix = list.find((a) => a.id.toLowerCase().startsWith(lower));
-  if (idPrefix) return idPrefix;
-  const namePrefix = list.find((a) => a.name.toLowerCase().startsWith(lower));
-  if (namePrefix) return namePrefix;
-  return list.find((a) => a.name.toLowerCase().includes(lower));
-}
-
-/** First @Bot in text (skips @everyone / @routine: / @mcp:). */
-function firstMentionedAgent(content: string, list: Agent[]): Agent | undefined {
-  const re = /@([^\s@]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const tok = m[1].replace(/[.,!?;:，。！？；：]+$/u, "");
-    const lower = tok.toLowerCase();
-    if (lower === "everyone" || lower === "all") continue;
-    if (lower.startsWith("routine:") || lower.startsWith("mcp:")) continue;
-    const hit = matchAgentByMentionToken(tok, list);
-    if (hit) return hit;
-  }
-  return undefined;
-}
-
-/** Group silence token from server PASS / empty skip (mirror isGroupPassReply). */
-function isGroupPassContent(content: string): boolean {
-  let t = (content || "").trim();
-  if (!t) return true;
-  // Peel wrappers iteratively: markdown, ASCII/CJK brackets, trailing punct.
-  for (let i = 0; i < 8; i++) {
-    const prev = t;
-    t = t.trim().replace(/^[`\s"'*_~]+|[`\s"'*_~]+$/gu, "").trim();
-    const pairs: [string, string][] = [
-      ["[", "]"],
-      ["【", "】"],
-      ["（", "）"],
-      ["(", ")"],
-      ["「", "」"],
-      ["『", "』"],
-      ["<", ">"],
-      ["《", "》"],
-    ];
-    for (const [a, b] of pairs) {
-      if (t.startsWith(a) && t.endsWith(b) && t.length >= a.length + b.length) {
-        t = t.slice(a.length, t.length - b.length).trim();
-      }
-    }
-    t = t.replace(/[。.!！…]+$/u, "").trim();
-    if (t === prev) break;
-  }
-  return /^pass$/i.test(t);
-}
-
-function stripLeadingAtAgent(content: string, agent: Agent): string {
-  for (const p of [agent.name, agent.id]) {
-    if (!p) continue;
-    const re = new RegExp(`^@${escapeRegExp(p)}\\s*`, "i");
-    if (re.test(content)) {
-      const next = content.replace(re, "").trim();
-      return next || content;
-    }
-  }
-  return content;
-}
-
-const HANDOFF_CONTEXT_MAX_MSGS = 12;
-const HANDOFF_CONTEXT_MAX_CHARS = 1200;
-
-function buildHandoffContext(
-  msgs: UiMessage[],
-  fromBotName: string,
-): { role: string; content: string }[] {
-  const usable = msgs
-    .filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim() && !m.streaming)
-    .slice(-HANDOFF_CONTEXT_MAX_MSGS);
-  if (usable.length === 0) {
-    return [
-      {
-        role: "system",
-        content: `用户从与「${fromBotName}」的对话转交给你；此前暂无更多上下文。`,
-      },
-    ];
-  }
-  const out: { role: string; content: string }[] = [
-    {
-      role: "system",
-      content: `用户从与「${fromBotName}」的对话转交给你。以下是那边近期对话（供参考，不要复述这段说明）：`,
-    },
-  ];
-  for (const m of usable) {
-    let text = m.content.trim();
-    if (text.length > HANDOFF_CONTEXT_MAX_CHARS) {
-      text = `${text.slice(0, HANDOFF_CONTEXT_MAX_CHARS)}…`;
-    }
-    out.push({ role: m.role === "assistant" ? "assistant" : "user", content: text });
-  }
-  return out;
-}
-
-const lastActiveStorageKey = (userId: string) => `openbot_last_active_${userId}`;
-
-function readLastActiveSelection(userId: string): LastActiveSelection | null {
-  try {
-    const raw = localStorage.getItem(lastActiveStorageKey(userId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<LastActiveSelection>;
-    if ((parsed.kind === "agent" || parsed.kind === "channel") && typeof parsed.id === "string" && parsed.id) {
-      return { kind: parsed.kind, id: parsed.id };
-    }
-  } catch {
-    // Ignore malformed or unavailable localStorage entries.
-  }
-  return null;
-}
-
-const listFoldStorageKey = (userId: string) => `openbot_list_fold_${userId}`;
-
-type ListFoldState = { assistantsCollapsed: boolean; groupsCollapsed: boolean };
-
-function readListFoldState(userId: string): ListFoldState {
-  try {
-    const raw = localStorage.getItem(listFoldStorageKey(userId));
-    if (!raw) return { assistantsCollapsed: false, groupsCollapsed: false };
-    const parsed = JSON.parse(raw) as Partial<ListFoldState>;
-    return {
-      assistantsCollapsed: Boolean(parsed.assistantsCollapsed),
-      groupsCollapsed: Boolean(parsed.groupsCollapsed),
-    };
-  } catch {
-    return { assistantsCollapsed: false, groupsCollapsed: false };
-  }
-}
-
-function writeListFoldState(userId: string, next: ListFoldState) {
-  try {
-    localStorage.setItem(listFoldStorageKey(userId), JSON.stringify(next));
-  } catch {
-    // Ignore unavailable localStorage.
-  }
-}
-
-/** layout-narrow token (≤860) — master-detail / mobileView; CSS `@media (max-width: 860px)`. */
-
-const emptyLLMForm: LLMInput = {
-  name: "默认连接",
-  base_url: "",
-  api_key: "",
-  model: "",
-  enable_tools: false,
-  is_default: true,
-  context_window: null,
-};
-
+import { AuthPage } from "./components/app/AuthPage";
+import { AppSidebar } from "./components/app/AppSidebar";
+import { ChatMain } from "./components/app/ChatMain";
+import { accountInitials } from "./components/app/accountInitials";
+import { SettingsGlyph } from "./components/app/SettingsGlyph";
+import { emptyLLMForm } from "./lib/app/constants";
+import { buildHandoffContext } from "./lib/app/handoff";
+import { isGroupPassContent } from "./lib/app/groupPass";
+import { firstMentionedAgent, matchAgentByMentionToken, stripLeadingAtAgent } from "./lib/app/mentions";
+import {
+  readLastActiveSelection,
+  readListFoldState,
+  writeLastActiveSelection,
+  writeListFoldState,
+} from "./lib/app/storage";
+import { refreshSettingsForTab, type SettingsRefreshApi } from "./lib/app/settingsRefresh";
+import type { ConvRunState, LastActiveSelection, SettingsTab, UiMessage } from "./types/app-ui";
+import { SETTINGS_TITLE } from "./types/app-ui";
+import {
+  chatScrollRef,
+  chatState,
+  pinChatScroll,
+  replyTargetRef,
+  resetChatSession,
+  setApprovalGate,
+  setChatSwitchPending,
+  setInput,
+  setMessages,
+  setPendingFiles,
+  setReplyTarget,
+  setRunActiveTool,
+  setRunFaceAgentId,
+  setRunLabel,
+  setSending,
+  setTaskBusy,
+  viewedMessages,
+  writeOpenThreadRootId,
+} from "./stores/chat";
+import { usePresenceStore } from "./stores/presence";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => getStoredUser());
@@ -511,44 +252,19 @@ export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
   const [conversation, setConversation] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<UiMessage[]>([]);
-  /** True while opening another bot/channel chat — suppress stale paint / onboarding flash. */
-  const [chatSwitchPending, setChatSwitchPending] = useState(false);
-  /** Composer reply target (Slack-style). */
-  const [replyTarget, setReplyTarget] = useState<ComposerReplyTarget | null>(null);
-  const replyTargetRef = useRef<ComposerReplyTarget | null>(null);
-  /** Open thread panel root id (null = main timeline). */
-  const [openThreadRootId, setOpenThreadRootIdState] = useState<string | null>(null);
-  /** Sync mirror of openThreadRootId so async send / stamp see the latest panel state. */
+  /** Sync mirror of the thread panel so async send / stamp see the latest panel state. */
   const openThreadRootIdRef = useRef<string | null>(null);
   const setOpenThreadRootId = useCallback((id: string | null) => {
     const next = (id || "").trim() || null;
     openThreadRootIdRef.current = next;
-    setOpenThreadRootIdState(next);
+    writeOpenThreadRootId(next);
   }, []);
   const localUserIdRef = useRef<string | null>(null);
-
-  const [input, setInput] = useState("");
-  const [convSearch, setConvSearch] = useState("");
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [taskBusy, setTaskBusy] = useState(false);
   const [taskConvIds, setTaskConvIds] = useState<Set<string>>(() => new Set());
   const taskConvIdsRef = useRef(taskConvIds);
   taskConvIdsRef.current = taskConvIds;
   const [, setStatus] = useState(""); // chat chrome status bar removed; keep setter for clear/error paths
-  const [runLabel, setRunLabel] = useState("正在思考…");
-  /** Current-view tool name for §8 searching animation variant (mirrors ConvRunState.activeTool). */
-  const [runActiveTool, setRunActiveTool] = useState("");
-  /** Agent_id for in-chat RunStatus AgentAvatar (parallel group: answering bot, not list focus). */
-  const [runFaceAgentId, setRunFaceAgentId] = useState("");
-  /** Durable HITL: request_id awaiting tool approval. */
-  const [approvalGate, setApprovalGate] = useState<{
-    conversationId: string;
-    requestId: string;
-  } | null>(null);
   const lastRequestIdRef = useRef<string>("");
-  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
@@ -591,31 +307,17 @@ export default function App() {
   const [channelBusy, setChannelBusy] = useState(false);
 
   const [avatarSettingsAgent, setAvatarSettingsAgent] = useState<Agent | null>(null);
-  // bot_presence per agent (idle|thinking|working|awaiting_approval|error), pushed by server.
-  const [presenceByAgent, setPresenceByAgent] = useState<Record<string, BotPresenceStatus>>({});
-  // bot_online overrides pushed by server (green dot); independent of presence face.
-  // Agent-global (not reset on conversation switch). Seeded from ListAgents `online`,
-  // updated live by `bot_online` (chat WS + conversation SSE).
-  const [onlineByAgent, setOnlineByAgent] = useState<Record<string, boolean>>({});
-  const applyBotOnline = useCallback((agentId: string, on: boolean) => {
-    setOnlineByAgent((prev) => (prev[agentId] === on ? prev : { ...prev, [agentId]: on }));
+  // bot_presence / bot_online live in the presence store so list dots don't re-render App.
+  const applyBotOnline = useCallback((id: string, on: boolean) => {
+    usePresenceStore.getState().setOnline(id, on);
     setAgents((prev) =>
-      prev.some((a) => a.id === agentId && a.online !== on)
-        ? prev.map((a) => (a.id === agentId ? { ...a, online: on } : a))
+      prev.some((a) => a.id === id && a.online !== on)
+        ? prev.map((a) => (a.id === id ? { ...a, online: on } : a))
         : prev,
     );
   }, []);
   const seedOnlineFromAgents = useCallback((list: Agent[]) => {
-    setOnlineByAgent((prev) => {
-      let next = prev;
-      for (const a of list) {
-        if (typeof a.online === "boolean" && prev[a.id] !== a.online) {
-          if (next === prev) next = { ...prev };
-          next[a.id] = a.online;
-        }
-      }
-      return next;
-    });
+    usePresenceStore.getState().seedOnline(list);
   }, []);
   // Message feedback → pending lessons; TrainPanel confirms (only active lessons reach the runtime).
   const [feedbackTarget, setFeedbackTarget] = useState<FeedbackTarget | null>(null);
@@ -917,8 +619,6 @@ export default function App() {
   /** Per-conversation in-flight SSE runs — switching bots must not abort these. */
   const runsRef = useRef<Map<string, ConvRunState>>(new Map());
   const messagesByConvRef = useRef<Map<string, UiMessage[]>>(new Map());
-  /** Mirrors `messages` so switch-away can snapshot without waiting a render. */
-  const messagesLiveRef = useRef<UiMessage[]>([]);
   const conversationRef = useRef<Conversation | null>(null);
   const didRestoreLastActive = useRef<string | null>(null);
   /** False until last-active restore finishes so we never flash agents[0] / onboarding. */
@@ -1105,11 +805,6 @@ export default function App() {
     conversationRef.current = conversation;
   }, [conversation]);
 
-  useEffect(() => {
-    messagesLiveRef.current = messages;
-  }, [messages]);
-
-
   const applyReactionEvent = useCallback((evt: ReactionUpdatedEvent) => {
     setMessages((prev) =>
       prev.map((m) => {
@@ -1130,7 +825,7 @@ export default function App() {
 
   const onToggleReaction = useCallback(
     async (messageId: string, emoji: string) => {
-      const prevSnapshot = messages.find((m) => m.id === messageId)?.reactions;
+      const prevSnapshot = viewedMessages().find((m) => m.id === messageId)?.reactions;
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== messageId) return m;
@@ -1163,7 +858,7 @@ export default function App() {
         toast.error(err instanceof Error ? err.message : String(err));
       }
     },
-    [messages, applyReactionEvent],
+    [applyReactionEvent],
   );
 
   const openFeedbackForMessage = useCallback(
@@ -1276,7 +971,7 @@ export default function App() {
           if (evt.agent_id) {
             // Five-state whitelist; empty → idle, unknown → working (v2.1 product rule).
             const st: BotPresenceStatus = normalizePresenceStatus(evt.status);
-            setPresenceByAgent((prev) => ({ ...prev, [evt.agent_id]: st }));
+            usePresenceStore.getState().setPresence(evt.agent_id, st);
             if (st === "awaiting_approval") {
               const rid = lastRequestIdRef.current;
               const cid = conversationRef.current?.id;
@@ -1369,77 +1064,10 @@ export default function App() {
     return Boolean(id && runsRef.current.has(id));
   }, [runBusyTick, conversation?.id]);
 
-  const chatProcessing = sending || taskBusy || viewingRunActive;
-
-  const messagesRef = useRef<HTMLDivElement | null>(null);
-  /** When true, keep the message list pinned to the latest content. */
-  const stickToBottomRef = useRef(true);
-
-  const isNearBottom = useCallback(() => {
-    const el = messagesRef.current;
-    if (!el) return true;
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  }, []);
-
-  const scrollToBottom = useCallback((smooth = false) => {
-    const el = messagesRef.current;
-    if (!el) return;
-    // Scroll the messages pane only — avoid scrollIntoView (can move page/sidebar).
-    if (smooth) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    } else {
-      el.scrollTop = el.scrollHeight;
-    }
-    stickToBottomRef.current = true;
-    setShowScrollBottom(false);
-  }, []);
-
-  const onMessagesScroll = useCallback(() => {
-    const near = isNearBottom();
-    stickToBottomRef.current = near;
-    setShowScrollBottom(!near);
-  }, [isNearBottom]);
-
-  // Keep pinned while streaming / status updates unless the user scrolled up.
-  useEffect(() => {
-    if (!stickToBottomRef.current) {
-      setShowScrollBottom(true);
-      return;
-    }
-    const id = requestAnimationFrame(() => {
-      scrollToBottom(false);
-    });
-    return () => cancelAnimationFrame(id);
-  }, [messages, sending, chatProcessing, runLabel, scrollToBottom]);
-
-
-
-
   const activeAgent = useMemo(
     () => (agentId ? agents.find((a) => a.id === agentId) : undefined),
     [agents, agentId],
   );
-
-  /** §8: search/retrieve tool signal this turn (stream tool name or host_activity label). */
-  const searchingHintNow = useMemo(
-    () =>
-      toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(hostActivity),
-    [runActiveTool, hostActivity],
-  );
-
-  /**
-   * In-chat RunStatus face: prefer SSE presence of the answering bot (agent_start),
-   * not the list-focus bot — otherwise group chat shows another bot's robot-heads.
-   * If idle while a run is live, fall back to working/thinking.
-   */
-  const runStatusFace = useMemo((): BotPresenceStatus => {
-    const faceId = (runFaceAgentId || activeAgent?.id || "").trim();
-    const fromSse = faceId ? normalizePresenceStatus(presenceByAgent[faceId]) : "idle";
-    if (fromSse !== "idle") return fromSse;
-    if (!(sending || taskBusy || viewingRunActive)) return "idle";
-    if (runActiveTool) return "working";
-    return "thinking";
-  }, [runFaceAgentId, activeAgent, presenceByAgent, sending, taskBusy, viewingRunActive, runActiveTool]);
 
   const onboardingKey = useMemo(
     () => onboardingStorageKey(conversation?.id, agentId),
@@ -1450,130 +1078,11 @@ export default function App() {
     setOnboardingDismissedState(isOnboardingDismissed(onboardingKey));
   }, [onboardingKey]);
 
-  const hasChatMessages = useMemo(
-    () => messages.some((m) => m.role === "user" || m.role === "assistant"),
-    [messages],
-  );
-
-  // Bot onboarding card + welcome bubbles are DM/new-bot only — never for group channels.
-  const showOnboarding = Boolean(
-    authed &&
-      selectionHydrated &&
-      !conversation?.channel_id &&
-      !hasChatMessages &&
-      !onboardingDismissed &&
-      !chatProcessing &&
-      !chatSwitchPending,
-  );
-
-
-  const filteredAgents = useMemo(() => {
-    const q = convSearch.trim().toLowerCase();
-    if (!q) return agents;
-    return agents.filter((a) => {
-      const hay = `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [agents, convSearch]);
-
   const agentNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of agents) m.set(a.id, a.name);
     return m;
   }, [agents]);
-
-  const replyCountByRoot = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const m of messages) {
-      const root = (m.thread_root_id || "").trim();
-      if (!root) continue;
-      if (m.role === "summary") continue;
-      map.set(root, (map.get(root) || 0) + 1);
-    }
-    return map;
-  }, [messages]);
-
-  /** Main timeline: top-level messages only (thread replies live in the panel). */
-  const mainTimelineMessages = useMemo(
-    () => messages.filter((m) => !(m.thread_root_id || "").trim()),
-    [messages],
-  );
-
-  const openThreadMessages = useMemo(() => {
-    const rootId = (openThreadRootId || "").trim();
-    if (!rootId) return [] as UiMessage[];
-    return messages.filter((m) => m.id === rootId || (m.thread_root_id || "") === rootId);
-  }, [messages, openThreadRootId]);
-
-  const messageById = useMemo(() => {
-    const map = new Map<string, UiMessage>();
-    for (const m of messages) map.set(m.id, m);
-    return map;
-  }, [messages]);
-
-  const quoteFor = (m: UiMessage) => {
-    const pid = (m.reply_to_id || "").trim();
-    if (!pid) return null;
-    const parent = messageById.get(pid);
-    if (!parent) return null;
-    const who =
-      parent.role === "assistant"
-        ? parent.agent_name || agentNameById.get(parent.agent_id || "") || parent.agent_id || "助手"
-        : "你";
-    return { who, text: parent.content || "" };
-  };
-
-  /** Group only: name above assistant bubbles; DM keeps current look. */
-  const speakerNameFor = (m: UiMessage): string | undefined => {
-    if (!conversation?.channel_id) return undefined;
-    if (m.role !== "assistant") return undefined;
-    const name = (m.agent_name || agentNameById.get(m.agent_id || "") || "").trim();
-    return name || undefined;
-  };
-
-  const beginReplyTo = (m: UiMessage) => {
-    const who =
-      m.role === "assistant"
-        ? m.agent_name || agentNameById.get(m.agent_id || "") || m.agent_id || "助手"
-        : "你";
-    // Plain one-line preview for the composer quote bar (CSS ellipsis does the rest).
-    const text = (m.content || "")
-      .replace(/```\w*/g, " ")
-      .replace(/^\s{0,3}(#{1,6}|>)\s*/gm, "")
-      .replace(/(\*\*|__|~~|`)/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 120);
-    const target = { id: m.id, who, text: text || "（无正文）" };
-    replyTargetRef.current = target;
-    setReplyTarget(target);
-    // PM: 「回复」 stays on the main timeline (Grok-style quote bar only).
-    // Do NOT open/select the sidebar thread panel from this action.
-    // Existing topic threads remain reachable via "N 条回复" / onOpenThread.
-  };
-
-  const jumpToMessage = (id: string) => {
-    const el = document.querySelector(`[data-msg-id="${CSS.escape(id)}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("msg-highlight");
-      window.setTimeout(() => el.classList.remove("msg-highlight"), 1200);
-    }
-  };
-
-
-  // Group member avatar: live agent state (reflects just-saved settings) first,
-  // then the channel's server-side member_profiles snapshot.
-  // Green dot: latest bot_online push wins, else server `online` snapshot; default hidden.
-  const isBotOnline = useCallback(
-    (agentId?: string | null, snapshot?: boolean): boolean => {
-      if (!agentId) return false;
-      if (agentId in onlineByAgent) return onlineByAgent[agentId];
-      const a = agents.find((x) => x.id === agentId);
-      return (a?.online ?? snapshot) === true;
-    },
-    [onlineByAgent, agents],
-  );
 
   const channelMemberProfiles = useCallback(
     (ch: Channel): {
@@ -1597,16 +1106,6 @@ export default function App() {
     [agents, agentNameById],
   );
 
-  const filteredChannels = useMemo(() => {
-    const q = convSearch.trim().toLowerCase();
-    if (!q) return channels;
-    return channels.filter((ch) => {
-      const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join(" ");
-      const hay = `${ch.name} ${memberNames}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [channels, convSearch, agentNameById]);
-
   const activeChannel = useMemo(() => {
     if (!conversation?.channel_id) return null;
     return channels.find((c) => c.id === conversation.channel_id) ?? null;
@@ -1627,28 +1126,6 @@ export default function App() {
       })
       .filter((a): a is Agent => Boolean(a));
   }, [activeChannel, agents]);
-
-  /** Resolve shape/color/name for RunStatus AgentAvatar by answering agent_id. */
-  const runFaceAgent = useMemo(() => {
-    const id = (runFaceAgentId || "").trim();
-    if (id) {
-      const fromGroup = (groupMentionMembers || []).find((a) => a.id === id);
-      if (fromGroup) return fromGroup;
-      const a = agents.find((x) => x.id === id);
-      if (a) return a;
-      const p = activeChannel?.member_profiles?.find((x) => x.agent_id === id);
-      if (p) {
-        return {
-          id,
-          name: p.name || agentNameById.get(id) || id,
-          avatar_shape: p.avatar_shape,
-          avatar_color: p.avatar_color,
-        } as Agent;
-      }
-      return { id, name: agentNameById.get(id) || id } as Agent;
-    }
-    return activeAgent;
-  }, [runFaceAgentId, groupMentionMembers, agents, activeChannel, agentNameById, activeAgent]);
 
   const composerMentionItems = useMemo((): ComposerMentionItem[] => {
     const items: ComposerMentionItem[] = [];
@@ -1772,14 +1249,13 @@ export default function App() {
     }
   };
 
-  const saveLastActiveSelection = useCallback((selection: LastActiveSelection) => {
-    if (!user?.id) return;
-    try {
-      localStorage.setItem(lastActiveStorageKey(user.id), JSON.stringify(selection));
-    } catch {
-      // Ignore unavailable localStorage.
-    }
-  }, [user?.id]);
+  const saveLastActiveSelection = useCallback(
+    (selection: LastActiveSelection) => {
+      if (!user?.id) return;
+      writeLastActiveSelection(user.id, selection);
+    },
+    [user?.id],
+  );
 
   const onLogout = () => {
     didRestoreLastActive.current = null;
@@ -1796,10 +1272,9 @@ export default function App() {
     setToken(null);
     setUser(null);
     conversationRef.current = null;
+    openThreadRootIdRef.current = null;
     setConversation(null);
-    setMessages([]);
-    setSending(false);
-    setTaskBusy(false);
+    resetChatSession();
     setTaskConvIds(new Set());
     setLlms([]);
     setStatus("");
@@ -1831,7 +1306,6 @@ export default function App() {
     const next = updater(prev);
     messagesByConvRef.current.set(convId, next);
     if (conversationRef.current?.id === convId) {
-      messagesLiveRef.current = next;
       setMessages(next);
     }
   };
@@ -2190,7 +1664,7 @@ export default function App() {
   const snapshotViewedMessages = () => {
     const id = conversationRef.current?.id;
     if (!id) return;
-    messagesByConvRef.current.set(id, messagesLiveRef.current);
+    messagesByConvRef.current.set(id, viewedMessages());
   };
 
   const sealStreamingMessagesForConv = (convId: string, _markStopped?: boolean) => {
@@ -2506,7 +1980,6 @@ export default function App() {
                   const mapped = mapApiMessages(msgs, nameLookup);
                   messagesByConvRef.current.set(conv.id, mapped);
                   if (conversationRef.current?.id === conv.id) {
-                    messagesLiveRef.current = mapped;
                     setMessages(mapped);
                   }
                 }
@@ -2540,7 +2013,7 @@ export default function App() {
 
 
   const applyConversationView = (conv: Conversation, apiMsgs?: Message[], nameLookup?: Map<string, string> | Agent[]) => {
-    stickToBottomRef.current = true;
+    chatScrollRef.stickToBottom = true;
     // Sync ref immediately so in-flight tokens for the previous conv cannot paint into this view.
     conversationRef.current = conv;
     setConversation(conv);
@@ -2557,7 +2030,6 @@ export default function App() {
     const activeRun = runsRef.current.get(conv.id);
     if (activeRun) {
       const buffered = messagesByConvRef.current.get(conv.id) ?? [];
-      messagesLiveRef.current = buffered;
       setMessages(buffered);
       setSending(true);
       setRunLabel(activeRun.runLabel || "正在思考…");
@@ -2572,12 +2044,10 @@ export default function App() {
     if (apiMsgs) {
       const mapped = mapApiMessages(apiMsgs, nameLookup ?? agents);
       messagesByConvRef.current.set(conv.id, mapped);
-      messagesLiveRef.current = mapped;
       setMessages(mapped);
     } else {
       // Never leave the previous conversation's bubbles on screen when apiMsgs was omitted.
       const cached = messagesByConvRef.current.get(conv.id) ?? [];
-      messagesLiveRef.current = cached;
       setMessages(cached);
     }
   };
@@ -2593,7 +2063,7 @@ export default function App() {
     setPendingFiles([]);
     setStatus("");
     // Drop previous conv immediately so stream patches cannot re-paint old bubbles under the new header.
-    stickToBottomRef.current = true;
+    chatScrollRef.stickToBottom = true;
     setChatSwitchPending(true);
     conversationRef.current = null;
     setConversation(null);
@@ -2604,10 +2074,8 @@ export default function App() {
     const cachedConvId = (agentEntry?.conversation_id || "").trim();
     const cachedMsgs = cachedConvId ? messagesByConvRef.current.get(cachedConvId) : undefined;
     if (cachedMsgs) {
-      messagesLiveRef.current = cachedMsgs;
       setMessages(cachedMsgs);
     } else {
-      messagesLiveRef.current = [];
       setMessages([]);
     }
     try {
@@ -2636,7 +2104,6 @@ export default function App() {
       if (selectGen !== selectGenRef.current) return;
       conversationRef.current = null;
       setConversation(null);
-      messagesLiveRef.current = [];
       setMessages([]);
       setChatSwitchPending(false);
       setSending(false);
@@ -2651,7 +2118,7 @@ export default function App() {
       setSending(false);
       setRunLabel("正在思考…");
       setMobileView("chat");
-      stickToBottomRef.current = true;
+      chatScrollRef.stickToBottom = true;
       setChatSwitchPending(true);
       // Drop previous conv immediately so old bubbles cannot linger under the new channel header.
       conversationRef.current = null;
@@ -2663,10 +2130,8 @@ export default function App() {
       const cachedConvId = (channelEntry?.conversation_id || "").trim();
       const cachedMsgs = cachedConvId ? messagesByConvRef.current.get(cachedConvId) : undefined;
       if (cachedMsgs) {
-        messagesLiveRef.current = cachedMsgs;
         setMessages(cachedMsgs);
       } else {
-        messagesLiveRef.current = [];
         setMessages([]);
       }
       setPendingFiles([]);
@@ -2718,8 +2183,8 @@ export default function App() {
         conversationId: viewedId,
       });
     } else if (
-      sending ||
-      taskBusy ||
+      chatState().sending ||
+      chatState().taskBusy ||
       (viewedId ? taskConvIdsRef.current.has(viewedId) : false)
     ) {
       // Durable still busy but client map empty (SSE drop / finally raced): force
@@ -2743,8 +2208,8 @@ export default function App() {
             agents.find((a) => a.id === currentAid) ||
             ({ id: currentAid, name: agentNameById.get(currentAid) || "助手" } as Agent);
           const sourceMsgs = sourceConvId
-            ? messagesByConvRef.current.get(sourceConvId) ?? messagesLiveRef.current
-            : messagesLiveRef.current;
+            ? messagesByConvRef.current.get(sourceConvId) ?? viewedMessages()
+            : viewedMessages();
           handoffContext = buildHandoffContext(sourceMsgs, sourceAgent.name || "助手");
 
           // 原 Bot 会话留下这次转交，下次回来仍看得见、模型也读得到。
@@ -2777,7 +2242,6 @@ export default function App() {
           const listed = await listMessagesWithStatus(targetConv.id);
           const mapped = mapApiMessages(listed.messages, agentNameById);
           messagesByConvRef.current.set(targetConv.id, mapped);
-          messagesLiveRef.current = mapped;
           setMessages(mapped);
           noteTask(
             targetConv.id,
@@ -2804,8 +2268,7 @@ export default function App() {
     setOnboardingDismissed(onboardingKey);
     setOnboardingDismissedState(true);
     // After send always jump to bottom (common chat pattern).
-    stickToBottomRef.current = true;
-    setShowScrollBottom(false);
+    pinChatScroll();
     const localAttachments: AttachmentMeta[] = filesToSend.map((f, i) => {
       const mime = f.file.type || "application/octet-stream";
       const meta: AttachmentMeta = {
@@ -2867,9 +2330,7 @@ export default function App() {
     if (optTargetId) {
       patchConvMessages(optTargetId, appendOptimistic);
     } else {
-      const next = appendOptimistic(messagesLiveRef.current);
-      messagesLiveRef.current = next;
-      setMessages(next);
+      setMessages(appendOptimistic(viewedMessages()));
     }
     const mentionAgentIds = (() => {
       if (!conversationRef.current?.channel_id || !groupMentionMembers?.length) {
@@ -2915,7 +2376,7 @@ export default function App() {
         : { kind: "agent", id: conv.agent_id };
       // Ensure buffer has optimistic messages under the real conv id (first send may create it).
       if (!messagesByConvRef.current.has(streamConvId) || conversationRef.current?.id === streamConvId) {
-        messagesByConvRef.current.set(streamConvId, messagesLiveRef.current);
+        messagesByConvRef.current.set(streamConvId, viewedMessages());
       }
       void refreshConversations();
       void refreshAgents().catch(() => {});
@@ -3295,6 +2756,7 @@ export default function App() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const { input, pendingFiles } = chatState();
     await sendUserText(input, [...pendingFiles]);
   };
 
@@ -3738,11 +3200,10 @@ export default function App() {
     toast.success(`已创建 Bot「${created.name}」`);
     try {
       const conv = await openPrimaryConversation(created.id);
-      stickToBottomRef.current = true;
+      chatScrollRef.stickToBottom = true;
       conversationRef.current = conv;
       setConversation(conv);
       messagesByConvRef.current.set(conv.id, []);
-      messagesLiveRef.current = [];
       setMessages([]);
       setOnboardingDismissedState(false);
       saveLastActiveSelection({ kind: "agent", id: created.id });
@@ -3848,54 +3309,75 @@ export default function App() {
     };
   }, [authed, user?.id, refreshAgents, refreshChannels, refreshLLMs]);
 
-  const openSettings = async (tab: SettingsTab = "llm") => {
-    setShowSettings(true);
-    // touch / layout-narrow: AccountMenu "设置" → hub; deep links (更改模型) skip hub.
-    setSettingsShellHub(Boolean(sheetForm && tab === "general"));
-    if (tab === "general") setSettingsGeneralPane("account");
-    setSettingsTab(tab);
-    setLLMMsg("");
-    setSkillsMsg("");
-    setMcpMsg("");
-    setMcpTestResult("");
-    try {
-      await refreshLLMs();
-    } catch (err) {
-      setLLMMsg(err instanceof Error ? err.message : String(err));
-    }
-    try {
-      await refreshAgents();
-    } catch {
-      /* sidebar still shows fallback agents */
-    }
-    try {
-      await refreshSkills();
-    } catch (err) {
-      setSkillsMsg(err instanceof Error ? err.message : String(err));
-    }
-    try {
-      await refreshCompact();
-    } catch {
-      /* optional */
-    }
-    try {
-      await refreshMCP();
-    } catch (err) {
-      setMcpMsg(err instanceof Error ? err.message : String(err));
-    }
-    setRoutinesMsg("");
-    try {
-      await refreshRoutines();
-    } catch (err) {
-      setRoutinesMsg(err instanceof Error ? err.message : String(err));
-    }
-    setSandboxMsg("");
-    try {
-      await refreshSandbox();
-    } catch (err) {
-      setSandboxMsg(err instanceof Error ? err.message : String(err));
-    }
-  };
+  const settingsRefreshApi = useMemo<SettingsRefreshApi>(
+    () => ({
+      refreshLLMs,
+      refreshAgents,
+      refreshSkills,
+      refreshCompact,
+      refreshMCP,
+      refreshRoutines,
+      refreshSandbox,
+      refreshMachines,
+      refreshSecrets,
+      refreshToolAllowlist,
+    }),
+    [
+      refreshLLMs,
+      refreshAgents,
+      refreshSkills,
+      refreshCompact,
+      refreshMCP,
+      refreshRoutines,
+      refreshSandbox,
+      refreshMachines,
+      refreshSecrets,
+    ],
+  );
+
+  const settingsRefreshErrors = useMemo(
+    () => ({
+      onLLMError: setLLMMsg,
+      onSkillsError: setSkillsMsg,
+      onMcpError: setMcpMsg,
+      onRoutinesError: setRoutinesMsg,
+      onSandboxError: setSandboxMsg,
+      onMachinesError: setMachinesMsg,
+    }),
+    [],
+  );
+
+  const prefetchSettingsTab = useCallback(
+    (tab: SettingsTab) => {
+      void refreshSettingsForTab(tab, settingsRefreshApi, settingsRefreshErrors);
+    },
+    [settingsRefreshApi, settingsRefreshErrors],
+  );
+
+  const selectSettingsTab = useCallback(
+    (tab: SettingsTab) => {
+      setSettingsTab(tab);
+      prefetchSettingsTab(tab);
+    },
+    [prefetchSettingsTab],
+  );
+
+  const openSettings = useCallback(
+    (tab: SettingsTab = "llm") => {
+      setShowSettings(true);
+      setSettingsShellHub(Boolean(sheetForm && tab === "general"));
+      if (tab === "general") setSettingsGeneralPane("account");
+      setSettingsTab(tab);
+      setLLMMsg("");
+      setSkillsMsg("");
+      setMcpMsg("");
+      setMcpTestResult("");
+      setRoutinesMsg("");
+      setSandboxMsg("");
+      prefetchSettingsTab(tab);
+    },
+    [sheetForm, prefetchSettingsTab],
+  );
 
   const startEdit = (c: LLMConnection) => {
     setEditingId(c.id);
@@ -4283,445 +3765,165 @@ export default function App() {
     }
   };
 
+  const onOpenSettingsGeneral = useCallback(() => void openSettings("general"), [openSettings]);
+  const onOpenSettingsLlm = useCallback(() => void openSettings("llm"), [openSettings]);
+
+  const onToggleCreateSheet = useCallback(() => {
+    if (showNewChat) {
+      setShowNewChat(false);
+      return;
+    }
+    setCreateSheetOpen((v) => !v);
+  }, [showNewChat]);
+
+  const onOpenNewChatList = useCallback(() => {
+    setNewChatInitialMode("list");
+    setShowNewChat((v) => !v);
+  }, []);
+
+  const onSelectAgentSync = useCallback((id: string) => void onSelectAgent(id), [onSelectAgent]);
+  const onOpenChannelChatSync = useCallback((id: string) => void openChannelChat(id), [openChannelChat]);
+  const onRemoveAgentSync = useCallback(
+    (a: Agent, e?: MouseEvent) => void removeAgent(a, e),
+    [removeAgent],
+  );
+  const onRemoveChannelSync = useCallback(
+    (ch: Channel, e?: MouseEvent) => void removeChannel(ch, e),
+    [removeChannel],
+  );
+  const onOpenBotSettingsFromSidebar = useCallback(
+    (id: string) => {
+      void onSelectAgent(id);
+      void openSettings("bot");
+    },
+    [onSelectAgent, openSettings],
+  );
+
+  const runSystemBackSync = useCallback(() => void runSystemBack(), [runSystemBack]);
+
+  const onOnboardingSelect = useCallback(
+    (opt: OnboardingOption) => {
+      void (async () => {
+        try {
+          if (agentId) {
+            await applyAgentOnboarding(agentId, { focus: opt.letter });
+            await refreshAgents();
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : String(err));
+        }
+        void sendUserText(opt.prompt);
+      })();
+    },
+    [agentId, refreshAgents, sendUserText],
+  );
+
+  const onOnboardingCustom = useCallback(
+    (customText: string) => {
+      void (async () => {
+        try {
+          if (agentId) {
+            await applyAgentOnboarding(agentId, {
+              focus: "E",
+              description: customText.slice(0, 400),
+              system_prompt: `用户自定义方向：${customText}`,
+            });
+            await refreshAgents();
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : String(err));
+        }
+        void sendUserText(customText);
+      })();
+    },
+    [agentId, refreshAgents, sendUserText],
+  );
+
+  const onOnboardingDismiss = useCallback(() => {
+    setOnboardingDismissed(onboardingKey);
+    setOnboardingDismissedState(true);
+  }, [onboardingKey]);
+
+  const onApprovalDeny = useCallback(() => {
+    const gate = chatState().approvalGate;
+    if (!gate) return;
+    void approveConversationRun(gate.conversationId, gate.requestId, false, "user_rejected", {
+      decision: "deny",
+    })
+      .then(() => setApprovalGate(null))
+      .catch((err) => setStatus(`拒绝失败：${err instanceof Error ? err.message : String(err)}`));
+  }, []);
+
+  const onApprovalAllow = useCallback(() => {
+    const gate = chatState().approvalGate;
+    if (!gate) return;
+    void approveConversationRun(gate.conversationId, gate.requestId, true, "", { decision: "allow_once" })
+      .then(() => {
+        setApprovalGate(null);
+        setRunLabel("正在继续…");
+      })
+      .catch((err) => setStatus(`批准失败：${err instanceof Error ? err.message : String(err)}`));
+  }, []);
+
   if (!authed) {
     return (
-      <div className="auth-page">
-        <form className="auth-card" onSubmit={onAuth}>
-          <div className="brand auth-brand">
-            <div className="logo">◈</div>
-            <div>
-              <div className="brand-title">open-bot</div>
-              <div className="brand-sub">登录后使用自定义 LLM</div>
-            </div>
-          </div>
-          <div className="auth-tabs">
-            <button
-              type="button"
-              className={authMode === "login" ? "active" : ""}
-              onClick={() => setAuthMode("login")}
-            >
-              登录
-            </button>
-            <button
-              type="button"
-              className={authMode === "register" ? "active" : ""}
-              onClick={() => setAuthMode("register")}
-            >
-              注册
-            </button>
-          </div>
-          <label>
-            用户名
-            <input
-              value={authUser}
-              onChange={(e) => setAuthUser(e.target.value)}
-              autoComplete="username"
-              required
-              minLength={2}
-            />
-          </label>
-          <label>
-            密码
-            <input
-              type="password"
-              value={authPass}
-              onChange={(e) => setAuthPass(e.target.value)}
-              autoComplete={authMode === "login" ? "current-password" : "new-password"}
-              required
-              minLength={4}
-            />
-          </label>
-          {authError ? <div className="auth-error">{authError}</div> : null}
-          <button type="submit" className="primary" disabled={authBusy}>
-            {authBusy ? "请稍候…" : authMode === "login" ? "登录" : "注册"}
-          </button>
-          {oidcEnabled && authMode === "login" ? (
-            <>
-              <div className="auth-divider muted small">或</div>
-              <button type="button" className="settings-btn" disabled={authBusy} onClick={() => void onCasdoorLogin()}>
-                用 Casdoor 登录
-              </button>
-            </>
-          ) : null}
-          <ApiServerField variant="login" />
-        </form>
-      </div>
+      <AuthPage
+        authMode={authMode}
+        authUser={authUser}
+        authPass={authPass}
+        authError={authError}
+        authBusy={authBusy}
+        oidcEnabled={oidcEnabled}
+        onAuthModeChange={setAuthMode}
+        onAuthUserChange={setAuthUser}
+        onAuthPassChange={setAuthPass}
+        onSubmit={onAuth}
+        onCasdoorLogin={() => void onCasdoorLogin()}
+      />
     );
   }
 
   return (
     <div className={`app${isNarrowLayout ? ` mobile-${mobileView}` : ""}${sheetForm ? " shell-narrow" : ""}`}>
-      <aside className="sidebar">
-        {sheetForm ? (
-          <div className="sidebar-shell-head">
-            <div className="sidebar-shell-topbar">
-              <button
-                type="button"
-                className="sidebar-shell-user"
-                title={user?.username || "账户"}
-                aria-label="打开设置"
-                onClick={() => void openSettings("general")}
-              >
-                <span className="sidebar-shell-user-avatar" aria-hidden>
-                  {accountInitials(user?.username || "")}
-                </span>
-              </button>
-              <div className="sidebar-shell-top-actions">
-                <label className="sidebar-shell-search-btn" title="搜索">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                  <input
-                    value={convSearch}
-                    onChange={(e) => setConvSearch(e.target.value)}
-                    placeholder="搜索"
-                    aria-label="搜索助手或群聊"
-                  />
-                </label>
-                <button
-                  ref={newChatBtnRef}
-                  type="button"
-                  className={`icon-btn sidebar-shell-plus${createSheetOpen || showNewChat ? " active-plus" : ""}`}
-                  title="新建"
-                  aria-haspopup="dialog"
-                  aria-expanded={createSheetOpen || showNewChat}
-                  onClick={() => {
-                    if (showNewChat) {
-                      setShowNewChat(false);
-                      return;
-                    }
-                    setCreateSheetOpen((v) => !v);
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div className="sidebar-identity">
-              {(() => {
-                const focus =
-                  activeAgent ||
-                  agents.find((a) => a.id === agentId) ||
-                  agents[0] ||
-                  null;
-                return (
-                  <>
-                    <div className="sidebar-identity-avatar">
-                      {focus ? (
-                        <AgentAvatar
-                          id={focus.id}
-                          name={focus.name}
-                          size={80}
-                          shape={focus.avatar_shape}
-                          color={focus.avatar_color}
-                          status={presenceByAgent[focus.id] || "idle"}
-                          searchingHint={
-                            Boolean(
-                              (runFaceAgentId ? focus.id === runFaceAgentId : activeAgent && focus.id === activeAgent.id) &&
-                                searchingHintNow,
-                            )
-                          }
-                          online={isBotOnline(focus.id)}
-                          onClick={() => openAvatarSettings(focus)}
-                        />
-                      ) : (
-                        <span className="sidebar-identity-fallback" aria-hidden>
-                          {accountInitials(user?.username || "open bot")}
-                        </span>
-                      )}
-                    </div>
-                    <div className="sidebar-identity-name">
-                      {focus?.name || user?.username || "open bot"}
-                    </div>
-                    <button type="button" className="sidebar-identity-workspace" aria-label="工作区">
-                      open bot
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        ) : (
-          <div className="sidebar-top">
-            <label className="sidebar-search">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" />
-              </svg>
-              <input
-                value={convSearch}
-                onChange={(e) => setConvSearch(e.target.value)}
-                placeholder="搜索助手 / 群聊"
-                aria-label="搜索助手或群聊"
-              />
-            </label>
-            <button
-              ref={newChatBtnRef}
-              type="button"
-              className={`icon-btn${showNewChat ? " active-plus" : ""}`}
-              title="新建聊天"
-              aria-haspopup="dialog"
-              aria-expanded={showNewChat}
-              onClick={() => {
-                setNewChatInitialMode("list");
-                setShowNewChat((v) => !v);
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
-          </div>
-        )}
-
-        {sheetForm ? (
-          <button
-            type="button"
-            className="section-fold-head"
-            aria-expanded={!assistantsCollapsed}
-            onClick={toggleAssistantsCollapsed}
-          >
-            <span className="section-fold-title">助手</span>
-            <span className="section-fold-meta">
-              {assistantsCollapsed ? (
-                <span className="section-fold-count">{filteredAgents.length}</span>
-              ) : null}
-              <span className="section-fold-chevron" aria-hidden>
-                {assistantsCollapsed ? "▸" : "▾"}
-              </span>
-            </span>
-          </button>
-        ) : (
-          <div className="section-label">助手</div>
-        )}
-        {!(sheetForm && assistantsCollapsed) ? (
-        <nav className="agent-list">
-          {agents.length === 0 ? (
-            <div className="muted small" style={{ padding: "8px 10px", lineHeight: 1.5 }}>
-              暂无助手。点击右上角「+」创建第一个助手。
-            </div>
-          ) : filteredAgents.length === 0 ? (
-            <div className="muted small" style={{ padding: "4px 10px" }}>
-              无匹配助手
-            </div>
-          ) : (
-            filteredAgents.map((a) => {
-              const active =
-                !conversation?.channel_id &&
-                (conversation?.agent_id === a.id || (!conversation && a.id === agentId));
-              const snippet = (a.last_message || a.description || "").trim();
-              return (
-                <div
-                  key={a.id}
-                  className={`agent-item conv-item ${active ? "active" : ""}`}
-                  onClick={() => onSelectAgent(a.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectAgent(a.id);
-                    }
-                  }}
-                  onPointerDown={(e) => beginConvLongPress(e, { kind: "agent", agent: a })}
-                  onPointerMove={moveConvLongPress}
-                  onPointerUp={endConvLongPress}
-                  onPointerCancel={endConvLongPress}
-                  onContextMenu={(e) => {
-                    if (touchUi) e.preventDefault();
-                  }}
-                >
-                  <AgentAvatar
-                    id={a.id}
-                    name={a.name}
-                    size={sheetForm ? 46 : 32}
-                    shape={a.avatar_shape}
-                    color={a.avatar_color}
-                    status={presenceByAgent[a.id] || "idle"}
-                    searchingHint={
-                      Boolean(
-                        (runFaceAgentId ? a.id === runFaceAgentId : activeAgent && a.id === activeAgent.id) &&
-                          searchingHintNow,
-                      )
-                    }
-                    online={isBotOnline(a.id)}
-                    onClick={() => openAvatarSettings(a)}
-                  />
-                  <div className="agent-item-body">
-                    <div className="agent-name">
-                      {a.name}
-                      {busySelectionKeys.has(`agent:${a.id}`) ? (
-                        <span className="run-busy-dot" title="回复中" aria-label="回复中" />
-                      ) : null}
-                    </div>
-                    <div className="agent-desc">{snippet || "尚开始对话"}</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="conv-settings"
-                    title="Bot 设置"
-                    aria-label="Bot 设置"
-                    disabled={agentBusy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void onSelectAgent(a.id);
-                      void openSettings("bot");
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="conv-clone"
-                    title="复制助手"
-                    aria-label="复制助手"
-                    disabled={agentBusy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCloneTarget(a);
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                      <rect x="9" y="9" width="13" height="13" rx="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="conv-del"
-                    title="删除助手"
-                    disabled={agentBusy}
-                    onClick={(e) => void removeAgent(a, e)}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </nav>
-        ) : null}
-
-        {sheetForm && channels.length === 0 ? null : (
-        <>
-        {sheetForm ? (
-          <button
-            type="button"
-            className="section-fold-head"
-            aria-expanded={!groupsCollapsed}
-            onClick={toggleGroupsCollapsed}
-          >
-            <span className="section-fold-title">群聊</span>
-            <span className="section-fold-meta">
-              {groupsCollapsed ? (
-                <span className="section-fold-count">{filteredChannels.length}</span>
-              ) : null}
-              <span className="section-fold-chevron" aria-hidden>
-                {groupsCollapsed ? "▸" : "▾"}
-              </span>
-            </span>
-          </button>
-        ) : (
-          <div className="section-label">群聊</div>
-        )}
-        {!(sheetForm && groupsCollapsed) ? (
-        <div className="conv-list channel-list">
-          {filteredChannels.length === 0 ? (
-            <div className="muted small" style={{ padding: "4px 10px" }}>
-              {channels.length === 0 ? "暂无群聊，可从「+」创建" : "无匹配群聊"}
-            </div>
-          ) : (
-            filteredChannels.map((ch) => {
-              const memberNames = (ch.members || [])
-                .map((id) => agentNameById.get(id) || id)
-                .join("、");
-              return (
-                <div
-                  key={ch.id}
-                  className={`agent-item conv-item channel-item ${conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id ? "active" : ""}`}
-                  title={memberNames}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => void openChannelChat(ch.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      (e.currentTarget as HTMLElement).click();
-                    }
-                  }}
-                  onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
-                  onPointerMove={moveConvLongPress}
-                  onPointerUp={endConvLongPress}
-                  onPointerCancel={endConvLongPress}
-                  onContextMenu={(e) => {
-                    if (touchUi) e.preventDefault();
-                  }}
-                >
-                  <div className="channel-member-stack" aria-hidden>
-                    {channelMemberProfiles(ch)
-                      .slice(0, 3)
-                      .map((p) => (
-                        <AgentAvatar
-                          key={p.agent_id}
-                          id={p.agent_id}
-                          name={p.name}
-                          size={22}
-                          shape={p.avatar_shape}
-                          color={p.avatar_color}
-                          online={isBotOnline(p.agent_id, p.online)}
-                        />
-                      ))}
-                  </div>
-                  <div className="conv-item-main">
-                    <div className="agent-name">
-                      {ch.name}
-                      {busySelectionKeys.has(`channel:${ch.id}`) ? (
-                        <span className="run-busy-dot" title="回复中" aria-label="回复中" />
-                      ) : null}
-                    </div>
-                    <div className="agent-desc">
-                      {memberNames || "无成员"} · 点击打开群聊
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="conv-del"
-                    title="删除群聊"
-                    disabled={channelBusy}
-                    onClick={(e) => void removeChannel(ch, e)}
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-        ) : null}
-        </>
-        )}
-
-        {!sheetForm ? (
-          <div className="sidebar-foot">
-            <AccountMenu
-              username={user?.username || "账户"}
-              llm={defaultLLM}
-              onOpenSettings={() => void openSettings("general")}
-              onChangeModel={() => void openSettings("llm")}
-              onLogout={onLogout}
-            />
-          </div>
-        ) : null}
-      </aside>
+      <AppSidebar
+        sheetForm={sheetForm}
+        user={user}
+        hostActivity={hostActivity}
+        newChatBtnRef={newChatBtnRef}
+        createSheetOpen={createSheetOpen}
+        showNewChat={showNewChat}
+        onToggleCreateSheet={onToggleCreateSheet}
+        onOpenNewChatList={onOpenNewChatList}
+        onOpenSettingsGeneral={onOpenSettingsGeneral}
+        onOpenSettingsLlm={onOpenSettingsLlm}
+        activeAgent={activeAgent}
+        agents={agents}
+        agentId={agentId}
+        conversation={conversation}
+        onOpenAvatarSettings={openAvatarSettings}
+        assistantsCollapsed={assistantsCollapsed}
+        groupsCollapsed={groupsCollapsed}
+        onToggleAssistantsCollapsed={toggleAssistantsCollapsed}
+        onToggleGroupsCollapsed={toggleGroupsCollapsed}
+        channels={channels}
+        busySelectionKeys={busySelectionKeys}
+        onSelectAgent={onSelectAgentSync}
+        agentBusy={agentBusy}
+        channelBusy={channelBusy}
+        touchUi={touchUi}
+        onBeginConvLongPress={beginConvLongPress}
+        onMoveConvLongPress={moveConvLongPress}
+        onEndConvLongPress={endConvLongPress}
+        onOpenBotSettings={onOpenBotSettingsFromSidebar}
+        onCloneAgent={setCloneTarget}
+        onRemoveAgent={onRemoveAgentSync}
+        channelMemberProfiles={channelMemberProfiles}
+        agentNameById={agentNameById}
+        onOpenChannelChat={onOpenChannelChatSync}
+        onRemoveChannel={onRemoveChannelSync}
+        defaultLLM={defaultLLM}
+        onLogout={onLogout}
+      />
 
       <CreateActionSheet
         open={createSheetOpen}
@@ -4799,318 +4001,37 @@ export default function App() {
         }}
       />
 
-      <main className="main">
-        {hostActivity ? <div className="status host-activity">{hostActivity}</div> : null}
-        <header className="topbar">
-          <button
-            type="button"
-            className="topbar-back"
-            aria-label="返回"
-            onClick={() => {
-              void runSystemBack();
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            <span className="topbar-back-label">返回</span>
-          </button>
-          <div className="agent-pill">
-            {activeChannel ? (
-              <button
-                type="button"
-                className="agent-pill-channel"
-                aria-label={`群设置 ${activeChannel.name}`}
-                title="群设置"
-                onClick={() => setGroupMembersChannel(activeChannel)}
-              >
-                <span className="channel-member-stack" aria-hidden>
-                  {channelMemberProfiles(activeChannel).map((p) => (
-                    <AgentAvatar
-                      key={p.agent_id}
-                      id={p.agent_id}
-                      name={p.name}
-                      size={24}
-                      shape={p.avatar_shape}
-                      color={p.avatar_color}
-                      status={presenceByAgent[p.agent_id] || "idle"}
-                      searchingHint={searchingHintNow && normalizePresenceStatus(presenceByAgent[p.agent_id]) === "working"}
-                      online={isBotOnline(p.agent_id, p.online)}
-                    />
-                  ))}
-                </span>
-                <span className="agent-pill-name">{activeChannel.name}</span>
-                <span className="agent-pill-members muted small" style={{ marginLeft: 8 }}>
-                  {(activeChannel.members || [])
-                    .map((id) => agentNameById.get(id) || id)
-                    .join("、")}
-                </span>
-              </button>
-            ) : !selectionHydrated ? (
-              <span className="agent-pill-name muted">加载中…</span>
-            ) : (
-              <>
-                <AgentAvatar
-                  id={activeAgent?.id}
-                  name={activeAgent?.name ?? "助手"}
-                  size={28}
-                  shape={activeAgent?.avatar_shape}
-                  color={activeAgent?.avatar_color}
-                  status={(activeAgent && presenceByAgent[activeAgent.id]) || "idle"}
-                  searchingHint={
-                    Boolean(
-                      searchingHintNow &&
-                        (!runFaceAgentId || runFaceAgentId === activeAgent?.id),
-                    )
-                  }
-                  online={isBotOnline(activeAgent?.id)}
-                  onClick={activeAgent ? () => openAvatarSettings(activeAgent) : undefined}
-                />
-                <span className="agent-pill-name">{activeAgent?.name ?? "助手"}</span>
-                {activeAgent ? (
-                  <button
-                    type="button"
-                    className="ghost train-entry-btn"
-                    title="训练：确认 / 停用从反馈生成的经验"
-                    onClick={() => setTrainAgent(activeAgent)}
-                  >
-                    训练
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </header>
-
-        <div
-          className="messages"
-          key={conversation?.id ?? agentId ?? "none"}
-          ref={messagesRef}
-          onScroll={onMessagesScroll}
-        >
-          {!selectionHydrated || (chatSwitchPending && messages.length === 0) ? (
-            <div className="empty">
-              <p className="muted">加载中…</p>
-            </div>
-          ) : showOnboarding ? (
-            <>
-              {ONBOARDING_WELCOME.map((text, i) => (
-                <ChatMessage
-                  key={`onboard-welcome-${i}`}
-                  message={{ id: `onboard-welcome-${i}`, role: "assistant", content: text }}
-                />
-              ))}
-              <BotOnboardingCard
-                disabled={chatProcessing}
-                onSelectOption={(opt: OnboardingOption) => {
-                  void (async () => {
-                    try {
-                      if (agentId) {
-                        await applyAgentOnboarding(agentId, { focus: opt.letter });
-                        await refreshAgents();
-                      }
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : String(err));
-                    }
-                    void sendUserText(opt.prompt);
-                  })();
-                }}
-                onCustomSubmit={(customText: string) => {
-                  void (async () => {
-                    try {
-                      if (agentId) {
-                        await applyAgentOnboarding(agentId, {
-                          focus: "E",
-                          description: customText.slice(0, 400),
-                          system_prompt: `用户自定义方向：${customText}`,
-                        });
-                        await refreshAgents();
-                      }
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : String(err));
-                    }
-                    void sendUserText(customText);
-                  })();
-                }}
-                onDismiss={() => {
-                  setOnboardingDismissed(onboardingKey);
-                  setOnboardingDismissedState(true);
-                }}
-              />
-            </>
-          ) : messages.length === 0 ? (
-            <div className="empty">
-              <h2>有什么可以帮你的？</h2>
-              <p>{agents.length === 0 ? "暂无助手，点击左上角「+」创建一个。" : "从左侧选择一位助手进入连续对话；群聊里可用 @ 点名助手。回复经 Go API 流式代理到 Python runtime。"}</p>
-            </div>
-          ) : null}
-          {mainTimelineMessages.map((m) => (
-            <ChatMessage
-              key={m.id}
-              message={m}
-              agentId={m.agent_id || agentId}
-              speakerName={speakerNameFor(m)}
-              onHostDecide={m.role === "host_confirm" ? (d) => settleHostConfirm(m, d) : undefined}
-              alwaysAllowEnabled={hostExecPolicy !== "ask"}
-              replyQuote={quoteFor(m)}
-              replyCount={replyCountByRoot.get(m.id) || 0}
-              onReply={beginReplyTo}
-              onOpenThread={(rootId) => setOpenThreadRootId(rootId)}
-              onJumpToParent={(pid) => {
-                // Only open the thread panel when the parent already lives in a topic thread.
-                // Mainline quote jumps just scroll + highlight (design: 跳到原消息并高亮).
-                const parent = messageById.get(pid);
-                if (parent?.thread_root_id) {
-                  setOpenThreadRootId(parent.thread_root_id);
-                  window.setTimeout(() => jumpToMessage(pid), 50);
-                } else {
-                  jumpToMessage(pid);
-                }
-              }}
-              onToggleReaction={onToggleReaction}
-              onFeedback={(msg) => openFeedbackForMessage(msg, "feedback_menu")}
-              onNegativeReaction={(msg) => openFeedbackForMessage(msg, "reaction_followup")}
-            />
-          ))}
-          {chatProcessing ? (
-            !messages.some((m) => m.role === "assistant" && m.streaming && m.content) ? (
-              <RunStatus
-                label={taskBusy && !sending && !viewingRunActive ? runLabel || "正在做…" : runLabel || "正在思考…"}
-                agentId={runFaceAgent?.id}
-                agentName={runFaceAgent?.name ?? "助手"}
-                shape={runFaceAgent?.avatar_shape}
-                avatarColor={runFaceAgent?.avatar_color}
-                color={resolveAvatarColor(runFaceAgent?.id || runFaceAgent?.name || "open-bot", runFaceAgent?.avatar_color)}
-                status={runStatusFace}
-                searchingHint={searchingHintNow}
-              />
-            ) : null
-          ) : null}
-        </div>
-
-        {openThreadRootId ? (
-          <div className="thread-panel" role="dialog" aria-label="对话线程">
-            <div className="thread-panel-head">
-              <div className="thread-panel-title">线程</div>
-              <button
-                type="button"
-                className="thread-panel-close"
-                onClick={() => setOpenThreadRootId(null)}
-              >
-                关闭
-              </button>
-            </div>
-            <div className="thread-panel-body">
-              {openThreadMessages.map((m) => (
-                <ChatMessage
-                  key={`thread-${m.id}`}
-                  message={m}
-                  agentId={m.agent_id || agentId}
-                  speakerName={speakerNameFor(m)}
-                  dense
-                  replyQuote={quoteFor(m)}
-                  onReply={beginReplyTo}
-                  onJumpToParent={(pid) => jumpToMessage(pid)}
-                  onHostDecide={m.role === "host_confirm" ? (d) => settleHostConfirm(m, d) : undefined}
-                  alwaysAllowEnabled={hostExecPolicy !== "ask"}
-                  onToggleReaction={onToggleReaction}
-                  onFeedback={(msg) => openFeedbackForMessage(msg, "feedback_menu")}
-                  onNegativeReaction={(msg) => openFeedbackForMessage(msg, "reaction_followup")}
-                />
-              ))}
-              {openThreadMessages.length === 0 ? (
-                <p className="muted small" style={{ padding: "12px 16px" }}>
-                  暂无回复
-                </p>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="composer-wrap">
-          {approvalGate &&
-          conversation?.id === approvalGate.conversationId ? (
-            <div className="approval-gate-card" role="status">
-              <span className="approval-gate-text">工具需要你确认后才能继续</span>
-              <div className="approval-gate-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => {
-                    const gate = approvalGate;
-                    void approveConversationRun(
-                      gate.conversationId,
-                      gate.requestId,
-                      false,
-                      "user_rejected",
-                      { decision: "deny" },
-                    )
-                      .then(() => setApprovalGate(null))
-                      .catch((err) =>
-                        setStatus(`拒绝失败：${err instanceof Error ? err.message : String(err)}`),
-                      );
-                  }}
-                >
-                  拒绝
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => {
-                    const gate = approvalGate;
-                    void approveConversationRun(
-                      gate.conversationId,
-                      gate.requestId,
-                      true,
-                      "",
-                      { decision: "allow_once" },
-                    )
-                      .then(() => {
-                        setApprovalGate(null);
-                        setRunLabel("正在继续…");
-                      })
-                      .catch((err) =>
-                        setStatus(`批准失败：${err instanceof Error ? err.message : String(err)}`),
-                      );
-                  }}
-                >
-                  批准
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {showScrollBottom ? (
-            <button
-              type="button"
-              className="scroll-bottom-btn"
-              title="滚到底部"
-              onClick={() => scrollToBottom(true)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-          ) : null}
-          <Composer
-            value={input}
-            onChange={setInput}
-            onSubmit={onSubmit}
-            onStop={() => stopCurrentRun({ markStopped: true })}
-            sending={chatProcessing}
-            agentName={activeChannel ? activeChannel.name : activeAgent?.name}
-            files={pendingFiles}
-            onFilesChange={setPendingFiles}
-            mentionItems={composerMentionItems}
-            skillOptions={composerSkills}
-            groupChat={Boolean(activeChannel)}
-            replyTo={replyTarget}
-            onClearReply={() => {
-              replyTargetRef.current = null;
-              setReplyTarget(null);
-            }}
-          />
-        </div>
-      </main>
+      <ChatMain
+        hostActivity={hostActivity}
+        onSystemBack={runSystemBackSync}
+        activeChannel={activeChannel}
+        selectionHydrated={selectionHydrated}
+        activeAgent={activeAgent}
+        agentId={agentId}
+        conversation={conversation}
+        channelMemberProfiles={channelMemberProfiles}
+        agentNameById={agentNameById}
+        onOpenGroupSettings={setGroupMembersChannel}
+        onOpenAvatarSettings={openAvatarSettings}
+        onOpenTrain={setTrainAgent}
+        onboardingDismissed={onboardingDismissed}
+        agents={agents}
+        onOnboardingSelect={onOnboardingSelect}
+        onOnboardingCustom={onOnboardingCustom}
+        onOnboardingDismiss={onOnboardingDismiss}
+        settleHostConfirm={settleHostConfirm}
+        hostExecPolicy={hostExecPolicy}
+        setOpenThreadRootId={setOpenThreadRootId}
+        onToggleReaction={onToggleReaction}
+        openFeedbackForMessage={openFeedbackForMessage}
+        viewingRunActive={viewingRunActive}
+        onApprovalDeny={onApprovalDeny}
+        onApprovalAllow={onApprovalAllow}
+        onSubmit={onSubmit}
+        stopCurrentRun={stopCurrentRun}
+        composerMentionItems={composerMentionItems}
+        composerSkills={composerSkills}
+      />
 
       {showSettings && (
         <div
@@ -5162,7 +4083,6 @@ export default function App() {
                     setSettingsTab("general");
                   } else if (tab === "review") {
                     setSettingsTab("review");
-                    void refreshToolAllowlist();
                   } else if (tab === "general") {
                     setSettingsGeneralPane("review");
                     setSettingsTab("general");
@@ -5170,26 +4090,12 @@ export default function App() {
                     setSettingsTab(tab);
                   }
                   setSettingsShellHub(false);
-                  if (tab === "mcp") {
-                    void refreshMCP().catch((err) =>
-                      setMcpMsg(err instanceof Error ? err.message : String(err)),
-                    );
-                  } else if (tab === "compact") {
-                    void refreshCompact();
-                  } else if (tab === "routines") {
-                    void refreshRoutines().catch((err) =>
-                      setRoutinesMsg(err instanceof Error ? err.message : String(err)),
-                    );
-                  } else if (tab === "sandbox") {
-                    void refreshSandbox().catch((err) =>
-                      setSandboxMsg(err instanceof Error ? err.message : String(err)),
-                    );
-                  } else if (tab === "machines") {
-                    void refreshMachines().catch((err) =>
-                      setMachinesMsg(err instanceof Error ? err.message : String(err)),
-                    );
-                  } else if (tab === "secrets") {
-                    void refreshSecrets();
+                  if (tab === "account" || tab === "server") {
+                    prefetchSettingsTab("general");
+                  } else if (tab !== "general") {
+                    prefetchSettingsTab(tab);
+                  } else {
+                    prefetchSettingsTab("general");
                   }
                 }}
               />
@@ -5251,32 +4157,7 @@ export default function App() {
                   key={id}
                   type="button"
                   className={settingsTab === id ? "active" : ""}
-                  onClick={() => {
-                    setSettingsTab(id);
-                    if (id === "mcp") {
-                      void refreshMCP().catch((err) =>
-                        setMcpMsg(err instanceof Error ? err.message : String(err)),
-                      );
-                    } else if (id === "compact") {
-                      void refreshCompact();
-                    } else if (id === "routines") {
-                      void refreshRoutines().catch((err) =>
-                        setRoutinesMsg(err instanceof Error ? err.message : String(err)),
-                      );
-                    } else if (id === "sandbox") {
-                      void refreshSandbox().catch((err) =>
-                        setSandboxMsg(err instanceof Error ? err.message : String(err)),
-                      );
-                    } else if (id === "machines") {
-                      void refreshMachines().catch((err) =>
-                        setMachinesMsg(err instanceof Error ? err.message : String(err)),
-                      );
-                    } else if (id === "secrets") {
-                      void refreshSecrets();
-                    } else if (id === "review") {
-                      void refreshToolAllowlist();
-                    }
-                  }}
+                  onClick={() => selectSettingsTab(id)}
                 >
                   <SettingsGlyph id={id} />
                   <span>{label}</span>

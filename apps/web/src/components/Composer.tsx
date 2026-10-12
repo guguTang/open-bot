@@ -1,3 +1,4 @@
+import { CornerUpLeft, Square, X } from "lucide-react";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 
@@ -301,21 +302,7 @@ export function Composer({
       {replyTo ? (
         <>
           <div className="composer-quote-bar" title={replyTo.text}>
-            <svg
-              className="composer-quote-icon"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <polyline points="9 14 4 9 9 4" />
-              <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-            </svg>
+            <CornerUpLeft className="composer-quote-icon" size={16} strokeWidth={2} aria-hidden />
             <span className="composer-quote-text">{replyTo.text}</span>
             <button
               type="button"
@@ -324,10 +311,7 @@ export function Composer({
               aria-label="取消回复"
               onClick={onClearReply}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-                <line x1="6" y1="6" x2="18" y2="18" />
-                <line x1="18" y1="6" x2="6" y2="18" />
-              </svg>
+              <X size={14} strokeWidth={2.2} aria-hidden />
             </button>
           </div>
           <div className="composer-quote-divider" aria-hidden />
@@ -444,7 +428,14 @@ export function Composer({
               onStop?.();
             }}
           >
-            <span className="composer-stop-icon" aria-hidden />
+            <Square
+              className="composer-stop-icon"
+              size={12}
+              fill="currentColor"
+              stroke="currentColor"
+              strokeWidth={0}
+              aria-hidden
+            />
           </button>
         ) : (
           <button type="submit" className="composer-send" disabled={!canSend} title="发送">
