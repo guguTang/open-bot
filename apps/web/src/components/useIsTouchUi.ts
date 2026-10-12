@@ -34,6 +34,28 @@ function syncTouchUiClass(on: boolean) {
  * `pointer: coarse` OR width ≤767. Wide touch tablets get the sheet.
  * Also toggles `html.touch-ui` so CSS matches the same rule.
  */
+export function useIsNarrowLayout(): boolean {
+  const [narrow, setNarrow] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia(LAYOUT_NARROW_MQ).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(LAYOUT_NARROW_MQ);
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", sync);
+      return () => mq.removeEventListener("change", sync);
+    }
+    mq.addListener(sync);
+    return () => mq.removeListener(sync);
+  }, []);
+
+  return narrow;
+}
+
 export function useIsTouchUi(): boolean {
   const [touch, setTouch] = useState(readTouchUi);
 

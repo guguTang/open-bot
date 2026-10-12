@@ -1,0 +1,10 @@
+export { CompactSettingsTab, type CompactSettingsTabProps } from "./CompactSettingsTab";
+export { GeneralSettingsTab, type GeneralSettingsTabProps } from "./GeneralSettingsTab";
+export { LlmSettingsTab, type LlmSettingsTabProps } from "./LlmSettingsTab";
+export { MachinesSettingsTab, type MachinesSettingsTabProps } from "./MachinesSettingsTab";
+export { McpSettingsTab, type McpSettingsTabProps } from "./McpSettingsTab";
+export { ReviewSettingsTab, type ReviewSettingsTabProps } from "./ReviewSettingsTab";
+export { RoutinesSettingsTab, type RoutinesSettingsTabProps } from "./RoutinesSettingsTab";
+export { SandboxSettingsTab, type SandboxSettingsTabProps } from "./SandboxSettingsTab";
+export { SecretsSettingsTab, type SecretsSettingsTabProps } from "./SecretsSettingsTab";
+export { SkillsSettingsTab, type SkillsSettingsTabProps } from "./SkillsSettingsTab";

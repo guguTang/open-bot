@@ -1,12 +1,17 @@
 import { ChevronDown, Copy, Plus, Search, Settings } from "lucide-react";
-import { memo, MouseEvent, PointerEvent as ReactPointerEvent, RefObject, useDeferredValue, useMemo } from "react";
-import type { Agent, Channel, Conversation, LLMConnection, User } from "../../api";
+import { memo, useDeferredValue, useMemo } from "react";
+import type { Agent, Channel } from "../../api";
 import { toolNameLooksLikeSearch } from "../avatarColor";
 import { AccountMenu } from "../AccountMenu";
 import { AgentAvatar } from "../AgentAvatar";
+import { useIsTouchUi, useSheetFormUi } from "../useIsTouchUi";
+import { useConvLongPressHandlers } from "../../hooks/useConvLongPress";
 import { useChatStore } from "../../stores/chat";
 import { botIsOnline, usePresenceStore } from "../../stores/presence";
+import { sessionActions } from "../../stores/sessionActions";
 import { useShellStore } from "../../stores/shell";
+import { useWorkspaceStore } from "../../stores/workspace";
+import { agentNameMap, channelMemberProfiles, resolveActiveAgent } from "../../lib/app/workspaceDerived";
 import { accountInitials } from "./accountInitials";
 
 export type ConvLongPressTarget =
@@ -21,93 +26,35 @@ export type ChannelMemberProfile = {
   online?: boolean;
 };
 
-export type AppSidebarProps = {
-  sheetForm: boolean;
-  user: User | null;
-  hostActivity: string;
-  newChatBtnRef: RefObject<HTMLButtonElement | null>;
-  createSheetOpen: boolean;
-  showNewChat: boolean;
-  onToggleCreateSheet: () => void;
-  onOpenNewChatList: () => void;
-  onOpenSettingsGeneral: () => void;
-  onOpenSettingsLlm: () => void;
-  activeAgent: Agent | null | undefined;
-  agents: Agent[];
-  agentId: string;
-  conversation: Conversation | null;
-  onOpenAvatarSettings: (agent: Agent) => void;
-  assistantsCollapsed: boolean;
-  groupsCollapsed: boolean;
-  onToggleAssistantsCollapsed: () => void;
-  onToggleGroupsCollapsed: () => void;
-  channels: Channel[];
-  busySelectionKeys: Set<string>;
-  onSelectAgent: (id: string) => void;
-  agentBusy: boolean;
-  channelBusy: boolean;
-  touchUi: boolean;
-  onBeginConvLongPress: (e: ReactPointerEvent, target: ConvLongPressTarget) => void;
-  onMoveConvLongPress: (e: ReactPointerEvent) => void;
-  onEndConvLongPress: () => void;
-  onOpenBotSettings: (agentId: string) => void;
-  onCloneAgent: (agent: Agent) => void;
-  onRemoveAgent: (agent: Agent, e?: MouseEvent) => void;
-  channelMemberProfiles: (ch: Channel) => ChannelMemberProfile[];
-  agentNameById: Map<string, string>;
-  onOpenChannelChat: (channelId: string) => void;
-  onRemoveChannel: (ch: Channel, e?: MouseEvent) => void;
-  defaultLLM: LLMConnection | undefined;
-  onLogout: () => void;
-};
-
-function AppSidebarInner(props: AppSidebarProps) {
-  const {
-    sheetForm,
-    user,
-    hostActivity,
-    newChatBtnRef,
-    createSheetOpen,
-    showNewChat,
-    onToggleCreateSheet,
-    onOpenNewChatList,
-    onOpenSettingsGeneral,
-    onOpenSettingsLlm,
-    activeAgent,
-    agents,
-    agentId,
-    conversation,
-    onOpenAvatarSettings,
-    assistantsCollapsed,
-    groupsCollapsed,
-    onToggleAssistantsCollapsed,
-    onToggleGroupsCollapsed,
-    channels,
-    busySelectionKeys,
-    onSelectAgent,
-    agentBusy,
-    channelBusy,
-    touchUi,
-    onBeginConvLongPress,
-    onMoveConvLongPress,
-    onEndConvLongPress,
-    onOpenBotSettings,
-    onCloneAgent,
-    onRemoveAgent,
-    channelMemberProfiles,
-    agentNameById,
-    onOpenChannelChat,
-    onRemoveChannel,
-    defaultLLM,
-    onLogout,
-  } = props;
-
+function AppSidebarInner() {
+  const user = useWorkspaceStore((s) => s.user);
+  const agents = useWorkspaceStore((s) => s.agents);
+  const agentId = useWorkspaceStore((s) => s.agentId);
+  const conversation = useWorkspaceStore((s) => s.conversation);
+  const channels = useWorkspaceStore((s) => s.channels);
+  const assistantsCollapsed = useWorkspaceStore((s) => s.assistantsCollapsed);
+  const groupsCollapsed = useWorkspaceStore((s) => s.groupsCollapsed);
+  const agentBusy = useWorkspaceStore((s) => s.agentBusy);
+  const channelBusy = useWorkspaceStore((s) => s.channelBusy);
+  const busySelectionKeys = useWorkspaceStore((s) => s.busySelectionKeys);
+  const defaultLLM = useWorkspaceStore((s) => s.defaultLLM);
+  const hostActivity = useShellStore((s) => s.hostActivity);
+  const createSheetOpen = useShellStore((s) => s.createSheetOpen);
+  const showNewChat = useShellStore((s) => s.showNewChat);
   const convSearch = useShellStore((s) => s.convSearch);
   const setConvSearch = useShellStore((s) => s.setConvSearch);
   const presenceByAgent = usePresenceStore((s) => s.presenceByAgent);
   const onlineByAgent = usePresenceStore((s) => s.onlineByAgent);
   const runFaceAgentId = useChatStore((s) => s.runFaceAgentId);
   const runActiveTool = useChatStore((s) => s.runActiveTool);
+
+  const sheetForm = useSheetFormUi();
+  const touchUi = useIsTouchUi();
+  const { beginConvLongPress, moveConvLongPress, endConvLongPress } = useConvLongPressHandlers(touchUi);
+
+  const actions = sessionActions();
+  const activeAgent = resolveActiveAgent(agentId, agents);
+  const agentNameById = useMemo(() => agentNameMap(agents), [agents]);
   const searchingHintNow = toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(hostActivity);
   const isBotOnline = (id?: string | null, snapshot?: boolean) => botIsOnline(onlineByAgent, agents, id, snapshot);
   const deferredConvSearch = useDeferredValue(convSearch);
@@ -131,6 +78,7 @@ function AppSidebarInner(props: AppSidebarProps) {
 
   const identityFocus =
     activeAgent || agents.find((a) => a.id === agentId) || agents[0] || null;
+  const busyKeySet = useMemo(() => new Set(busySelectionKeys), [busySelectionKeys]);
 
   return (
     <aside className="sidebar">
@@ -142,7 +90,7 @@ function AppSidebarInner(props: AppSidebarProps) {
               className="sidebar-shell-user"
               title={user?.username || "账户"}
               aria-label="打开设置"
-              onClick={() => void onOpenSettingsGeneral()}
+              onClick={() => void sessionActions().openSettings("general")}
             >
               <span className="sidebar-shell-user-avatar" aria-hidden>
                 {accountInitials(user?.username || "")}
@@ -159,13 +107,13 @@ function AppSidebarInner(props: AppSidebarProps) {
                 />
               </label>
               <button
-                ref={newChatBtnRef}
+                ref={actions.newChatBtnRef}
                 type="button"
                 className={`icon-btn sidebar-shell-plus${createSheetOpen || showNewChat ? " active-plus" : ""}`}
                 title="新建"
                 aria-haspopup="dialog"
                 aria-expanded={createSheetOpen || showNewChat}
-                onClick={onToggleCreateSheet}
+                onClick={() => sessionActions().onToggleCreateSheet()}
               >
                 <Plus size={18} strokeWidth={2} aria-hidden />
               </button>
@@ -186,7 +134,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                       searchingHintNow,
                   )}
                   online={isBotOnline(identityFocus.id)}
-                  onClick={() => onOpenAvatarSettings(identityFocus)}
+                  onClick={() => sessionActions().openAvatarSettings(identityFocus)}
                 />
               ) : (
                 <span className="sidebar-identity-fallback" aria-hidden>
@@ -213,13 +161,13 @@ function AppSidebarInner(props: AppSidebarProps) {
             />
           </label>
           <button
-            ref={newChatBtnRef}
+            ref={actions.newChatBtnRef}
             type="button"
             className={`icon-btn${showNewChat ? " active-plus" : ""}`}
             title="新建聊天"
             aria-haspopup="dialog"
             aria-expanded={showNewChat}
-            onClick={onOpenNewChatList}
+            onClick={() => sessionActions().onOpenNewChatList()}
           >
             <Plus size={18} strokeWidth={2} aria-hidden />
           </button>
@@ -231,7 +179,7 @@ function AppSidebarInner(props: AppSidebarProps) {
           type="button"
           className="section-fold-head"
           aria-expanded={!assistantsCollapsed}
-          onClick={onToggleAssistantsCollapsed}
+          onClick={() => sessionActions().toggleAssistantsCollapsed()}
         >
           <span className="section-fold-title">助手</span>
           <span className="section-fold-meta">
@@ -264,19 +212,19 @@ function AppSidebarInner(props: AppSidebarProps) {
                 <div
                   key={a.id}
                   className={`agent-item conv-item ${active ? "active" : ""}`}
-                  onClick={() => onSelectAgent(a.id)}
+                  onClick={() => sessionActions().onSelectAgent(a.id)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      onSelectAgent(a.id);
+                      sessionActions().onSelectAgent(a.id);
                     }
                   }}
-                  onPointerDown={(e) => onBeginConvLongPress(e, { kind: "agent", agent: a })}
-                  onPointerMove={onMoveConvLongPress}
-                  onPointerUp={onEndConvLongPress}
-                  onPointerCancel={onEndConvLongPress}
+                  onPointerDown={(e) => beginConvLongPress(e, { kind: "agent", agent: a })}
+                  onPointerMove={moveConvLongPress}
+                  onPointerUp={endConvLongPress}
+                  onPointerCancel={endConvLongPress}
                   onContextMenu={(e) => {
                     if (touchUi) e.preventDefault();
                   }}
@@ -293,12 +241,12 @@ function AppSidebarInner(props: AppSidebarProps) {
                         searchingHintNow,
                     )}
                     online={isBotOnline(a.id)}
-                    onClick={() => onOpenAvatarSettings(a)}
+                    onClick={() => sessionActions().openAvatarSettings(a)}
                   />
                   <div className="agent-item-body">
                     <div className="agent-name">
                       {a.name}
-                      {busySelectionKeys.has(`agent:${a.id}`) ? (
+                      {busyKeySet.has(`agent:${a.id}`) ? (
                         <span className="run-busy-dot" title="回复中" aria-label="回复中" />
                       ) : null}
                     </div>
@@ -312,7 +260,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                     disabled={agentBusy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenBotSettings(a.id);
+                      sessionActions().onOpenBotSettings(a.id);
                     }}
                   >
                     <Settings size={14} strokeWidth={2} aria-hidden />
@@ -325,7 +273,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                     disabled={agentBusy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onCloneAgent(a);
+                      sessionActions().setCloneTarget(a);
                     }}
                   >
                     <Copy size={14} strokeWidth={2} aria-hidden />
@@ -335,7 +283,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                     className="conv-del"
                     title="删除助手"
                     disabled={agentBusy}
-                    onClick={(e) => void onRemoveAgent(a, e)}
+                    onClick={(e) => void sessionActions().removeAgent(a, e)}
                   >
                     ×
                   </button>
@@ -353,7 +301,7 @@ function AppSidebarInner(props: AppSidebarProps) {
               type="button"
               className="section-fold-head"
               aria-expanded={!groupsCollapsed}
-              onClick={onToggleGroupsCollapsed}
+              onClick={() => sessionActions().toggleGroupsCollapsed()}
             >
               <span className="section-fold-title">群聊</span>
               <span className="section-fold-meta">
@@ -382,23 +330,23 @@ function AppSidebarInner(props: AppSidebarProps) {
                       title={memberNames}
                       role="button"
                       tabIndex={0}
-                      onClick={() => void onOpenChannelChat(ch.id)}
+                      onClick={() => void sessionActions().openChannelChat(ch.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           (e.currentTarget as HTMLElement).click();
                         }
                       }}
-                      onPointerDown={(e) => onBeginConvLongPress(e, { kind: "channel", channel: ch })}
-                      onPointerMove={onMoveConvLongPress}
-                      onPointerUp={onEndConvLongPress}
-                      onPointerCancel={onEndConvLongPress}
+                      onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
+                      onPointerMove={moveConvLongPress}
+                      onPointerUp={endConvLongPress}
+                      onPointerCancel={endConvLongPress}
                       onContextMenu={(e) => {
                         if (touchUi) e.preventDefault();
                       }}
                     >
                       <div className="channel-member-stack" aria-hidden>
-                        {channelMemberProfiles(ch)
+                        {channelMemberProfiles(ch, agents, agentNameById)
                           .slice(0, 3)
                           .map((p) => (
                             <AgentAvatar
@@ -415,7 +363,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                       <div className="conv-item-main">
                         <div className="agent-name">
                           {ch.name}
-                          {busySelectionKeys.has(`channel:${ch.id}`) ? (
+                          {busyKeySet.has(`channel:${ch.id}`) ? (
                             <span className="run-busy-dot" title="回复中" aria-label="回复中" />
                           ) : null}
                         </div>
@@ -426,7 +374,7 @@ function AppSidebarInner(props: AppSidebarProps) {
                         className="conv-del"
                         title="删除群聊"
                         disabled={channelBusy}
-                        onClick={(e) => void onRemoveChannel(ch, e)}
+                        onClick={(e) => void sessionActions().removeChannel(ch, e)}
                       >
                         ×
                       </button>
@@ -444,9 +392,9 @@ function AppSidebarInner(props: AppSidebarProps) {
           <AccountMenu
             username={user?.username || "账户"}
             llm={defaultLLM}
-            onOpenSettings={() => void onOpenSettingsGeneral()}
-            onChangeModel={() => void onOpenSettingsLlm()}
-            onLogout={onLogout}
+            onOpenSettings={() => void sessionActions().openSettings("general")}
+            onChangeModel={() => void sessionActions().openSettings("llm")}
+            onLogout={() => sessionActions().onLogout()}
           />
         </div>
       ) : null}

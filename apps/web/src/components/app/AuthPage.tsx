@@ -1,36 +1,24 @@
-import { FormEvent } from "react";
+import type { useAuthSession } from "../../hooks/useAuthSession";
 import { ApiServerField } from "../ApiServerField";
 
-export type AuthPageProps = {
-  authMode: "login" | "register";
-  authUser: string;
-  authPass: string;
-  authError: string;
-  authBusy: boolean;
-  oidcEnabled: boolean;
-  onAuthModeChange: (mode: "login" | "register") => void;
-  onAuthUserChange: (value: string) => void;
-  onAuthPassChange: (value: string) => void;
-  onSubmit: (e: FormEvent) => void;
-  onCasdoorLogin: () => void;
-};
+export function AuthPage({ auth }: { auth: ReturnType<typeof useAuthSession> }) {
+  const {
+    authMode,
+    setAuthMode,
+    authUser,
+    setAuthUser,
+    authPass,
+    setAuthPass,
+    authError,
+    authBusy,
+    oidcEnabled,
+    onAuth,
+    onCasdoorLogin,
+  } = auth;
 
-export function AuthPage({
-  authMode,
-  authUser,
-  authPass,
-  authError,
-  authBusy,
-  oidcEnabled,
-  onAuthModeChange,
-  onAuthUserChange,
-  onAuthPassChange,
-  onSubmit,
-  onCasdoorLogin,
-}: AuthPageProps) {
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={onSubmit}>
+      <form className="auth-card" onSubmit={onAuth}>
         <div className="brand auth-brand">
           <div className="logo">◈</div>
           <div>
@@ -42,14 +30,14 @@ export function AuthPage({
           <button
             type="button"
             className={authMode === "login" ? "active" : ""}
-            onClick={() => onAuthModeChange("login")}
+            onClick={() => setAuthMode("login")}
           >
             登录
           </button>
           <button
             type="button"
             className={authMode === "register" ? "active" : ""}
-            onClick={() => onAuthModeChange("register")}
+            onClick={() => setAuthMode("register")}
           >
             注册
           </button>
@@ -58,7 +46,7 @@ export function AuthPage({
           用户名
           <input
             value={authUser}
-            onChange={(e) => onAuthUserChange(e.target.value)}
+            onChange={(e) => setAuthUser(e.target.value)}
             autoComplete="username"
             required
             minLength={2}
@@ -69,7 +57,7 @@ export function AuthPage({
           <input
             type="password"
             value={authPass}
-            onChange={(e) => onAuthPassChange(e.target.value)}
+            onChange={(e) => setAuthPass(e.target.value)}
             autoComplete={authMode === "login" ? "current-password" : "new-password"}
             required
             minLength={4}

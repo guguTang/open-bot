@@ -12,6 +12,7 @@ import type { ComposerReplyTarget, PendingFile } from "../components/Composer";
 import type { UiMessage } from "../types/app-ui";
 import { usePresenceStore } from "./presence";
 import { useShellStore } from "./shell";
+import { useWorkspaceStore } from "./workspace";
 
 export type ApprovalGate = {
   conversationId: string;
@@ -115,4 +116,5 @@ export function resetChatSession() {
   useChatStore.getState().resetChat();
   usePresenceStore.getState().reset();
   useShellStore.getState().reset();
+  useWorkspaceStore.getState().reset();
 }
