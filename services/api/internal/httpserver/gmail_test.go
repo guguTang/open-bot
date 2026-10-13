@@ -195,3 +195,19 @@ func TestGmailHasSendScope(t *testing.T) {
 		t.Fatal("empty")
 	}
 }
+
+
+func TestGmailBodyLooksLikePathOnly(t *testing.T) {
+	if !gmailBodyLooksLikePathOnly("/workspace/out/西游记.md") {
+		t.Fatal("workspace path")
+	}
+	if !gmailBodyLooksLikePathOnly("./reports/summary.txt") {
+		t.Fatal("relative path")
+	}
+	if gmailBodyLooksLikePathOnly("你好，这是正文。") {
+		t.Fatal("prose must pass")
+	}
+	if gmailBodyLooksLikePathOnly("见附件说明如下：\n/workspace/x.md") {
+		t.Fatal("multiline with path mention is content")
+	}
+}

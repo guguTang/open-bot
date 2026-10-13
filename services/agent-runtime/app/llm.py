@@ -817,7 +817,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "Always shows a chat confirm card (to / subject / body); never auto-sends. "
                 "If Gmail is not connected, returns an error telling the user to open "
                 "Settings → 连接应用. Do not invent a successful send. "
-                "Not for Resend or other relay APIs — this uses the user's own mailbox."
+                "Not for Resend or other relay APIs — this uses the user's own mailbox. "
+                "CRITICAL body rules: put the actual email text in `body`, never a file path "
+                "(e.g. /workspace/..., relative paths, or 'see file X'). "
+                "If the user wants a generated/workspace file emailed, read it first "
+                "(sandbox_read / host_read as appropriate) and paste the text into `body` "
+                "(summarize or truncate if huge). MVP has no attachments — for binary/images "
+                "say you can only send plain text in the body and offer a text alternative; "
+                "do not put the path in the body as a substitute."
             ),
             "parameters": {
                 "type": "object",
@@ -826,8 +833,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Recipient email(s), comma-separated",
                     },
-                    "subject": {"type": "string"},
-                    "body": {"type": "string", "description": "Plain-text body"},
+                    "subject": {"type": "string", "description": "Email subject line"},
+                    "body": {
+                        "type": "string",
+                        "description": (
+                            "Plain-text email body content (the words the recipient should read). "
+                            "Never a filesystem path. Read files into this string before calling."
+                        ),
+                    },
                     "cc": {"type": "string"},
                     "bcc": {"type": "string"},
                 },

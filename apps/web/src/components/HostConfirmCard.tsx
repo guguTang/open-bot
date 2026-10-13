@@ -102,7 +102,9 @@ export function HostConfirmCard({
   const settled = item.status === "allowed" ? "已允许" : item.status === "denied" ? "已拒绝" : "";
   const tool = toolLabelForHostOp(item.op, item.path);
   const snippet = commandSnippet(item);
-  const titleLine = snippet ? `${tool} · ${snippet}` : tool;
+  // email_send: keep title short; to/subject live in detail + preview with normal wrap.
+  const titleLine =
+    item.op === "email_send" ? tool : snippet ? `${tool} · ${snippet}` : tool;
   // Product: 不擅自代发 — never offer Always allow for email.
   const allowAlways = alwaysAllowEnabled && item.op !== "email_send";
   const gitWriteHint =
@@ -114,7 +116,7 @@ export function HostConfirmCard({
 
   return (
     <div
-      className="host-confirm-card approval-gate-card"
+      className="host-confirm-card"
       role="region"
       aria-label="工具需要确认"
       data-tool-family={family}

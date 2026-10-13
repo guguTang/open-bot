@@ -102,6 +102,52 @@ func gmailMissingSendScopeHint() string {
 	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「设置 → 连接应用」断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
 }
 
+// gmailBodyLooksLikePathOnly detects a body that is only a filesystem path
+// (model forgot to read the file). Reject before confirm so the user never
+// approves a path-as-body send.
+func gmailBodyLooksLikePathOnly(body string) bool {
+	b := strings.TrimSpace(body)
+	if b == "" || strings.ContainsAny(b, "\n\r") {
+		return false
+	}
+	b = strings.Trim(b, "`\"'")
+	b = strings.TrimSpace(b)
+	if b == "" {
+		return false
+	}
+	// Multi-word prose is content, not a bare path.
+	if strings.Contains(b, " ") {
+		return false
+	}
+	lower := strings.ToLower(b)
+	switch {
+	case strings.HasPrefix(b, "/"),
+		strings.HasPrefix(b, "~/"),
+		strings.HasPrefix(b, "./"),
+		strings.HasPrefix(b, "../"),
+		strings.HasPrefix(lower, "workspace/"),
+		strings.Contains(lower, "/workspace/"):
+		return true
+	}
+	// Windows drive path: C:\... or C:/...
+	if len(b) > 2 && ((b[0] >= 'A' && b[0] <= 'Z') || (b[0] >= 'a' && b[0] <= 'z')) && b[1] == ':' && (b[2] == '\\' || b[2] == '/') {
+		return true
+	}
+	// relative path with slash and a file-ish suffix
+	if strings.Contains(b, "/") && !strings.Contains(b, "://") {
+		for _, ext := range []string{".md", ".txt", ".html", ".htm", ".csv", ".json", ".log", ".pdf", ".png", ".jpg"} {
+			if strings.HasSuffix(lower, ext) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func gmailPathOnlyBodyHint() string {
+	return "邮件正文不能只是文件路径。请先读取文件内容，把实际文本写入 gmail_send 的 body（过大则摘要）；MVP 不支持附件。"
+}
+
 func gmailInsufficientScopeError(msg string) bool {
 	m := strings.ToLower(msg)
 	return strings.Contains(msg, "授权范围不足") ||
@@ -428,6 +474,12 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "invalid bcc: " + err.Error()})
 			return
 		}
+	}
+	if gmailBodyLooksLikePathOnly(msgBody) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "error": gmailPathOnlyBodyHint(),
+		})
+		return
 	}
 
 	cfg := loadGmailOAuthConfig()
