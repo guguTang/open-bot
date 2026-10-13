@@ -60,6 +60,7 @@ const menuRoutes = {
         { path: "/usage", name: "用量" },
         { path: "/orgs", name: "组织（平台）" },
         { path: "/flags", name: "功能开关" },
+        { path: "/doc-parse", name: "附件解析" },
         { path: "/audit", name: "审计日志" },
       ],
     },

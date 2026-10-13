@@ -250,6 +250,25 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max]) + "…"
 }
 
+// overlayLastUserContent replaces the last user turn in history with content so
+// the runtime's normalize_messages sees a matching current turn. Used when the
+// persisted user row stays raw (UI) but the model needs an ephemeral expansion
+// (e.g. MarkItDown extract). Does not mutate the stored message.
+func overlayLastUserContent(history []runtimeMsg, content string) []runtimeMsg {
+	content = strings.TrimSpace(content)
+	if content == "" || len(history) == 0 {
+		return history
+	}
+	out := append([]runtimeMsg(nil), history...)
+	for i := len(out) - 1; i >= 0; i-- {
+		if out[i].Role == "user" {
+			out[i].Content = content
+			return out
+		}
+	}
+	return append(out, runtimeMsg{Role: "user", Content: content})
+}
+
 // injectReplyIntoUserContent prefixes the last user turn in history and the
 // top-level content string with reply context (idempotent if already prefixed).
 func injectReplyIntoUserContent(content string, history []runtimeMsg, prefix string) (string, []runtimeMsg) {

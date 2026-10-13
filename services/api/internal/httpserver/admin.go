@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -289,13 +290,13 @@ func (s *Server) handleAdminGetLLM(w http.ResponseWriter, r *http.Request) {
 }
 
 type orgLLMBody struct {
-	Name           string `json:"name"`
-	BaseURL        string `json:"base_url"`
-	APIKey         string `json:"api_key"`
-	Model          string `json:"model"`
-	EnableTools    bool   `json:"enable_tools"`
-	ContextWindow  *int   `json:"context_window"`
-	MaxToolRounds  *int   `json:"max_tool_rounds"`
+	Name          string `json:"name"`
+	BaseURL       string `json:"base_url"`
+	APIKey        string `json:"api_key"`
+	Model         string `json:"model"`
+	EnableTools   bool   `json:"enable_tools"`
+	ContextWindow *int   `json:"context_window"`
+	MaxToolRounds *int   `json:"max_tool_rounds"`
 }
 
 func (s *Server) handleAdminPutLLM(w http.ResponseWriter, r *http.Request) {
@@ -436,4 +437,63 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		"token": token,
 		"user":  u.PublicMap(),
 	})
+}
+
+func (s *Server) handleAdminGetDocParse(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.loadAuthUser(w, r)
+	if !ok {
+		return
+	}
+	settings, err := s.db.GetOrgSettings(u.OrgID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, docParseSettingsResponse(settings))
+}
+
+func (s *Server) handleAdminPutDocParse(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.loadAuthUser(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		TimeoutSeconds *int `json:"doc_parse_timeout_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if body.TimeoutSeconds != nil {
+		n := *body.TimeoutSeconds
+		if n < minDocParseTimeoutSec || n > maxDocParseTimeoutSec {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("doc_parse_timeout_seconds must be between %d and %d", minDocParseTimeoutSec, maxDocParseTimeoutSec),
+			})
+			return
+		}
+	}
+	settings, err := s.db.SetOrgDocParseTimeout(u.OrgID, body.TimeoutSeconds)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeAudit(u.OrgID, u.ID, "org.doc_parse_update", "org_settings", u.OrgID, map[string]any{
+		"doc_parse_timeout_seconds": settings.DocParseTimeoutSeconds,
+	})
+	writeJSON(w, http.StatusOK, docParseSettingsResponse(settings))
+}
+
+func docParseSettingsResponse(settings *db.OrgSettings) map[string]any {
+	out := map[string]any{
+		"doc_parse_timeout_seconds": nil,
+		"default_timeout_seconds":   defaultDocParseTimeoutSec,
+		"min_timeout_seconds":       minDocParseTimeoutSec,
+		"max_timeout_seconds":       maxDocParseTimeoutSec,
+		"updated_at":                settings.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000000000Z07:00"),
+	}
+	if settings.DocParseTimeoutSeconds != nil {
+		out["doc_parse_timeout_seconds"] = *settings.DocParseTimeoutSeconds
+	}
+	return out
 }

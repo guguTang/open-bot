@@ -1,5 +1,5 @@
-# Lean official-package image: PDF + DOCX + XLSX + PPTX only.
-# Not installed: xls, outlook, audio, youtube, Azure document intelligence, OCR.
+# Lean official-package image: PDF + DOCX + XLSX + XLS + PPTX.
+# Not installed: outlook, audio, youtube, Azure document intelligence, OCR.
 # magika (a MarkItDown dependency) pulls onnxruntime; libgomp1 is the slim-image
 # runtime it needs. First start loads that model from the wheel, not the network.
 FROM python:3.12-slim

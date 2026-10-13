@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -26,23 +27,52 @@ const (
 	// maxDocParseResponseBytes bounds the sidecar JSON so a huge reply cannot
 	// be buffered whole. The sidecar itself caps markdown (see MAX_RETURN_BYTES).
 	maxDocParseResponseBytes = 1 << 20
+
+	defaultDocParseTimeoutSec = 60
+	minDocParseTimeoutSec     = 5
+	maxDocParseTimeoutSec     = 300
 )
 
 var (
-	// PDF/Office convert can exceed ~10s on cold start or multi-page files;
-	// keep HTTP client Timeout slightly above the per-request context budget.
+	// PDF/Office convert can exceed ~10s on cold start or multi-page files.
+	// Client Timeout is the hard ceiling (admin max + buffer); per-request
+	// context timeout comes from resolveDocParseTimeout / org settings.
 	docParseClient = &http.Client{
-		Timeout: 65 * time.Second,
+		Timeout: time.Duration(maxDocParseTimeoutSec+10) * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	docParseTimeout = 60 * time.Second
 )
+
+// resolveDocParseTimeout picks the per-request convert budget.
+// Priority: overrideSeconds (org admin setting) → DOC_PARSE_TIMEOUT_SECONDS env → 60s.
+// Values are clamped to [5, 300].
+func resolveDocParseTimeout(overrideSeconds *int) time.Duration {
+	if overrideSeconds != nil {
+		return clampDocParseTimeoutSec(*overrideSeconds)
+	}
+	if raw := strings.TrimSpace(os.Getenv("DOC_PARSE_TIMEOUT_SECONDS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			return clampDocParseTimeoutSec(n)
+		}
+	}
+	return time.Duration(defaultDocParseTimeoutSec) * time.Second
+}
+
+func clampDocParseTimeoutSec(n int) time.Duration {
+	if n < minDocParseTimeoutSec {
+		n = minDocParseTimeoutSec
+	}
+	if n > maxDocParseTimeoutSec {
+		n = maxDocParseTimeoutSec
+	}
+	return time.Duration(n) * time.Second
+}
 
 func officeExt(ext string) bool {
 	switch ext {
-	case ".pdf", ".docx", ".xlsx", ".pptx":
+	case ".pdf", ".docx", ".xlsx", ".xls", ".pptx":
 		return true
 	default:
 		return false
@@ -54,6 +84,7 @@ func officeMIME(mt string) bool {
 	case "application/pdf",
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.ms-excel",
 		"application/vnd.openxmlformats-officedocument.presentationml.presentation":
 		return true
 	default:
@@ -81,6 +112,8 @@ func officeKindLabel(mimeType, filename string) string {
 		return "DOCX"
 	case ext == ".xlsx" || mt == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
 		return "XLSX"
+	case ext == ".xls" || mt == "application/vnd.ms-excel":
+		return "XLS"
 	case ext == ".pptx" || mt == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
 		return "PPTX"
 	default:
@@ -105,6 +138,8 @@ func officeUploadName(name, mimeType string) string {
 		return name + ".docx"
 	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
 		return name + ".xlsx"
+	case "application/vnd.ms-excel":
+		return name + ".xls"
 	case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
 		return name + ".pptx"
 	default:
@@ -158,12 +193,15 @@ func isTimeoutErr(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-func fetchDocumentMarkdown(ctx context.Context, absPath, filename, mimeType string) (markdown string, charCount int, truncated bool, kind string) {
+func fetchDocumentMarkdown(ctx context.Context, absPath, filename, mimeType string, timeout time.Duration) (markdown string, charCount int, truncated bool, kind string) {
 	endpoint, kind := docParseEndpoint()
 	if kind != "" {
 		return "", 0, false, kind
 	}
-	ctx, cancel := context.WithTimeout(ctx, docParseTimeout)
+	if timeout <= 0 {
+		timeout = resolveDocParseTimeout(nil)
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	f, err := os.Open(absPath)
@@ -180,6 +218,14 @@ func fetchDocumentMarkdown(ctx context.Context, absPath, filename, mimeType stri
 	}
 	if _, err := io.Copy(part, io.LimitReader(f, maxAttachmentBytes)); err != nil {
 		return "", 0, false, "read"
+	}
+	// Prefer per-request timeout so admin changes apply without restarting the sidecar.
+	sec := int(timeout.Round(time.Second) / time.Second)
+	if sec < 1 {
+		sec = 1
+	}
+	if err := mw.WriteField("timeout_seconds", strconv.Itoa(sec)); err != nil {
+		return "", 0, false, "failed"
 	}
 	if err := mw.Close(); err != nil {
 		return "", 0, false, "failed"
@@ -275,10 +321,10 @@ func writeInlinedDocument(b *strings.Builder, markdown string, charCount int, si
 	}
 }
 
-func appendOfficeDocument(ctx context.Context, b *strings.Builder, abs, name, mimeType string) {
+func appendOfficeDocument(ctx context.Context, b *strings.Builder, abs, name, mimeType string, timeout time.Duration) {
 	label := officeKindLabel(mimeType, name)
 	filename := officeUploadName(name, mimeType)
-	markdown, charCount, truncated, kind := fetchDocumentMarkdown(ctx, abs, filename, mimeType)
+	markdown, charCount, truncated, kind := fetchDocumentMarkdown(ctx, abs, filename, mimeType, timeout)
 	if kind != "" {
 		if kind != "unconfigured" {
 			log.Printf("doc parse %s file=%s: %s", label, name, kind)

@@ -48,6 +48,7 @@ const ALLOWED_EXT = new Set([
   ".pdf",
   ".docx",
   ".xlsx",
+  ".xls",
   ".pptx",
   ".png",
   ".jpg",
@@ -86,6 +87,7 @@ export function attachmentAllowed(mime: string, name: string): boolean {
     mt === "application/pdf" ||
     mt === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mt === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mt === "application/vnd.ms-excel" ||
     mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation"
   )
     return true;
@@ -101,7 +103,7 @@ export function validateAttachment(file: PickedFile): string | null {
     return `文件超过 20MB 限制：${file.name}`;
   }
   if (!attachmentAllowed(file.mime, file.name)) {
-    return `不支持的文件类型：${file.name}（支持图片、文本、pdf、docx、xlsx、pptx、json、md、csv 与代码文件）`;
+    return `不支持的文件类型：${file.name}（支持图片、文本、pdf、docx、xlsx、xls、pptx、json、md、csv 与代码文件）`;
   }
   return null;
 }

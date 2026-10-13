@@ -18,7 +18,7 @@ import logging
 import os
 from typing import Any
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -30,11 +30,12 @@ MAX_RETURN_BYTES = int(os.environ.get("MAX_RETURN_BYTES", str(200 * 1024)))
 DEFAULT_TIMEOUT_SECONDS = 60.0
 MAX_CONCURRENT = 2
 
-ALLOWED_EXT = {".pdf", ".docx", ".xlsx", ".pptx"}
+ALLOWED_EXT = {".pdf", ".docx", ".xlsx", ".xls", ".pptx"}
 MIME_TO_EXT = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.ms-excel": ".xls",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
 }
 
@@ -127,8 +128,31 @@ def health() -> JSONResponse:
     return JSONResponse(status_code=200, content={"status": "ok"})
 
 
+def resolve_request_timeout(timeout_seconds: float | None) -> float:
+    """Prefer per-request timeout from Go (admin setting); else env default.
+
+    Upper-bound at 300s. Values <= 0 fall back to env/default. Sub-5s is allowed
+    so tests and Go client budgets can be shorter than the admin UI minimum.
+    """
+    if timeout_seconds is not None:
+        try:
+            value = float(timeout_seconds)
+        except (TypeError, ValueError):
+            value = convert_timeout_seconds()
+    else:
+        value = convert_timeout_seconds()
+    if value <= 0:
+        value = convert_timeout_seconds()
+    if value > 300:
+        return 300.0
+    return value
+
+
 @app.post("/convert")
-async def convert(file: UploadFile = File(...)) -> JSONResponse:
+async def convert(
+    file: UploadFile = File(...),
+    timeout_seconds: float | None = Form(default=None),
+) -> JSONResponse:
     if _import_error is not None or _md is None:
         return _error(503, "markitdown unavailable")
 
@@ -153,6 +177,8 @@ async def convert(file: UploadFile = File(...)) -> JSONResponse:
     if not data:
         return _error(422, "empty file")
 
+    req_timeout = resolve_request_timeout(timeout_seconds)
+
     acquired = False
     try:
         await asyncio.wait_for(_sem.acquire(), timeout=1.0)
@@ -164,7 +190,7 @@ async def convert(file: UploadFile = File(...)) -> JSONResponse:
         try:
             text = await asyncio.wait_for(
                 asyncio.to_thread(_convert_bytes, data, filename, mime, ext),
-                timeout=convert_timeout_seconds(),
+                timeout=req_timeout,
             )
         except TimeoutError:
             log.warning("convert timed out name=%s bytes=%d", filename, len(data))

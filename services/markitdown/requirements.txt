@@ -1,11 +1,11 @@
 # Runtime only. Tests install httpx separately (see README); it is not baked into the image.
 #
 # Official MarkItDown extras for PDF and Office Open XML.
-# Intentionally omitted (larger or out of scope): xls, outlook, audio-transcription,
+# Intentionally omitted (larger or out of scope): outlook, audio-transcription,
 # youtube-transcription, az-doc-intel, az-content-understanding, and markitdown-ocr.
 # Scanned PDFs therefore return empty text — no OCR in this image.
 # Pins match the versions exercised by test_app.py (PDF text + DOCX).
 fastapi==0.143.0
 uvicorn==0.54.0
 python-multipart==0.0.32
-markitdown[pdf,docx,xlsx,pptx]==0.1.8
+markitdown[pdf,docx,xlsx,pptx,xls]==0.1.8

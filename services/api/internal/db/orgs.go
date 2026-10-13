@@ -26,20 +26,21 @@ type Org struct {
 }
 
 type OrgSettings struct {
-	OrgID            string    `json:"org_id"`
-	LLMName          string    `json:"llm_name"`
-	LLMBaseURL       string    `json:"llm_base_url"`
-	LLMAPIKey        string    `json:"-"`
-	LLMModel         string    `json:"llm_model"`
-	LLMEnableTools   bool      `json:"llm_enable_tools"`
-	LLMContextWindow *int      `json:"llm_context_window,omitempty"`
-	LLMMaxToolRounds *int      `json:"llm_max_tool_rounds,omitempty"`
-	FeatureFlagsJSON string    `json:"feature_flags_json"`
-	DecisionProvider string    `json:"decision_provider"`
-	DecisionBaseURL  string    `json:"decision_base_url"`
-	DecisionAPIKey   string    `json:"-"`
-	DecisionModel    string    `json:"decision_model"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	OrgID                  string    `json:"org_id"`
+	LLMName                string    `json:"llm_name"`
+	LLMBaseURL             string    `json:"llm_base_url"`
+	LLMAPIKey              string    `json:"-"`
+	LLMModel               string    `json:"llm_model"`
+	LLMEnableTools         bool      `json:"llm_enable_tools"`
+	LLMContextWindow       *int      `json:"llm_context_window,omitempty"`
+	LLMMaxToolRounds       *int      `json:"llm_max_tool_rounds,omitempty"`
+	FeatureFlagsJSON       string    `json:"feature_flags_json"`
+	DecisionProvider       string    `json:"decision_provider"`
+	DecisionBaseURL        string    `json:"decision_base_url"`
+	DecisionAPIKey         string    `json:"-"`
+	DecisionModel          string    `json:"decision_model"`
+	DocParseTimeoutSeconds *int      `json:"doc_parse_timeout_seconds,omitempty"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }
 
 type OrgSettingsPublic struct {
@@ -232,6 +233,7 @@ ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_base_url TEXT NOT NUL
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_api_key TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_model TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS llm_max_tool_rounds INT;
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS doc_parse_timeout_seconds INT;
 
 CREATE TABLE IF NOT EXISTS org_invites (
   id TEXT PRIMARY KEY,
@@ -306,7 +308,6 @@ WHERE (role IS NULL OR role = '') AND LOWER(username) <> LOWER($2)
 	return err
 }
 
-
 func (d *DB) CreateOrg(slug, name string) (*Org, error) {
 	slug = strings.ToLower(strings.TrimSpace(slug))
 	name = strings.TrimSpace(name)
@@ -371,16 +372,19 @@ func (d *DB) GetOrgSettings(orgID string) (*OrgSettings, error) {
 	row := d.SQL.QueryRow(`
 SELECT org_id, llm_name, llm_base_url, llm_api_key, llm_model, llm_enable_tools,
        llm_context_window, llm_max_tool_rounds, feature_flags_json, updated_at,
-       decision_provider, decision_base_url, decision_api_key, decision_model
+       decision_provider, decision_base_url, decision_api_key, decision_model,
+       doc_parse_timeout_seconds
 FROM org_settings WHERE org_id = $1
 `, orgID)
 	var s OrgSettings
 	var cw sql.NullInt64
 	var mtr sql.NullInt64
+	var dpts sql.NullInt64
 	if err := row.Scan(
 		&s.OrgID, &s.LLMName, &s.LLMBaseURL, &s.LLMAPIKey, &s.LLMModel, &s.LLMEnableTools,
 		&cw, &mtr, &s.FeatureFlagsJSON, &s.UpdatedAt,
 		&s.DecisionProvider, &s.DecisionBaseURL, &s.DecisionAPIKey, &s.DecisionModel,
+		&dpts,
 	); err != nil {
 		return nil, err
 	}
@@ -391,6 +395,10 @@ FROM org_settings WHERE org_id = $1
 	if mtr.Valid && mtr.Int64 > 0 {
 		v := int(mtr.Int64)
 		s.LLMMaxToolRounds = &v
+	}
+	if dpts.Valid && dpts.Int64 > 0 {
+		v := int(dpts.Int64)
+		s.DocParseTimeoutSeconds = &v
 	}
 	return &s, nil
 }
@@ -463,6 +471,28 @@ func (d *DB) SetOrgFeatureFlags(orgID, flagsJSON string) (*OrgSettings, error) {
 	_, err := d.SQL.Exec(`
 UPDATE org_settings SET feature_flags_json = $2, updated_at = $3 WHERE org_id = $1
 `, orgID, flagsJSON, Now())
+	if err != nil {
+		return nil, err
+	}
+	return d.GetOrgSettings(orgID)
+}
+
+// SetOrgDocParseTimeout stores the org document-parse timeout in seconds.
+// Pass nil to clear (fall back to env/default). Values outside [5,300] are rejected.
+func (d *DB) SetOrgDocParseTimeout(orgID string, seconds *int) (*OrgSettings, error) {
+	var val any
+	if seconds != nil {
+		n := *seconds
+		if n < 5 || n > 300 {
+			return nil, errors.New("doc_parse_timeout_seconds must be between 5 and 300")
+		}
+		val = n
+	} else {
+		val = nil
+	}
+	_, err := d.SQL.Exec(`
+UPDATE org_settings SET doc_parse_timeout_seconds = $2, updated_at = $3 WHERE org_id = $1
+`, orgID, val, Now())
 	if err != nil {
 		return nil, err
 	}

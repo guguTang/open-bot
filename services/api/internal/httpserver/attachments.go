@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -95,7 +96,7 @@ func attachmentAllowed(mimeType, filename string) bool {
 		".java": true, ".c": true, ".h": true, ".cpp": true, ".hpp": true,
 		".rb": true, ".php": true, ".sh": true, ".bash": true, ".zsh": true,
 		".sql": true, ".toml": true, ".ini": true, ".cfg": true, ".log": true,
-		".pdf": true, ".docx": true, ".xlsx": true, ".pptx": true,
+		".pdf": true, ".docx": true, ".xlsx": true, ".xls": true, ".pptx": true,
 		".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 		".svg": true, ".bmp": true, ".ico": true,
 	}
@@ -229,7 +230,7 @@ func (s *Server) handleUploadAttachment(w http.ResponseWriter, r *http.Request) 
 	}
 	if !attachmentAllowed(mimeType, name) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "unsupported file type (allow images, text, pdf, docx, xlsx, pptx, json, md, csv, code)",
+			"error": "unsupported file type (allow images, text, pdf, docx, xlsx, xls, pptx, json, md, csv, code)",
 		})
 		return
 	}
@@ -382,7 +383,7 @@ func resolveAttachmentPath(uid, convID string, ref AttachmentRef) (string, error
 	return abs, nil
 }
 
-func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef) (string, error) {
+func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef, parseTimeout time.Duration) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -415,7 +416,7 @@ func buildUserContentWithAttachments(ctx context.Context, text string, uid, conv
 		b.WriteString(fmt.Sprintf("- %s (%s, %s)\n", name, mimeType, formatSize(size)))
 
 		if isOfficeAttachment(mimeType, name) {
-			appendOfficeDocument(ctx, &b, abs, name, mimeType)
+			appendOfficeDocument(ctx, &b, abs, name, mimeType, parseTimeout)
 			continue
 		}
 		if strings.HasPrefix(strings.ToLower(mimeType), "image/") {

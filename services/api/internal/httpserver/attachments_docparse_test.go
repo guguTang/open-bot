@@ -22,6 +22,8 @@ func TestAttachmentAllowedOffice(t *testing.T) {
 		{"application/octet-stream", "notes.docx", true},
 		{"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx", true},
 		{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sheet.xlsx", true},
+		{"application/vnd.ms-excel", "legacy.xls", true},
+		{"application/octet-stream", "legacy.xls", true},
 		{"application/vnd.openxmlformats-officedocument.presentationml.presentation", "deck.pptx", true},
 		{"application/vnd.openxmlformats-officedocument.presentationml.presentation", "deck.bin", true},
 		{"application/msword", "old.doc", false},
@@ -59,15 +61,14 @@ func putUpload(t *testing.T, name, mime string, body []byte) (string, string, At
 	}
 }
 
-func useDocParseClient(t *testing.T, timeout time.Duration) {
+func useDocParseClient(t *testing.T, timeout time.Duration) time.Duration {
 	t.Helper()
-	prevC, prevT := docParseClient, docParseTimeout
+	prevC := docParseClient
 	docParseClient = &http.Client{Timeout: timeout + 2*time.Second}
-	docParseTimeout = timeout
 	t.Cleanup(func() {
 		docParseClient = prevC
-		docParseTimeout = prevT
 	})
+	return timeout
 }
 
 func TestBuildUserContentDocxConverted(t *testing.T) {
@@ -96,10 +97,10 @@ func TestBuildUserContentDocxConverted(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 
 	uid, conv, ref := putUpload(t, "notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", payload)
-	out, err := buildUserContentWithAttachments(context.Background(), "请总结", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "请总结", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestBuildUserContentDocxConverted(t *testing.T) {
 func TestBuildUserContentPDFUnconfigured(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", "")
 	uid, conv, ref := putUpload(t, "scan.pdf", "application/octet-stream", []byte("%PDF-1.4"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +142,9 @@ func TestBuildUserContentConvertFailureDoesNotInvent(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "notes.docx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,9 +162,9 @@ func TestBuildUserContentConvertUnavailable(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "sheet.xlsx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,10 +186,10 @@ func TestBuildUserContentConvertTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 200*time.Millisecond)
+	timeout := useDocParseClient(t, 200*time.Millisecond)
 	uid, conv, ref := putUpload(t, "deck.pptx", "application/octet-stream", []byte("PK"))
 	start := time.Now()
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,9 +208,9 @@ func TestBuildUserContentEmptyPDF(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "scan.pdf", "application/pdf", []byte("%PDF"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,9 +230,9 @@ func TestBuildUserContentTruncatesMarkdown(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "a.docx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref})
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +253,7 @@ func TestBuildUserContentTextAndImageSkipParser(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DOC_PARSE_URL", srv.URL)
-	useDocParseClient(t, 2*time.Second)
+	timeout := useDocParseClient(t, 2*time.Second)
 
 	root := t.TempDir()
 	t.Setenv("OPENBOT_UPLOAD_ROOT", root)
@@ -276,7 +277,7 @@ func TestBuildUserContentTextAndImageSkipParser(t *testing.T) {
 		write("11111111-1111-1111-1111-111111111111", "a.txt", "text/plain", []byte("hello text")),
 		write("22222222-2222-2222-2222-222222222222", "a.png", "image/png", []byte("png")),
 	}
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, refs)
+	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, refs, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,5 +286,86 @@ func TestBuildUserContentTextAndImageSkipParser(t *testing.T) {
 	}
 	if !strings.Contains(out, "一期未传视觉多模态") {
 		t.Fatalf("image note missing: %s", out)
+	}
+}
+
+func TestResolveDocParseTimeout(t *testing.T) {
+	t.Setenv("DOC_PARSE_TIMEOUT_SECONDS", "")
+	if got := resolveDocParseTimeout(nil); got != 60*time.Second {
+		t.Fatalf("default %s", got)
+	}
+	n := 120
+	if got := resolveDocParseTimeout(&n); got != 120*time.Second {
+		t.Fatalf("override %s", got)
+	}
+	low := 1
+	if got := resolveDocParseTimeout(&low); got != 5*time.Second {
+		t.Fatalf("clamp low %s", got)
+	}
+	high := 999
+	if got := resolveDocParseTimeout(&high); got != 300*time.Second {
+		t.Fatalf("clamp high %s", got)
+	}
+	t.Setenv("DOC_PARSE_TIMEOUT_SECONDS", "90")
+	if got := resolveDocParseTimeout(nil); got != 90*time.Second {
+		t.Fatalf("env %s", got)
+	}
+}
+
+func TestBuildUserContentXlsConverted(t *testing.T) {
+	var gotName string
+	var gotTimeout string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("multipart: %v", err)
+			return
+		}
+		f, hdr, err := r.FormFile("file")
+		if err != nil {
+			t.Errorf("file: %v", err)
+			return
+		}
+		defer f.Close()
+		gotName = hdr.Filename
+		gotTimeout = r.FormValue("timeout_seconds")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"markdown":"| A | B |\n| HelloXLS | 1 |","filename":"legacy.xls","char_count":20,"truncated":false}`))
+	}))
+	defer srv.Close()
+	t.Setenv("DOC_PARSE_URL", srv.URL)
+	timeout := useDocParseClient(t, 2*time.Second)
+
+	uid, conv, ref := putUpload(t, "legacy.xls", "application/vnd.ms-excel", []byte("fake-xls"))
+	out, err := buildUserContentWithAttachments(context.Background(), "总结表格", uid, conv, []AttachmentRef{ref}, timeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotName != "legacy.xls" {
+		t.Fatalf("filename %q", gotName)
+	}
+	if gotTimeout != "2" {
+		t.Fatalf("timeout_seconds %q", gotTimeout)
+	}
+	if !strings.Contains(out, "HelloXLS") || !strings.Contains(out, "以下为用户文件正文") {
+		t.Fatalf("got %s", out)
+	}
+}
+
+func TestOverlayLastUserContent(t *testing.T) {
+	h := []runtimeMsg{
+		{Role: "user", Content: "你好"},
+		{Role: "assistant", Content: "嗯"},
+		{Role: "user", Content: "请总结"},
+	}
+	overlay := "请总结\n\n（用户上传了 1 个附件）\n以下为用户文件正文"
+	got := overlayLastUserContent(h, overlay)
+	if got[2].Content != overlay {
+		t.Fatalf("last user not overlaid: %q", got[2].Content)
+	}
+	if h[2].Content != "请总结" {
+		t.Fatal("original history mutated")
+	}
+	if got[0].Content != "你好" {
+		t.Fatal("earlier turns changed")
 	}
 }

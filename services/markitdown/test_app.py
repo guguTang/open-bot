@@ -130,5 +130,46 @@ class ConvertAPITest(unittest.TestCase):
         self.assertIn("Hello from docx fixture", text)
 
 
+    def test_convert_respects_form_timeout(self) -> None:
+        def _slow(*_a, **_k):
+            import time
+
+            time.sleep(2)
+            return "late"
+
+        with mock.patch.object(sidecar, "_convert_bytes", _slow):
+            res = self.client.post(
+                "/convert",
+                files={"file": ("slow.pdf", b"%PDF-1.4", "application/pdf")},
+                data={"timeout_seconds": "0.2"},
+            )
+        self.assertEqual(res.status_code, 504)
+        self.assertEqual(res.json()["error"], "conversion timed out")
+
+    def test_xls_extension_allowed(self) -> None:
+        with mock.patch.object(sidecar, "_convert_bytes", return_value="sheet markdown"):
+            res = self.client.post(
+                "/convert",
+                files={"file": ("legacy.xls", b"\xd0\xcf\x11\xe0", "application/vnd.ms-excel")},
+            )
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json()["markdown"], "sheet markdown")
+
+    def test_xlsx_extension_allowed(self) -> None:
+        with mock.patch.object(sidecar, "_convert_bytes", return_value="xlsx markdown"):
+            res = self.client.post(
+                "/convert",
+                files={
+                    "file": (
+                        "sheet.xlsx",
+                        b"PK fake",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertIn("xlsx markdown", res.json()["markdown"])
+
+
 if __name__ == "__main__":
     unittest.main()

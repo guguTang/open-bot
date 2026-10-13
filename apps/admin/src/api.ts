@@ -572,6 +572,33 @@ export async function adminGetUsage(days = 30, orgId?: string): Promise<OrgUsage
   return res.json();
 }
 
+
+export type DocParseSettings = {
+  doc_parse_timeout_seconds: number | null;
+  default_timeout_seconds: number;
+  min_timeout_seconds: number;
+  max_timeout_seconds: number;
+  updated_at?: string;
+};
+
+export async function adminGetDocParse(): Promise<DocParseSettings> {
+  const res = await fetch(`${API_BASE}/v1/admin/org/doc-parse`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminPutDocParse(body: {
+  doc_parse_timeout_seconds: number | null;
+}): Promise<DocParseSettings> {
+  const res = await fetch(`${API_BASE}/v1/admin/org/doc-parse`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
 export async function adminGetFeatureFlags(): Promise<{ feature_flags_json: string }> {
   const res = await fetch(`${API_BASE}/v1/admin/feature-flags`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await readError(res));

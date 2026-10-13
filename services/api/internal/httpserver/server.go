@@ -116,6 +116,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/admin/platform/orgs/{id}/usage", s.requirePlatformAdmin(s.handlePlatformOrgUsage))
 	mux.HandleFunc("GET /v1/admin/feature-flags", s.requireOrgAdmin(s.handleAdminFeatureFlags))
 	mux.HandleFunc("PUT /v1/admin/feature-flags", s.requireOrgAdmin(s.handleAdminFeatureFlags))
+	mux.HandleFunc("GET /v1/admin/org/doc-parse", s.requireOrgAdmin(s.handleAdminGetDocParse))
+	mux.HandleFunc("PUT /v1/admin/org/doc-parse", s.requireOrgAdmin(s.handleAdminPutDocParse))
 	mux.HandleFunc("GET /v1/admin/audit-logs", s.requireOrgAdmin(s.handleAdminAuditLogs))
 
 	mux.HandleFunc("GET /v1/admin/users", s.requireOrgAdmin(s.handleAdminListUsers))
@@ -1357,14 +1359,25 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist the user's original text for the chat UI. Document extracts are
+	// composed only for the model/runtime (runtimeContent), never written back
+	// into the conversation message the UI renders.
 	storedContent := content
+	runtimeContent := content
 	if len(body.Attachments) > 0 {
-		built, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments)
+		var parseTimeoutOverride *int
+		if u, uerr := s.db.GetUserByID(uid); uerr == nil && u != nil && strings.TrimSpace(u.OrgID) != "" {
+			if settings, serr := s.db.GetOrgSettings(u.OrgID); serr == nil && settings != nil {
+				parseTimeoutOverride = settings.DocParseTimeoutSeconds
+			}
+		}
+		parseTimeout := resolveDocParseTimeout(parseTimeoutOverride)
+		built, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments, parseTimeout)
 		if berr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": berr.Error()})
 			return
 		}
-		storedContent = built
+		runtimeContent = built
 	}
 
 	var replyParent *db.Message
@@ -1609,7 +1622,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 				out, code, serr := s.postRuntimeJSON(runCtx, "/v1/runs/steer", map[string]any{
 					"conversation_id": conv.ID,
 					"request_id":      activeReq,
-					"text":            storedContent,
+					"text":            runtimeContent,
 					"mode":            mode,
 					"when_busy":       mode,
 				})
@@ -1694,7 +1707,6 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var history []runtimeMsg
-		runtimeContent := storedContent
 		agentNames := speakerNamesForHistory(s.db, msgs, agentID, agentName)
 		if threadRootID != "" {
 			// Quote injection is model-only and done by the runtime from
@@ -1706,6 +1718,11 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(body.HandoffContext) > 0 {
 			history = mergeHandoffContext(history, body.HandoffContext)
+		}
+		// Ephemeral doc extract: history still has the persisted raw user row;
+		// overlay so normalize_messages matches payload content for the model.
+		if runtimeContent != storedContent {
+			history = overlayLastUserContent(history, runtimeContent)
 		}
 		enabledSkills, _ := s.db.ListEnabledSkillNamesForAgent(uid, agentID)
 		if enabledSkills == nil {
@@ -1928,7 +1945,6 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 					var history []runtimeMsg
-					runtimeContent := storedContent
 					agentNames := speakerNamesForHistory(s.db, msgs, agentID, agentName)
 					if threadRootID != "" {
 						history = historyForThreadRuntime(msgs, threadRootID, agentID, agentNames)
@@ -1937,6 +1953,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 					}
 					if len(body.HandoffContext) > 0 {
 						history = mergeHandoffContext(history, body.HandoffContext)
+					}
+					if runtimeContent != storedContent {
+						history = overlayLastUserContent(history, runtimeContent)
 					}
 					enabledSkills, _ := s.db.ListEnabledSkillNamesForAgent(uid, agentID)
 					if enabledSkills == nil {

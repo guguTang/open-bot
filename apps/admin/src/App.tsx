@@ -14,6 +14,7 @@ import DecisionPage from "./pages/DecisionPage";
 import UsagePage from "./pages/UsagePage";
 import OrgsPage from "./pages/OrgsPage";
 import FlagsPage from "./pages/FlagsPage";
+import DocParsePage from "./pages/DocParsePage";
 import AuditPage from "./pages/AuditPage";
 import MemoryPage from "./pages/MemoryPage";
 import SkillsPage from "./pages/SkillsPage";
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="usage" element={<UsagePage />} />
         <Route path="orgs" element={<OrgsPage />} />
         <Route path="flags" element={<FlagsPage />} />
+        <Route path="doc-parse" element={<DocParsePage />} />
         <Route path="audit" element={<AuditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
