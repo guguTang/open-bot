@@ -27,7 +27,7 @@ log = logging.getLogger("markitdown-sidecar")
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
 # Bound the JSON body so the Go client can read a complete document.
 MAX_RETURN_BYTES = int(os.environ.get("MAX_RETURN_BYTES", str(200 * 1024)))
-DEFAULT_TIMEOUT_SECONDS = 8.0
+DEFAULT_TIMEOUT_SECONDS = 60.0
 MAX_CONCURRENT = 2
 
 ALLOWED_EXT = {".pdf", ".docx", ".xlsx", ".pptx"}

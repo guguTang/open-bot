@@ -19,7 +19,7 @@ Small HTTP wrapper around [Microsoft MarkItDown](https://github.com/microsoft/ma
 
 `char_count` is the full Unicode length before the response cap. `truncated` is true when `markdown` was cut to `MAX_RETURN_BYTES` (default 200 KiB). Empty `markdown` with HTTP 200 means conversion ran but no text was extracted (typical scanned PDF).
 
-Errors are JSON `{"error":"..."}`: `415` unsupported type, `413` over 20 MB, `422` conversion failed or empty file, `503` dependency missing or busy, `504` timed out (`CONVERT_TIMEOUT_SECONDS`, default 8).
+Errors are JSON `{"error":"..."}`: `415` unsupported type, `413` over 20 MB, `422` conversion failed or empty file, `503` dependency missing or busy, `504` timed out (`CONVERT_TIMEOUT_SECONDS`, default 60).
 
 Only `convert_stream` is called. The service does not accept URLs.
 

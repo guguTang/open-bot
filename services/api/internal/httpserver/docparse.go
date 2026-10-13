@@ -29,13 +29,15 @@ const (
 )
 
 var (
+	// PDF/Office convert can exceed ~10s on cold start or multi-page files;
+	// keep HTTP client Timeout slightly above the per-request context budget.
 	docParseClient = &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 65 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	docParseTimeout = 9 * time.Second
+	docParseTimeout = 60 * time.Second
 )
 
 func officeExt(ext string) bool {
