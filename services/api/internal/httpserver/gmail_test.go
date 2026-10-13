@@ -112,14 +112,13 @@ func TestParseGmailOAuthStateRejectsTamper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Flip last character of MAC.
-	b := []byte(state)
-	if b[len(b)-1] == 'A' {
-		b[len(b)-1] = 'B'
-	} else {
-		b[len(b)-1] = 'A'
+	// Corrupt MAC segment (avoid single-char base64 edge cases).
+	parts := strings.Split(state, ".")
+	if len(parts) != 2 {
+		t.Fatalf("state=%q", state)
 	}
-	if _, err := parseGmailOAuthState(string(b)); err == nil {
+	parts[1] = "AAAA" + parts[1]
+	if _, err := parseGmailOAuthState(parts[0]+"."+parts[1]); err == nil {
 		t.Fatal("expected tamper rejection")
 	}
 	if _, err := parseGmailOAuthState("not-a-state"); err == nil {
@@ -178,5 +177,21 @@ func TestMapGmailTokenExchangeError(t *testing.T) {
 		if got := mapGmailTokenExchangeError(errors.New(in)); got != want {
 			t.Fatalf("in=%q got=%q want=%q", in, got, want)
 		}
+	}
+}
+
+
+func TestGmailHasSendScope(t *testing.T) {
+	if !gmailHasSendScope("https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email") {
+		t.Fatal("expected send")
+	}
+	if gmailHasSendScope("https://www.googleapis.com/auth/userinfo.email openid") {
+		t.Fatal("email-only must not can_send")
+	}
+	if !gmailHasSendScope("https://mail.google.com/") {
+		t.Fatal("full mail scope should allow send")
+	}
+	if gmailHasSendScope("") {
+		t.Fatal("empty")
 	}
 }

@@ -29,10 +29,13 @@ const (
 	gmailTokenURL          = "https://oauth2.googleapis.com/token"
 	gmailUserInfoURL       = "https://www.googleapis.com/oauth2/v2/userinfo"
 	gmailSendURL           = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
-	gmailOAuthStateCookie  = "openbot_gmail_oauth_state"
-	gmailDefaultScopes     = "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email"
-	gmailOAuthStateTTL     = 10 * time.Minute
-	gmailConfirmTimeout    = 90 * time.Second
+	gmailOAuthStateCookie = "openbot_gmail_oauth_state"
+	gmailScopeSend        = "https://www.googleapis.com/auth/gmail.send"
+	gmailScopeEmail       = "https://www.googleapis.com/auth/userinfo.email"
+	// Space-separated scopes for the authorize request (must include gmail.send).
+	gmailDefaultScopes    = gmailScopeSend + " " + gmailScopeEmail
+	gmailOAuthStateTTL    = 10 * time.Minute
+	gmailConfirmTimeout   = 90 * time.Second
 )
 
 type gmailOAuthConfig struct {
@@ -68,6 +71,45 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+func gmailScopeList(scopes string) []string {
+	var out []string
+	for _, p := range strings.Fields(strings.ReplaceAll(scopes, ",", " ")) {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// gmailHasSendScope reports whether granted scopes can call users.messages.send.
+func gmailHasSendScope(scopes string) bool {
+	for _, s := range gmailScopeList(scopes) {
+		switch s {
+		case gmailScopeSend,
+			"https://www.googleapis.com/auth/gmail.compose",
+			"https://www.googleapis.com/auth/gmail.modify",
+			"https://mail.google.com/":
+			return true
+		}
+	}
+	return false
+}
+
+func gmailMissingSendScopeHint() string {
+	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「设置 → 连接应用」断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
+}
+
+func gmailInsufficientScopeError(msg string) bool {
+	m := strings.ToLower(msg)
+	return strings.Contains(msg, "授权范围不足") ||
+		strings.Contains(m, "insufficient") ||
+		strings.Contains(m, "insufficientpermissions") ||
+		strings.Contains(m, "access_denied") ||
+		strings.Contains(m, "access not configured") ||
+		strings.Contains(m, "request had insufficient authentication scopes")
 }
 
 // ---- signed OAuth state (user binding; no in-memory / cookie-only dependency) ----
@@ -154,6 +196,7 @@ func (s *Server) handleGmailStatus(w http.ResponseWriter, r *http.Request) {
 		"connected":        st.Connected,
 		"email":            st.Email,
 		"scopes":           st.Scopes,
+		"can_send":         st.Connected && gmailHasSendScope(st.Scopes),
 		"updated_at":       st.UpdatedAt,
 		"oauth_configured": cfg.Enabled(),
 	})
@@ -188,8 +231,10 @@ func (s *Server) handleGmailStart(w http.ResponseWriter, r *http.Request) {
 	q.Set("response_type", "code")
 	q.Set("scope", gmailDefaultScopes)
 	q.Set("access_type", "offline")
-	q.Set("prompt", "consent")
-	q.Set("include_granted_scopes", "true")
+	q.Set("prompt", "consent") // force refresh token + re-show scopes on reconnect
+	// false: avoid incremental merge that can succeed with only email/openid
+	// when gmail.send was unchecked (granular consent) or missing on GCP screen.
+	q.Set("include_granted_scopes", "false")
 	q.Set("state", state)
 	authURL := gmailAuthURL + "?" + q.Encode()
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -269,7 +314,14 @@ func (s *Server) handleGmailCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	scopes := strings.TrimSpace(tok.Scope)
 	if scopes == "" {
-		scopes = gmailDefaultScopes
+		// Do not assume gmail.send — empty scope from Google is a hard failure.
+		webFail("missing_gmail_send_scope")
+		return
+	}
+	if !gmailHasSendScope(scopes) {
+		log.Printf("gmail oauth: granted scopes lack send: %q", sanitizeGmailOAuthLog(scopes))
+		webFail("missing_gmail_send_scope")
+		return
 	}
 	if _, err := s.db.UpsertOAuthConnection(userID, gmailProvider, email, scopes, accessCT, refreshCT, expiry); err != nil {
 		webFail("store_failed")
@@ -309,12 +361,19 @@ func (s *Server) handleInternalGmailStatus(w http.ResponseWriter, r *http.Reques
 	}
 	cfg := loadGmailOAuthConfig()
 	st := s.db.OAuthConnectionStatus(uid, gmailProvider)
+	canSend := st.Connected && gmailHasSendScope(st.Scopes)
+	hint := gmailNotConnectedHint(st.Connected, cfg.Enabled())
+	if st.Connected && !canSend {
+		hint = gmailMissingSendScopeHint()
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":               true,
 		"connected":        st.Connected,
 		"email":            st.Email,
+		"scopes":           st.Scopes,
+		"can_send":         canSend,
 		"oauth_configured": cfg.Enabled(),
-		"hint":             gmailNotConnectedHint(st.Connected, cfg.Enabled()),
+		"hint":             hint,
 	})
 }
 
@@ -380,6 +439,13 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
+	if !gmailHasSendScope(conn.Scopes) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "connected": true, "can_send": false,
+			"error": gmailMissingSendScopeHint(),
+		})
+		return
+	}
 
 	cid := strings.TrimSpace(body.ConversationID)
 	preview := buildEmailPreview(subject, msgBody)
@@ -436,7 +502,11 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 		"subject":   subject,
 	}
 	if err != nil {
-		result["error"] = err.Error()
+		errMsg := err.Error()
+		if gmailInsufficientScopeError(errMsg) {
+			errMsg = gmailMissingSendScopeHint()
+		}
+		result["error"] = errMsg
 	} else {
 		result["message_id"] = msgID
 	}

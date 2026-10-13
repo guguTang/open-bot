@@ -45,25 +45,36 @@ export function IntegrationsSettingsTab({
               ，然后重启 API。详见 docs/Gmail连接与Web发信.md。
             </div>
           ) : connected ? (
-            <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div className="agent-name">已连接</div>
-                <div className="agent-desc">{gmail.email || "(未知邮箱)"}</div>
+            <>
+              <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <div className="agent-name">
+                    {gmail.can_send === false ? "已连接（发送权限不足）" : "已连接"}
+                  </div>
+                  <div className="agent-desc">{gmail.email || "(未知邮箱)"}</div>
+                </div>
+                <div className="llm-actions">
+                  <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+                    刷新
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={busy}
+                    onClick={() => void onDisconnectGmail()}
+                  >
+                    断开连接
+                  </button>
+                </div>
               </div>
-              <div className="llm-actions">
-                <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
-                  刷新
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  disabled={busy}
-                  onClick={() => void onDisconnectGmail()}
-                >
-                  断开连接
-                </button>
-              </div>
-            </div>
+              {gmail.can_send === false ? (
+                <div className="settings-status">
+                  当前授权缺少 Gmail 发送范围。请先「断开连接」，再「连接 Gmail」，并在 Google
+                  授权页勾选发送邮件权限；同时确认 Cloud 控制台 OAuth
+                  同意屏幕已添加 <code>gmail.send</code>。
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="llm-actions">
               <button

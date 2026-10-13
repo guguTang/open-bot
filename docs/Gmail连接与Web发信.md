@@ -36,13 +36,18 @@ Out of scope（除非极简）：Outlook、应用市场、入站邮件监听、G
 
 | Scope | 用途 |
 |---|---|
-| `https://www.googleapis.com/auth/gmail.send` | 代发 |
+| `https://www.googleapis.com/auth/gmail.send` | **必需** — `users.messages.send` 代发 |
 | `https://www.googleapis.com/auth/userinfo.email` | 展示已连接邮箱 |
 
-后续若要读信 / 草稿箱再扩 `gmail.readonly` / `gmail.compose`（需重新同意）。
+授权成功后以 Google token 响应里的 `scope` 为准；若缺少 `gmail.send`（常见于同意屏幕未添加该敏感范围，或授权页取消勾选），连接会被拒绝（`missing_gmail_send_scope`），已连接但缺范围时 Settings 显示「发送权限不足」，`gmail_send` 会明确要求 **断开 → 重新连接**。
 
-应用类型：Google Cloud **Web application** OAuth client。  
-Redirect URI：`{API_PUBLIC}/v1/integrations/gmail/callback`（本地默认 `http://127.0.0.1:18080/v1/integrations/gmail/callback`）。
+Google Cloud 配置要点：
+
+1. OAuth 同意屏幕 → 添加范围：至少 `gmail.send` + `userinfo.email`（测试用户模式即可）
+2. 凭据类型 **Web application**；Redirect URI：`{API_PUBLIC}/v1/integrations/gmail/callback`（本地默认 `http://127.0.0.1:18080/v1/integrations/gmail/callback`）
+3. 改过范围后：Settings → 断开连接 → 再连接 Gmail，并在授权页保留「发送邮件」勾选（`prompt=consent`）
+
+后续若要读信 / 草稿箱再扩 `gmail.readonly` / `gmail.compose`（需重新同意）。
 
 ---
 
