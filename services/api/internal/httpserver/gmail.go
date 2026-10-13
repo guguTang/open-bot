@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -211,8 +212,10 @@ func (s *Server) handleGmailCallback(w http.ResponseWriter, r *http.Request) {
 		webFail(errParam)
 		return
 	}
-	code := strings.TrimSpace(q.Get("code"))
-	state := strings.TrimSpace(q.Get("state"))
+	// PathUnescape keeps literal '+' (Query().Get turns '+' into space and can
+	// corrupt Google auth codes when the IdP does not percent-encode them).
+	code := strings.TrimSpace(gmailQueryParam(r.URL.RawQuery, "code"))
+	state := strings.TrimSpace(gmailQueryParam(r.URL.RawQuery, "state"))
 	if code == "" || state == "" {
 		webFail("missing_code_or_state")
 		return
@@ -232,7 +235,8 @@ func (s *Server) handleGmailCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	tok, err := exchangeGmailCode(r.Context(), cfg, code)
 	if err != nil {
-		webFail("token_exchange_failed")
+		log.Printf("gmail oauth: token exchange failed: %v", sanitizeGmailOAuthLog(err.Error()))
+		webFail(mapGmailTokenExchangeError(err))
 		return
 	}
 	email, err := fetchGmailUserEmail(r.Context(), tok.AccessToken)
@@ -551,15 +555,22 @@ func refreshGmailToken(ctx context.Context, cfg gmailOAuthConfig, refreshToken s
 	return postGmailToken(ctx, form)
 }
 
+// gmailHTTPClient uses ProxyFromEnvironment (HTTP_PROXY/HTTPS_PROXY). Go does not
+// read macOS System Settings proxies; without HTTPS_PROXY, calls to
+// oauth2.googleapis.com often time out behind Clash/Surge/V2Ray.
+func gmailHTTPClient() *http.Client {
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
 func postGmailToken(ctx context.Context, form url.Values) (*gmailTokenResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, gmailTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := http.DefaultClient.Do(req)
+	res, err := gmailHTTPClient().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("token network: %w", err)
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -580,15 +591,70 @@ func postGmailToken(ctx context.Context, form url.Values) (*gmailTokenResponse, 
 	return &tok, nil
 }
 
+// gmailQueryParam reads one query value with PathUnescape (preserves '+').
+func gmailQueryParam(rawQuery, key string) string {
+	if rawQuery == "" || key == "" {
+		return ""
+	}
+	prefix := key + "="
+	for _, part := range strings.Split(rawQuery, "&") {
+		if part == key {
+			return ""
+		}
+		if !strings.HasPrefix(part, prefix) {
+			continue
+		}
+		val := strings.TrimPrefix(part, prefix)
+		dec, err := url.PathUnescape(val)
+		if err != nil {
+			return val
+		}
+		return dec
+	}
+	return ""
+}
+
+func mapGmailTokenExchangeError(err error) string {
+	if err == nil {
+		return "token_exchange_failed"
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "timeout") || strings.Contains(msg, "deadline exceeded") ||
+		strings.Contains(msg, "i/o timeout") || strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "token network"):
+		return "token_exchange_network"
+	case strings.Contains(msg, "redirect_uri_mismatch"):
+		return "redirect_uri_mismatch"
+	case strings.Contains(msg, "invalid_client"):
+		return "invalid_client"
+	case strings.Contains(msg, "invalid_grant"):
+		return "invalid_grant"
+	case strings.Contains(msg, "unauthorized_client"):
+		return "unauthorized_client"
+	default:
+		return "token_exchange_failed"
+	}
+}
+
+func sanitizeGmailOAuthLog(s string) string {
+	// Never log client secrets; truncate long blobs.
+	s = strings.TrimSpace(s)
+	if len(s) > 300 {
+		s = s[:300] + "…"
+	}
+	return s
+}
+
 func fetchGmailUserEmail(ctx context.Context, accessToken string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, gmailUserInfoURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	res, err := http.DefaultClient.Do(req)
+	res, err := gmailHTTPClient().Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("userinfo network: %w", err)
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -661,7 +727,7 @@ func gmailAPISend(ctx context.Context, accessToken, rawMIME string) (string, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
-	res, err := http.DefaultClient.Do(req)
+	res, err := gmailHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}

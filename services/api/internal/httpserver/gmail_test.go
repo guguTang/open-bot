@@ -1,7 +1,9 @@
 package httpserver
 
 import (
+	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -142,5 +144,39 @@ func TestVerifyGmailOAuthStateCookie(t *testing.T) {
 	req2.AddCookie(&http.Cookie{Name: gmailOAuthStateCookie, Value: "other"})
 	if err := verifyGmailOAuthStateCookie(req2, state); err == nil {
 		t.Fatal("expected mismatch error")
+	}
+}
+
+
+func TestGmailQueryParamPreservesPlus(t *testing.T) {
+	raw := "code=4/0Axx+yy/zz&state=ab.cd"
+	if got := gmailQueryParam(raw, "code"); got != "4/0Axx+yy/zz" {
+		t.Fatalf("code=%q", got)
+	}
+	// %2B should decode to +
+	raw2 := "code=4/0Axx%2Byy&state=ab.cd"
+	if got := gmailQueryParam(raw2, "code"); got != "4/0Axx+yy" {
+		t.Fatalf("code=%q", got)
+	}
+	// Contrast: url.Query turns bare + into space
+	u, _ := url.Parse("http://x/?" + raw)
+	if u.Query().Get("code") == "4/0Axx+yy/zz" {
+		t.Fatal("expected std Query to corrupt +, otherwise test assumption wrong")
+	}
+}
+
+func TestMapGmailTokenExchangeError(t *testing.T) {
+	cases := map[string]string{
+		"token network: dial tcp: i/o timeout":        "token_exchange_network",
+		"Post https://oauth2.googleapis.com/token: context deadline exceeded": "token_exchange_network",
+		"redirect_uri_mismatch":                      "redirect_uri_mismatch",
+		"invalid_client: Unauthorized":               "invalid_client",
+		"invalid_grant: Bad Request":                 "invalid_grant",
+		"something else":                             "token_exchange_failed",
+	}
+	for in, want := range cases {
+		if got := mapGmailTokenExchangeError(errors.New(in)); got != want {
+			t.Fatalf("in=%q got=%q want=%q", in, got, want)
+		}
 	}
 }
