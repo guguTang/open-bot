@@ -24,10 +24,11 @@ export function useIntegrationsSettings() {
 
   const connectGmail = useCallback(async () => {
     setBusy(true);
-    setMsg("");
+    setMsg("正在跳转 Google 授权…");
     try {
       const { authorize_url } = await startGmailConnect();
       if (!authorize_url) throw new Error("未返回授权地址");
+      // Keep busy + msg until navigation; do not clear on success.
       window.location.href = authorize_url;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));

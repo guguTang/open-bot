@@ -66,8 +66,14 @@ export function IntegrationsSettingsTab({
             </div>
           ) : (
             <div className="llm-actions">
-              <button type="button" className="primary" disabled={busy} onClick={() => void onConnectGmail()}>
-                连接 Gmail
+              <button
+                type="button"
+                className="primary"
+                disabled={busy}
+                aria-busy={busy}
+                onClick={() => void onConnectGmail()}
+              >
+                {busy ? "连接中…" : "连接 Gmail"}
               </button>
               <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
                 刷新
