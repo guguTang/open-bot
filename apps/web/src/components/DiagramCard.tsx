@@ -7,6 +7,7 @@
  * States: pending (stream, fence unclosed) → rendering → ok | error. The renderer is only
  * called once the fence is closed (or the stream ended); see lib/mermaidFence.ts.
  */
+import { clamp } from "es-toolkit";
 import { ChevronDown, Download, Maximize2, Minus, Plus, X } from "lucide-react";
 import {
   useCallback,
@@ -26,6 +27,35 @@ import { useAppTheme } from "./useAppTheme";
 import { HtmlDiagramCard } from "./HtmlDiagramCard";
 import { ImageDiagramCard } from "./ImageDiagramCard";
 import { DiagramCardFrame, type DiagramKind, type DiagramOverflowItem } from "./DiagramCardFrame";
+import {
+  diagramActionsClass,
+  diagramBodyPendingClass,
+  diagramBodyRenderClass,
+  diagramBodyClass,
+  diagramBtnDownloadClass,
+  diagramBtnIconClass,
+  diagramBtnTextClass,
+  diagramCanvasClass,
+  diagramFsBackdropClass,
+  diagramFsBodyClass,
+  diagramFsShellClass,
+  diagramFsToolbarClass,
+  diagramMenuClass,
+  diagramMenuItemClass,
+  diagramMenuWrapClass,
+  diagramPendingDotClass,
+  diagramPendingLabelClass,
+  diagramPillClass,
+  diagramSourceClass,
+  diagramSourceFsClass,
+  diagramSourceTailClass,
+  diagramWarningClass,
+  diagramZoomBadgeClass,
+  diagramZoomFitClass,
+  diagramZoomGroupClass,
+  diagramZoomStepClass,
+  diagramZoomValueClass,
+} from "./diagram/diagramUi";
 
 export type { DiagramKind, DiagramOverflowItem } from "./DiagramCardFrame";
 export { DiagramCardFrame } from "./DiagramCardFrame";
@@ -70,7 +100,7 @@ function useDiagramZoom(
     (next: number | ((s: number) => number), at?: { clientX: number; clientY: number }) => {
       const prev = scaleRef.current;
       const raw = typeof next === "function" ? next(prev) : next;
-      const s = Math.round(Math.min(max, Math.max(min, raw)) * 100) / 100;
+      const s = Math.round(clamp(raw, min, max) * 100) / 100;
       if (s === prev) return;
       if (el) {
         const rect = el.getBoundingClientRect();
@@ -144,12 +174,14 @@ function DiagramSvg({
   height,
   scale,
   animate,
+  fullscreen,
 }: {
   svg: string;
   width: number;
   height: number;
   scale: number;
   animate?: boolean;
+  fullscreen?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const html = useMemo(() => ({ __html: svg }), [svg]);
@@ -166,7 +198,7 @@ function DiagramSvg({
   return (
     <div
       ref={hostRef}
-      className={`diagram-canvas${animate ? " is-enter" : ""}`}
+      className={diagramCanvasClass({ enter: animate, fullscreen })}
       // SVG comes from mermaid with securityLevel "strict" (DOMPurify-sanitized labels).
       dangerouslySetInnerHTML={html}
     />
@@ -211,10 +243,10 @@ function DownloadMenu({
   }, [open]);
 
   return (
-    <div className="diagram-menu-wrap" ref={wrapRef}>
+    <div className={diagramMenuWrapClass} ref={wrapRef}>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon diagram-btn-download"
+        className={diagramBtnDownloadClass}
         disabled={disabled || busy}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -226,13 +258,13 @@ function DownloadMenu({
         <IconCaret />
       </button>
       {open ? (
-        <div className="diagram-menu" role="menu">
+        <div className={diagramMenuClass} role="menu">
           {(["svg", "png"] as const).map((fmt) => (
             <button
               key={fmt}
               type="button"
               role="menuitem"
-              className="diagram-menu-item"
+              className={diagramMenuItemClass}
               onClick={() => {
                 setOpen(false);
                 onPick(fmt);
@@ -315,18 +347,18 @@ function DiagramFullscreen({
 
   return createPortal(
     <div
-      className="diagram-fs-backdrop"
+      className={diagramFsBackdropClass}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="diagram-fs" role="dialog" aria-modal="true" aria-label="Mermaid 图表">
-        <div className="diagram-toolbar diagram-fs-toolbar">
-          <span className="diagram-pill">Mermaid</span>
-          <div className="diagram-zoom" aria-label="缩放">
+      <div className={diagramFsShellClass} role="dialog" aria-modal="true" aria-label="Mermaid 图表">
+        <div className={diagramFsToolbarClass}>
+          <span className={diagramPillClass}>Mermaid</span>
+          <div className={diagramZoomGroupClass} aria-label="缩放">
             <button
               type="button"
-              className="diagram-btn diagram-btn-icon diagram-zoom-step"
+              className={diagramZoomStepClass}
               aria-label="缩小"
               title="缩小"
               disabled={showSource}
@@ -336,7 +368,7 @@ function DiagramFullscreen({
             </button>
             <button
               type="button"
-              className="diagram-btn diagram-btn-text diagram-zoom-value"
+              className={diagramZoomValueClass}
               title="重置为 100%"
               disabled={showSource}
               onClick={() => setScale(1)}
@@ -345,7 +377,7 @@ function DiagramFullscreen({
             </button>
             <button
               type="button"
-              className="diagram-btn diagram-btn-icon diagram-zoom-step"
+              className={diagramZoomStepClass}
               aria-label="放大"
               title="放大"
               disabled={showSource}
@@ -355,7 +387,7 @@ function DiagramFullscreen({
             </button>
             <button
               type="button"
-              className="diagram-btn diagram-btn-text diagram-zoom-fit"
+              className={diagramZoomFitClass}
               title="适应窗口"
               disabled={showSource}
               onClick={() => setScale(fitScale(false))}
@@ -363,24 +395,24 @@ function DiagramFullscreen({
               适应
             </button>
           </div>
-          <div className="diagram-actions">
+          <div className={diagramActionsClass}>
             <button
               type="button"
-              className="diagram-btn diagram-btn-text"
+              className={diagramBtnTextClass}
               aria-pressed={showSource}
               disabled={!canToggle}
               onClick={onToggle}
             >
               {showSource ? "图表" : "源码"}
             </button>
-            <button type="button" className="diagram-btn diagram-btn-text" onClick={onCopy}>
+            <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
               复制
             </button>
             <DownloadMenu disabled={false} busy={downloading} onPick={onDownload} />
             <button
               ref={closeRef}
               type="button"
-              className="diagram-btn diagram-btn-icon"
+              className={diagramBtnIconClass}
               aria-label="关闭"
               title="关闭 (Esc)"
               onClick={onClose}
@@ -391,13 +423,19 @@ function DiagramFullscreen({
         </div>
         <div
           ref={setBodyEl}
-          className={`diagram-fs-body${showSource ? " is-source" : ""}`}
+          className={diagramFsBodyClass()}
           onDoubleClick={showSource ? undefined : () => setScale(1)}
         >
           {showSource ? (
-            <pre className="diagram-source">{source}</pre>
+            <pre className={diagramSourceFsClass}>{source}</pre>
           ) : (
-            <DiagramSvg svg={result.svg} width={result.width} height={result.height} scale={scale} />
+            <DiagramSvg
+              svg={result.svg}
+              width={result.width}
+              height={result.height}
+              scale={scale}
+              fullscreen
+            />
           )}
         </div>
       </div>
@@ -547,7 +585,7 @@ function MermaidDiagramCard({
     <>
       <button
         type="button"
-        className="diagram-btn diagram-btn-text"
+        className={diagramBtnTextClass}
         aria-pressed={viewSource}
         disabled={!ok}
         title={failed ? "图表语法有误" : undefined}
@@ -555,13 +593,13 @@ function MermaidDiagramCard({
       >
         {viewSource ? "图表" : "源码"}
       </button>
-      <button type="button" className="diagram-btn diagram-btn-text" onClick={onCopy}>
+      <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
         复制
       </button>
       <DownloadMenu disabled={!ok} busy={downloading} onPick={onDownload} />
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-label="全屏"
         title={ok ? "全屏" : "图表就绪后可全屏"}
         disabled={!ok}
@@ -604,7 +642,7 @@ function MermaidDiagramCard({
     ok && !viewSource && scale !== 1 ? (
       <button
         type="button"
-        className="diagram-zoom-badge"
+        className={diagramZoomBadgeClass}
         title="重置为 100%"
         onClick={() => setScale(1)}
       >
@@ -615,32 +653,32 @@ function MermaidDiagramCard({
   let body: ReactNode;
   if (loading) {
     body = (
-      <div className="diagram-body diagram-body-pending" aria-busy="true">
-        <div className="diagram-pending-label">
-          <span className="diagram-pending-dot" aria-hidden="true" />
+      <div className={diagramBodyPendingClass} aria-busy="true">
+        <div className={diagramPendingLabelClass}>
+          <span className={diagramPendingDotClass} aria-hidden="true" />
           {pending ? "生成中…" : "渲染中…"}
         </div>
-        <pre ref={tailRef} className="diagram-source diagram-source-tail">
+        <pre ref={tailRef} className={diagramSourceTailClass}>
           {source}
         </pre>
       </div>
     );
   } else if (viewSource) {
     body = (
-      <div className="diagram-body diagram-body-source">
+      <div className={diagramBodyClass}>
         {failed ? (
-          <div className="diagram-warning" role="status">
+          <div className={diagramWarningClass} role="status">
             {failed.reason === "load" ? "图表渲染器加载失败，已显示源码" : "图表语法有误，已显示源码"}
           </div>
         ) : null}
-        <pre className="diagram-source">{source}</pre>
+        <pre className={diagramSourceClass}>{source}</pre>
       </div>
     );
   } else {
     body = (
       <div
         ref={setBodyEl}
-        className="diagram-body diagram-body-render"
+        className={diagramBodyRenderClass}
         onDoubleClick={() => setScale(1)}
       >
         <DiagramSvg svg={ok!.svg} width={ok!.width} height={ok!.height} scale={scale} animate={animate} />

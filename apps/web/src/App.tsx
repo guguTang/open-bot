@@ -25,8 +25,7 @@ import { patchShell } from "./stores/shell";
 import { patchWorkspace } from "./stores/workspace";
 
 export default function App() {
-  const auth = useAuthSession();
-  const { user, token, authed, onLogout: logoutSession } = auth;
+  const { user, token, authed, applySession, onLogout: logoutSession } = useAuthSession();
 
   const chatBridgeRef = useRef<AgentsChannelsChatBridge | null>(null);
   const sendUserTextRef = useRef<SendUserTextFn | null>(null);
@@ -335,7 +334,7 @@ export default function App() {
   ]);
 
   if (!authed) {
-    return <AuthPage auth={auth} />;
+    return <AuthPage onAuthenticated={applySession} />;
   }
 
   return (

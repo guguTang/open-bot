@@ -1,9 +1,9 @@
+import { cn } from "@/lib/utils";
 import { RobotHead } from "robot-heads";
 import {
   avatarSeed01,
   deriveScreenColor,
   deriveTrimColor,
-  normalizePresenceStatus,
   presenceToRobotState,
   resolveAvatarColor,
   resolveAvatarShape,
@@ -30,11 +30,6 @@ type Props = {
   title?: string;
 };
 
-/** Unknown status → working (product rule); empty → idle. */
-function normalizeStatus(status?: string | null): BotPresenceStatus {
-  return normalizePresenceStatus(status);
-}
-
 export function AgentAvatar({
   id,
   name,
@@ -51,7 +46,6 @@ export function AgentAvatar({
   const seedKey = id || name;
   const bg = resolveAvatarColor(seedKey, color);
   const sh = resolveAvatarShape(seedKey, shape);
-  const st = normalizeStatus(status);
   const robotState = presenceToRobotState(status, searchingHint);
   const clickable = Boolean(onClick);
   const seed = avatarSeed01(seedKey);
@@ -77,7 +71,7 @@ export function AgentAvatar({
       />
       {online ? (
         <span
-          className="agent-avatar-online-dot"
+          className="pointer-events-none absolute -bottom-px -right-px z-[2] box-border rounded-full border-[1.5px] border-[var(--panel,#fff)] bg-[#22c55e]"
           style={{ width: dotPx, height: dotPx }}
           aria-hidden
         />
@@ -85,14 +79,13 @@ export function AgentAvatar({
     </>
   );
 
-  const wrapClass = [
-    "agent-avatar-wrap",
-    `status-${st}`,
-    clickable ? "clickable" : "",
+  const wrapClass = cn(
+    "agent-avatar-wrap relative inline-flex shrink-0 items-center justify-center overflow-visible border-0 bg-transparent p-0 leading-none",
+    clickable ? "cursor-pointer" : "cursor-default",
+    "disabled:cursor-default",
+    "[&>span]:block [&>span]:leading-none",
     className,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  );
   // Slightly taller than size so hops/antenna glow are less clipped by tight parents;
   // RobotHead's layout box stays `size`×`size` inside.
   const wrapStyle = { width: size, height: size };

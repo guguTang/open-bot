@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { debounce } from "es-toolkit";
 import { Button, Card, Chip, Typography } from "heroui-native";
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -80,7 +81,7 @@ export default function LlmSettingsScreen(): JSX.Element {
       return;
     }
     const seq = ++modelsReqSeq.current;
-    const timer = setTimeout(() => {
+    const run = debounce(() => {
       setModelsLoading(true);
       setModelsError("");
       void api
@@ -108,7 +109,8 @@ export default function LlmSettingsScreen(): JSX.Element {
           if (seq === modelsReqSeq.current) setModelsLoading(false);
         });
     }, 450);
-    return () => clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [form.base_url, form.api_key, editingId, connections]);
 
   // 填写 Base URL + 密钥 + 模型后自动检测 prompt cache 是否支持。
@@ -124,7 +126,7 @@ export default function LlmSettingsScreen(): JSX.Element {
       return;
     }
     const seq = ++cacheReqSeq.current;
-    const timer = setTimeout(() => {
+    const run = debounce(() => {
       setCacheProbing(true);
       void api
         .probeLLMPromptCache({
@@ -145,7 +147,8 @@ export default function LlmSettingsScreen(): JSX.Element {
           if (seq === cacheReqSeq.current) setCacheProbing(false);
         });
     }, 450);
-    return () => clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [form.base_url, form.api_key, form.model, editingId, connections]);
 
   /**

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { uniq } from "es-toolkit";
 import { Button, Drawer, Popconfirm, Switch, Tabs, Typography, message } from "antd";
 import {
   ModalForm,
@@ -247,7 +248,7 @@ export default function UsersPage() {
                           const failed = res.failed || [];
                           const deleted = res.deleted || [];
                           if (failed.length) {
-                            const detail = [...new Set(failed.map((f) => f.error))].join("；");
+                            const detail = uniq(failed.map((f) => f.error)).join("；");
                             if (deleted.length) {
                               message.warning(
                                 `已删除 ${deleted.length} 个用户（含数据清空），${failed.length} 个未删除：${detail}`,

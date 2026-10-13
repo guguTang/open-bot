@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { debounce } from "es-toolkit";
 import {
   createLLMConnection,
   formatLLMPromptCacheProbe,
@@ -152,7 +153,7 @@ export function useLlmSettings() {
       return;
     }
     const seq = ++llmModelsReqSeq.current;
-    const timer = window.setTimeout(() => {
+    const run = debounce(() => {
       setLLMModelsLoading(true);
       setLLMModelsError("");
       void listLLMModels({
@@ -179,7 +180,8 @@ export function useLlmSettings() {
           if (seq === llmModelsReqSeq.current) setLLMModelsLoading(false);
         });
     }, 450);
-    return () => window.clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [llmForm.base_url, llmForm.api_key, editingId, llms]);
 
   useEffect(() => {
@@ -194,7 +196,7 @@ export function useLlmSettings() {
       return;
     }
     const seq = ++llmCacheReqSeq.current;
-    const timer = window.setTimeout(() => {
+    const run = debounce(() => {
       setLLMCacheProbing(true);
       void probeLLMPromptCache({
         base_url: base,
@@ -214,7 +216,8 @@ export function useLlmSettings() {
           if (seq === llmCacheReqSeq.current) setLLMCacheProbing(false);
         });
     }, 450);
-    return () => window.clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [llmForm.base_url, llmForm.api_key, llmForm.model, editingId, llms]);
 
   return {

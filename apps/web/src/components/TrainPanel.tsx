@@ -150,7 +150,7 @@ export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
           ))}
         </div>
 
-        {err ? <div className="new-chat-error">{err}</div> : null}
+        {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
 
         {edit ? (
           <form className="train-edit" onSubmit={(e) => void saveEdit(e)}>

@@ -2,6 +2,7 @@
  * Shared diagram-card shell (pill + toolbar + body). Used by Mermaid / HTML / 图片 cards.
  * P1-A: when the card is too narrow for pill + action buttons, collapse actions into a ⋯ menu.
  */
+import { cn } from "@/lib/utils";
 import { Ellipsis } from "lucide-react";
 import {
   useEffect,
@@ -10,6 +11,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  diagramActionsClass,
+  diagramActionsInlineClass,
+  diagramActionsMoreClass,
+  diagramBtnIconClass,
+  diagramCardClass,
+  diagramMenuItemClass,
+  diagramMenuWrapClass,
+  diagramOverflowMenuClass,
+  diagramPillClass,
+  diagramToolbarClass,
+  diagramToolbarExtraClass,
+} from "./diagram/diagramUi";
 
 export type DiagramKind = "mermaid" | "html" | "image";
 
@@ -55,10 +69,10 @@ function DiagramOverflowMenu({ items }: { items: DiagramOverflowItem[] }) {
   }, [open]);
 
   return (
-    <div className="diagram-menu-wrap" ref={wrapRef}>
+    <div className={diagramMenuWrapClass} ref={wrapRef}>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="更多"
@@ -68,13 +82,13 @@ function DiagramOverflowMenu({ items }: { items: DiagramOverflowItem[] }) {
         <IconMore />
       </button>
       {open ? (
-        <div className="diagram-menu diagram-overflow-menu" role="menu">
+        <div className={diagramOverflowMenuClass} role="menu">
           {items.map((item) => (
             <button
               key={item.key}
               type="button"
               role="menuitem"
-              className="diagram-menu-item"
+              className={diagramMenuItemClass}
               disabled={item.disabled}
               onClick={() => {
                 setOpen(false);
@@ -128,8 +142,8 @@ export function DiagramCardFrame({
       if (inline && inline.offsetWidth > 0) {
         inlineWidthRef.current = inline.offsetWidth;
       }
-      const pill = toolbar.querySelector(".diagram-pill") as HTMLElement | null;
-      const extraEl = toolbar.querySelector(".diagram-toolbar-extra") as HTMLElement | null;
+      const pill = toolbar.querySelector("[data-diagram-pill]") as HTMLElement | null;
+      const extraEl = toolbar.querySelector("[data-diagram-toolbar-extra]") as HTMLElement | null;
       const pad = 18;
       const gap = 6;
       const chrome =
@@ -157,22 +171,30 @@ export function DiagramCardFrame({
   return (
     <div
       ref={cardRef}
-      className={`diagram-card${pending ? " is-pending" : ""}${collapsed ? " is-toolbar-collapsed" : ""}`}
+      data-diagram-card
       data-kind={kind}
+      data-pending={pending ? "" : undefined}
+      className={cn(diagramCardClass, pending && "is-pending")}
     >
-      <div className="diagram-toolbar" ref={toolbarRef}>
-        <span className="diagram-pill">{KIND_LABEL[kind]}</span>
-        {extra ? <div className="diagram-toolbar-extra">{extra}</div> : null}
-        <div className="diagram-actions">
+      <div className={diagramToolbarClass} ref={toolbarRef}>
+        <span className={diagramPillClass} data-diagram-pill>
+          {KIND_LABEL[kind]}
+        </span>
+        {extra ? (
+          <div className={diagramToolbarExtraClass} data-diagram-toolbar-extra>
+            {extra}
+          </div>
+        ) : null}
+        <div className={diagramActionsClass}>
           <div
-            className="diagram-actions-inline"
+            className={diagramActionsInlineClass(collapsed)}
             ref={inlineRef}
             aria-hidden={collapsed}
           >
             {actions}
           </div>
           {canCollapse ? (
-            <div className="diagram-actions-more" hidden={!collapsed}>
+            <div className={diagramActionsMoreClass(collapsed)}>
               <DiagramOverflowMenu items={overflowItems!} />
             </div>
           ) : null}

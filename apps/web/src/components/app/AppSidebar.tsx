@@ -4,7 +4,19 @@ import type { Agent, Channel } from "../../api";
 import { toolNameLooksLikeSearch } from "../avatarColor";
 import { AccountMenu } from "../AccountMenu";
 import { AgentAvatar } from "../AgentAvatar";
-import { useIsTouchUi, useSheetFormUi } from "../useIsTouchUi";
+import { useIsNarrowLayout, useIsTouchUi, useSheetFormUi } from "../useIsTouchUi";
+import {
+  channelMemberStackClass,
+  runBusyDotClass,
+  sidebarAsideClass,
+  sidebarConvActionClass,
+  sidebarConvRowClass,
+  sidebarIconBtnClass,
+  sidebarListClass,
+  sidebarSearchFieldClass,
+  sidebarSectionFoldHeadClass,
+  sidebarSectionLabelClass,
+} from "./sidebarUi";
 import { useConvLongPressHandlers } from "../../hooks/useConvLongPress";
 import { useChatStore } from "../../stores/chat";
 import { botIsOnline, usePresenceStore } from "../../stores/presence";
@@ -12,6 +24,7 @@ import { sessionActions } from "../../stores/sessionActions";
 import { useShellStore } from "../../stores/shell";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { agentNameMap, channelMemberProfiles, resolveActiveAgent } from "../../lib/app/workspaceDerived";
+import { cn } from "@/lib/utils";
 import { accountInitials } from "./accountInitials";
 
 export type ConvLongPressTarget =
@@ -50,6 +63,9 @@ function AppSidebarInner() {
 
   const sheetForm = useSheetFormUi();
   const touchUi = useIsTouchUi();
+  const isNarrowLayout = useIsNarrowLayout();
+  const mobileView = useShellStore((s) => s.mobileView);
+  const touchOrSheet = touchUi || sheetForm;
   const { beginConvLongPress, moveConvLongPress, endConvLongPress } = useConvLongPressHandlers(touchUi);
 
   const actions = sessionActions();
@@ -81,23 +97,41 @@ function AppSidebarInner() {
   const busyKeySet = useMemo(() => new Set(busySelectionKeys), [busySelectionKeys]);
 
   return (
-    <aside className="sidebar">
+    <aside
+      className={sidebarAsideClass({
+        sheetForm,
+        hideOnMobileChat: isNarrowLayout && mobileView === "chat",
+      })}
+    >
       {sheetForm ? (
-        <div className="sidebar-shell-head">
-          <div className="sidebar-shell-topbar">
+        <div className="shrink-0 px-3 pb-1 pt-[max(16px,calc(var(--safe-top,0px)+12px))]">
+          <div className="flex min-h-11 items-center justify-between gap-2">
             <button
               type="button"
-              className="sidebar-shell-user"
+              className="grid size-11 min-h-11 min-w-11 cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0 [-webkit-tap-highlight-color:transparent] focus:outline-none active:brightness-[0.96]"
               title={user?.username || "账户"}
               aria-label="打开设置"
               onClick={() => void sessionActions().openSettings("general")}
             >
-              <span className="sidebar-shell-user-avatar" aria-hidden>
+              <span
+                className="grid size-9 place-items-center rounded-full bg-[#e5e7eb] text-xs font-semibold text-[#374151]"
+                aria-hidden
+              >
                 {accountInitials(user?.username || "")}
               </span>
             </button>
-            <div className="sidebar-shell-top-actions">
-              <label className="sidebar-shell-search-btn" title="搜索">
+            <div className="flex items-center gap-1.5">
+              <label
+                className={cn(
+                  "relative grid size-11 min-h-11 min-w-11 cursor-pointer place-items-center overflow-hidden rounded-full bg-[var(--bg-soft)] text-[var(--muted)]",
+                  "box-border focus-within:flex focus-within:w-[min(180px,48vw)] focus-within:min-w-11 focus-within:items-center focus-within:justify-start focus-within:gap-1.5 focus-within:rounded-[22px] focus-within:px-3",
+                  "[data-theme=dark]:bg-white/10 active:brightness-[0.96] [-webkit-tap-highlight-color:transparent]",
+                  "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:opacity-70",
+                  "[&_input]:absolute [&_input]:inset-0 [&_input]:size-full [&_input]:cursor-pointer [&_input]:border-0 [&_input]:bg-transparent [&_input]:opacity-0 [&_input]:text-base",
+                  "focus-within:[&_input]:static focus-within:[&_input]:min-w-0 focus-within:[&_input]:flex-1 focus-within:[&_input]:cursor-text focus-within:[&_input]:opacity-100 focus-within:[&_input]:text-[var(--text)] focus-within:[&_input]:outline-none",
+                )}
+                title="搜索"
+              >
                 <Search size={18} strokeWidth={2} aria-hidden />
                 <input
                   value={convSearch}
@@ -109,7 +143,7 @@ function AppSidebarInner() {
               <button
                 ref={actions.newChatBtnRef}
                 type="button"
-                className={`icon-btn sidebar-shell-plus${createSheetOpen || showNewChat ? " active-plus" : ""}`}
+                className={sidebarIconBtnClass({ sheetPlus: true })}
                 title="新建"
                 aria-haspopup="dialog"
                 aria-expanded={createSheetOpen || showNewChat}
@@ -119,8 +153,8 @@ function AppSidebarInner() {
               </button>
             </div>
           </div>
-          <div className="sidebar-identity">
-            <div className="sidebar-identity-avatar">
+          <div className="flex flex-col items-center gap-1.5 px-2 pb-4 pt-3 text-center">
+            <div className="grid size-20 place-items-center">
               {identityFocus ? (
                 <AgentAvatar
                   id={identityFocus.id}
@@ -139,21 +173,30 @@ function AppSidebarInner() {
                   onClick={() => sessionActions().openAvatarSettings(identityFocus)}
                 />
               ) : (
-                <span className="sidebar-identity-fallback" aria-hidden>
+                <span
+                  className="grid size-20 place-items-center rounded-full bg-[#111827] text-[22px] font-bold text-white"
+                  aria-hidden
+                >
                   {accountInitials(user?.username || "open bot")}
                 </span>
               )}
             </div>
-            <div className="sidebar-identity-name">{identityFocus?.name || user?.username || "open bot"}</div>
-            <button type="button" className="sidebar-identity-workspace" aria-label="工作区">
+            <div className="max-w-full truncate text-xl font-bold tracking-tight text-[var(--text)]">
+              {identityFocus?.name || user?.username || "open bot"}
+            </div>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-0 bg-transparent px-2 py-1 text-[13px] text-[var(--muted)] hover:bg-[var(--bg-soft)] active:bg-[var(--bg-soft)]"
+              aria-label="工作区"
+            >
               open bot
               <ChevronDown size={12} strokeWidth={2.2} aria-hidden />
             </button>
           </div>
         </div>
       ) : (
-        <div className="sidebar-top">
-          <label className="sidebar-search">
+        <div className="flex shrink-0 items-center gap-2 px-1 py-0.5">
+          <label className={sidebarSearchFieldClass()}>
             <Search size={16} strokeWidth={2} aria-hidden />
             <input
               value={convSearch}
@@ -165,7 +208,7 @@ function AppSidebarInner() {
           <button
             ref={actions.newChatBtnRef}
             type="button"
-            className={`icon-btn${showNewChat ? " active-plus" : ""}`}
+            className={sidebarIconBtnClass()}
             title="新建聊天"
             aria-haspopup="dialog"
             aria-expanded={showNewChat}
@@ -179,23 +222,25 @@ function AppSidebarInner() {
       {sheetForm ? (
         <button
           type="button"
-          className="section-fold-head"
+          className={sidebarSectionFoldHeadClass()}
           aria-expanded={!assistantsCollapsed}
           onClick={() => sessionActions().toggleAssistantsCollapsed()}
         >
-          <span className="section-fold-title">助手</span>
-          <span className="section-fold-meta">
-            {assistantsCollapsed ? <span className="section-fold-count">{filteredAgents.length}</span> : null}
-            <span className="section-fold-chevron" aria-hidden>
+          <span className="min-w-0 flex-1">助手</span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--muted)]">
+            {assistantsCollapsed ? (
+              <span className="text-xs font-medium opacity-85">{filteredAgents.length}</span>
+            ) : null}
+            <span className="inline-grid size-[18px] place-items-center opacity-70" aria-hidden>
               {assistantsCollapsed ? "▸" : "▾"}
             </span>
           </span>
         </button>
       ) : (
-        <div className="section-label">助手</div>
+        <div className={sidebarSectionLabelClass(sheetForm)}>助手</div>
       )}
       {!(sheetForm && assistantsCollapsed) ? (
-        <nav className="agent-list">
+        <nav className={sidebarListClass(sheetForm)} aria-label="助手列表">
           {agents.length === 0 ? (
             <div className="muted small" style={{ padding: "8px 10px", lineHeight: 1.5 }}>
               暂无助手。点击右上角「+」创建第一个助手。
@@ -213,7 +258,7 @@ function AppSidebarInner() {
               return (
                 <div
                   key={a.id}
-                  className={`agent-item conv-item ${active ? "active" : ""}`}
+                  className={sidebarConvRowClass({ sheetForm, active })}
                   onClick={() => sessionActions().onSelectAgent(a.id)}
                   role="button"
                   tabIndex={0}
@@ -247,18 +292,18 @@ function AppSidebarInner() {
                     online={isBotOnline(a.id)}
                     onClick={() => sessionActions().openAvatarSettings(a)}
                   />
-                  <div className="agent-item-body">
-                    <div className="agent-name">
+                  <div className="min-w-0 flex-1">
+                    <div className={cn("agent-name", sheetForm && "text-[15px]")}>
                       {a.name}
                       {busyKeySet.has(`agent:${a.id}`) ? (
-                        <span className="run-busy-dot" title="回复中" aria-label="回复中" />
+                        <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
                       ) : null}
                     </div>
-                    <div className="agent-desc">{snippet || "尚未开始对话"}</div>
+                    <div className={cn("agent-desc", sheetForm && "mt-0.5")}>{snippet || "尚未开始对话"}</div>
                   </div>
                   <button
                     type="button"
-                    className="conv-settings"
+                    className={sidebarConvActionClass({ touchOrSheet, variant: "settings" })}
                     title="Bot 设置"
                     aria-label="Bot 设置"
                     disabled={agentBusy}
@@ -271,7 +316,7 @@ function AppSidebarInner() {
                   </button>
                   <button
                     type="button"
-                    className="conv-clone"
+                    className={sidebarConvActionClass({ touchOrSheet, variant: "clone" })}
                     title="复制助手"
                     aria-label="复制助手"
                     disabled={agentBusy}
@@ -284,7 +329,7 @@ function AppSidebarInner() {
                   </button>
                   <button
                     type="button"
-                    className="conv-del"
+                    className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
                     title="删除助手"
                     disabled={agentBusy}
                     onClick={(e) => void sessionActions().removeAgent(a, e)}
@@ -303,23 +348,25 @@ function AppSidebarInner() {
           {sheetForm ? (
             <button
               type="button"
-              className="section-fold-head"
+              className={sidebarSectionFoldHeadClass()}
               aria-expanded={!groupsCollapsed}
               onClick={() => sessionActions().toggleGroupsCollapsed()}
             >
-              <span className="section-fold-title">群聊</span>
-              <span className="section-fold-meta">
-                {groupsCollapsed ? <span className="section-fold-count">{filteredChannels.length}</span> : null}
-                <span className="section-fold-chevron" aria-hidden>
+              <span className="min-w-0 flex-1">群聊</span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--muted)]">
+                {groupsCollapsed ? (
+                  <span className="text-xs font-medium opacity-85">{filteredChannels.length}</span>
+                ) : null}
+                <span className="inline-grid size-[18px] place-items-center opacity-70" aria-hidden>
                   {groupsCollapsed ? "▸" : "▾"}
                 </span>
               </span>
             </button>
           ) : (
-            <div className="section-label">群聊</div>
+            <div className={sidebarSectionLabelClass(sheetForm)}>群聊</div>
           )}
           {!(sheetForm && groupsCollapsed) ? (
-            <div className="conv-list channel-list">
+            <div className={sidebarListClass(sheetForm)} role="list">
               {filteredChannels.length === 0 ? (
                 <div className="muted small" style={{ padding: "4px 10px" }}>
                   {channels.length === 0 ? "暂无群聊，可从「+」创建" : "无匹配群聊"}
@@ -330,7 +377,12 @@ function AppSidebarInner() {
                   return (
                     <div
                       key={ch.id}
-                      className={`agent-item conv-item channel-item ${conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id ? "active" : ""}`}
+                      className={sidebarConvRowClass({
+                        sheetForm,
+                        active:
+                          conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id,
+                        channel: true,
+                      })}
                       title={memberNames}
                       role="button"
                       tabIndex={0}
@@ -349,7 +401,7 @@ function AppSidebarInner() {
                         if (touchUi) e.preventDefault();
                       }}
                     >
-                      <div className="channel-member-stack" aria-hidden>
+                      <div className={channelMemberStackClass} aria-hidden>
                         {channelMemberProfiles(ch, agents, agentNameById)
                           .slice(0, 3)
                           .map((p) => (
@@ -364,18 +416,20 @@ function AppSidebarInner() {
                             />
                           ))}
                       </div>
-                      <div className="conv-item-main">
-                        <div className="agent-name">
+                      <div className="min-w-0 flex-1">
+                        <div className={cn("agent-name", sheetForm && "text-[15px]")}>
                           {ch.name}
                           {busyKeySet.has(`channel:${ch.id}`) ? (
-                            <span className="run-busy-dot" title="回复中" aria-label="回复中" />
+                            <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
                           ) : null}
                         </div>
-                        <div className="agent-desc">{memberNames || "无成员"} · 点击打开群聊</div>
+                        <div className={cn("agent-desc", sheetForm && "mt-0.5")}>
+                          {memberNames || "无成员"} · 点击打开群聊
+                        </div>
                       </div>
                       <button
                         type="button"
-                        className="conv-del"
+                        className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
                         title="删除群聊"
                         disabled={channelBusy}
                         onClick={(e) => void sessionActions().removeChannel(ch, e)}
@@ -392,7 +446,7 @@ function AppSidebarInner() {
       )}
 
       {!sheetForm ? (
-        <div className="sidebar-foot">
+        <div className="flex shrink-0 items-center px-1 pb-0.5 pt-2">
           <AccountMenu
             username={user?.username || "账户"}
             llm={defaultLLM}

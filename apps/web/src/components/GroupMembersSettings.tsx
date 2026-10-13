@@ -286,12 +286,12 @@ export function GroupMembersSettings({ open, channel, agents, onClose, onChanged
               {candidates.length === 0 ? (
                 <p className="muted small">没有可添加的助手</p>
               ) : (
-                <div className="new-chat-members group-add-members">
+                <div className="group-add-members flex max-h-[280px] min-h-[120px] flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
                   {candidates.map((a) => (
                     <button
                       key={a.id}
                       type="button"
-                      className="new-chat-member group-add-member-btn"
+                      className="group-add-member-btn flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm hover:bg-[var(--bg-hover)]"
                       disabled={busy}
                       onClick={() => void onAdd(a.id)}
                     >

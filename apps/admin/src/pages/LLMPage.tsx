@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { debounce } from "es-toolkit";
 import { AutoComplete, Button, Card, Form, Space, message, Typography } from "antd";
 import {
   PageContainer,
@@ -77,7 +78,7 @@ export default function LLMPage() {
     }
 
     const seq = ++modelsReqSeq.current;
-    const timer = window.setTimeout(() => {
+    const run = debounce(() => {
       setModelsLoading(true);
       setModelsError("");
       void adminListOrgLLMModels({
@@ -103,8 +104,8 @@ export default function LLMPage() {
           if (seq === modelsReqSeq.current) setModelsLoading(false);
         });
     }, MODELS_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [watchedBaseURL, watchedAPIKey, llm?.api_key_set]);
 
   // Auto-detect prompt-cache support when endpoint + key + model are ready.
@@ -120,7 +121,7 @@ export default function LLMPage() {
     }
 
     const seq = ++cacheReqSeq.current;
-    const timer = window.setTimeout(() => {
+    const run = debounce(() => {
       setCacheProbing(true);
       void adminProbeOrgLLMPromptCache({
         base_url: base,
@@ -139,8 +140,8 @@ export default function LLMPage() {
           if (seq === cacheReqSeq.current) setCacheProbing(false);
         });
     }, MODELS_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
+    run();
+    return () => run.cancel();
   }, [watchedBaseURL, watchedAPIKey, watchedModel, llm?.api_key_set]);
 
   const runProbe = async () => {

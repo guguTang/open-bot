@@ -1,5 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export type OnboardingOption = {
   letter: string;
@@ -75,11 +76,15 @@ export function BotOnboardingCard({
   };
 
   return (
-    <div className="onboard-wrap">
-      <div className="onboard-card" role="region" aria-label="助手引导">
+    <div className="mx-auto my-2 mb-5 box-border w-full max-w-[560px] px-3">
+      <div
+        className="relative rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-soft)] px-[18px] pt-[18px] pb-3.5 shadow-[var(--shadow-sm)]"
+        role="region"
+        aria-label="助手引导"
+      >
         <button
           type="button"
-          className="onboard-close"
+          className="absolute top-2.5 right-2.5 size-7 cursor-pointer rounded-full border-none bg-transparent text-xl leading-none text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="关闭引导"
           title="关闭"
           disabled={disabled}
@@ -87,32 +92,43 @@ export function BotOnboardingCard({
         >
           ×
         </button>
-        <div className="onboard-head">
-          <h3 className="onboard-title">你现在最想让我先帮你做什么？</h3>
-          <p className="onboard-sub">选一个就行，之后还能随时改。</p>
+        <div className="mb-3 pr-7">
+          <h3 className="mb-1.5 text-[15.5px] leading-[1.35] font-[650] text-[var(--text)]">
+            你现在最想让我先帮你做什么？
+          </h3>
+          <p className="m-0 text-[13px] leading-[1.4] text-[var(--muted)]">选一个就行，之后还能随时改。</p>
         </div>
-        <div className="onboard-options" role="list">
+        <div className="flex flex-col gap-1.5" role="list">
           {ONBOARDING_OPTIONS.map((opt) => (
             <button
               key={opt.letter}
               type="button"
-              className="onboard-option"
+              className="flex w-full cursor-pointer items-start gap-3 rounded-[var(--radius-md)] border border-transparent bg-transparent px-2.5 py-2.5 text-left text-inherit hover:border-[var(--border)] hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-55"
               role="listitem"
               disabled={disabled}
               onClick={() => onSelectOption(opt)}
             >
-              <span className="onboard-letter" aria-hidden>
+              <span
+                className="mt-px inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[12.5px] font-bold text-[var(--text)]"
+                aria-hidden
+              >
                 {opt.letter}
               </span>
-              <span className="onboard-option-main">
-                <span className="onboard-option-title">{opt.title}</span>
-                {opt.desc ? <span className="onboard-option-desc">{opt.desc}</span> : null}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-[650] text-[var(--text)]">{opt.title}</span>
+                {opt.desc ? (
+                  <span className="text-[12.5px] leading-[1.35] text-[var(--muted)]">{opt.desc}</span>
+                ) : null}
               </span>
             </button>
           ))}
         </div>
-        <form className="onboard-custom" onSubmit={submitCustom}>
+        <form
+          className="mt-3 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 pr-2 pl-3.5"
+          onSubmit={submitCustom}
+        >
           <input
+            className="min-w-0 flex-1 border-none bg-transparent text-[13.5px] text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
             value={custom}
             onChange={(e) => setCustom(e.target.value)}
             placeholder="输入你自己的回答"
@@ -121,7 +137,10 @@ export function BotOnboardingCard({
           />
           <button
             type="submit"
-            className="onboard-custom-send"
+            className={cn(
+              "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-[var(--text)] text-white hover:opacity-90",
+              "disabled:cursor-not-allowed disabled:opacity-35",
+            )}
             disabled={disabled || !custom.trim()}
             aria-label="发送"
             title="发送"

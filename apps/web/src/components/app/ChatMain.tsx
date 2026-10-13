@@ -4,6 +4,7 @@ import type { Agent, ApprovalDecision, Channel, Conversation } from "../../api";
 import type { BotPresenceStatus } from "../../api";
 import { normalizePresenceStatus, resolveAvatarColor, toolNameLooksLikeSearch } from "../avatarColor";
 import { AgentAvatar } from "../AgentAvatar";
+import { channelMemberStackClass } from "./sidebarUi";
 import {
   BotOnboardingCard,
   ONBOARDING_WELCOME,
@@ -120,7 +121,7 @@ function ChatTopbar({
             title="群设置"
             onClick={() => onOpenGroupSettings(activeChannel)}
           >
-            <span className="channel-member-stack" aria-hidden>
+            <span className={channelMemberStackClass} aria-hidden>
               {channelMemberProfiles(activeChannel).map((p) => (
                 <AgentAvatar
                   key={p.agent_id}

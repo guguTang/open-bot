@@ -1,3 +1,5 @@
+import { clamp } from "es-toolkit";
+
 /** Formal palette — locked with open bot / UI UE design (unchanged). */
 export const AVATAR_COLOR_PALETTE = [
   "#e85d4c",
@@ -158,11 +160,6 @@ export function resolveAvatarShape(seed: string, override?: string | null): Avat
   return avatarShape(seed);
 }
 
-/** Lighten/darken hex for trim / screen LEDs. */
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(n)));
-}
-
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
   if (!m) return null;
@@ -174,7 +171,7 @@ function rgbToHex(r: number, g: number, b: number): string {
   return (
     "#" +
     [r, g, b]
-      .map((x) => clampByte(x).toString(16).padStart(2, "0"))
+      .map((x) => clamp(Math.round(x), 0, 255).toString(16).padStart(2, "0"))
       .join("")
   );
 }

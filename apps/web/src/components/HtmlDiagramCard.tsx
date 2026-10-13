@@ -22,6 +22,27 @@ import {
   sanitizeHtmlDiagram,
 } from "../lib/htmlDiagramSanitize";
 import { DiagramCardFrame, type DiagramOverflowItem } from "./DiagramCardFrame";
+import {
+  diagramActionsClass,
+  diagramBodyClass,
+  diagramBodyHtmlClass,
+  diagramBodyPendingClass,
+  diagramBtnIconClass,
+  diagramBtnTextClass,
+  diagramFsBackdropClass,
+  diagramFsBodyClass,
+  diagramFsShellClass,
+  diagramFsToolbarClass,
+  diagramHtmlIframeClass,
+  diagramHtmlIframeFsClass,
+  diagramPendingDotClass,
+  diagramPendingLabelClass,
+  diagramPillClass,
+  diagramSourceClass,
+  diagramSourceFsClass,
+  diagramSourceTailClass,
+  diagramWarningClass,
+} from "./diagram/diagramUi";
 import { useAppTheme } from "./useAppTheme";
 
 const diagramIcon = {
@@ -96,29 +117,29 @@ function HtmlFullscreen({
 
   return createPortal(
     <div
-      className="diagram-fs-backdrop"
+      className={diagramFsBackdropClass}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="diagram-fs" role="dialog" aria-modal="true" aria-label="HTML 图表">
-        <div className="diagram-toolbar diagram-fs-toolbar">
-          <span className="diagram-pill">HTML</span>
-          <div className="diagram-actions">
+      <div className={diagramFsShellClass} role="dialog" aria-modal="true" aria-label="HTML 图表">
+        <div className={diagramFsToolbarClass}>
+          <span className={diagramPillClass}>HTML</span>
+          <div className={diagramActionsClass}>
             <button
               type="button"
-              className="diagram-btn diagram-btn-text"
+              className={diagramBtnTextClass}
               aria-pressed={showSource}
               onClick={onToggle}
             >
               {showSource ? "预览" : "源码"}
             </button>
-            <button type="button" className="diagram-btn diagram-btn-text" onClick={onCopy}>
+            <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
               复制
             </button>
             <button
               type="button"
-              className="diagram-btn diagram-btn-icon"
+              className={diagramBtnIconClass}
               aria-label="下载 HTML"
               title="下载 HTML"
               onClick={onDownload}
@@ -128,7 +149,7 @@ function HtmlFullscreen({
             <button
               ref={closeRef}
               type="button"
-              className="diagram-btn diagram-btn-icon"
+              className={diagramBtnIconClass}
               aria-label="关闭"
               title="关闭 (Esc)"
               onClick={onClose}
@@ -137,12 +158,12 @@ function HtmlFullscreen({
             </button>
           </div>
         </div>
-        <div className={`diagram-fs-body${showSource ? " is-source" : " is-html"}`}>
+        <div className={diagramFsBodyClass({ source: showSource, html: !showSource })}>
           {showSource ? (
-            <pre className="diagram-source">{source}</pre>
+            <pre className={diagramSourceFsClass}>{source}</pre>
           ) : (
             <iframe
-              className="diagram-html-iframe diagram-html-iframe-fs"
+              className={diagramHtmlIframeFsClass}
               title="HTML 图表全屏预览"
               sandbox=""
               referrerPolicy="no-referrer"
@@ -223,7 +244,7 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
     <>
       <button
         type="button"
-        className="diagram-btn diagram-btn-text"
+        className={diagramBtnTextClass}
         aria-pressed={viewSource && ready}
         disabled={!ready}
         title={!ready ? "预览就绪后可切换" : undefined}
@@ -231,12 +252,12 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
       >
         {viewSource && ready ? "预览" : "源码"}
       </button>
-      <button type="button" className="diagram-btn diagram-btn-text" onClick={onCopy}>
+      <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
         复制
       </button>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-label="下载 HTML"
         title={ready ? "下载 HTML" : "图表就绪后可下载"}
         disabled={!ready}
@@ -246,7 +267,7 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
       </button>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-label="全屏"
         title={ready ? "全屏" : "图表就绪后可全屏"}
         disabled={!ready}
@@ -282,49 +303,49 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
   let body: ReactNode;
   if (preview.mode === "pending") {
     body = (
-      <div className="diagram-body diagram-body-pending" aria-busy="true">
-        <div className="diagram-pending-label">
-          <span className="diagram-pending-dot" aria-hidden="true" />
+      <div className={diagramBodyPendingClass} aria-busy="true">
+        <div className={diagramPendingLabelClass}>
+          <span className={diagramPendingDotClass} aria-hidden="true" />
           生成中…
         </div>
-        <pre ref={tailRef} className="diagram-source diagram-source-tail">
+        <pre ref={tailRef} className={diagramSourceTailClass}>
           {source}
         </pre>
       </div>
     );
   } else if (preview.mode === "empty") {
     body = (
-      <div className="diagram-body diagram-body-source">
-        <div className="diagram-warning" role="status">
+      <div className={diagramBodyClass}>
+        <div className={diagramWarningClass} role="status">
           无内容
         </div>
       </div>
     );
   } else if (preview.mode === "oversized") {
     body = (
-      <div className="diagram-body diagram-body-source">
-        <div className="diagram-warning" role="status">
+      <div className={diagramBodyClass}>
+        <div className={diagramWarningClass} role="status">
           内容过大，仅显示源码
         </div>
-        <pre className="diagram-source">{source}</pre>
+        <pre className={diagramSourceClass}>{source}</pre>
       </div>
     );
   } else if (preview.mode === "source-only" || previewFailed || (ready && showSource)) {
     body = (
-      <div className="diagram-body diagram-body-source">
+      <div className={diagramBodyClass}>
         {preview.mode === "source-only" || previewFailed ? (
-          <div className="diagram-warning" role="status">
+          <div className={diagramWarningClass} role="status">
             {preview.mode === "source-only" ? preview.tip : "无法预览，已显示源码"}
           </div>
         ) : null}
-        <pre className="diagram-source">{source}</pre>
+        <pre className={diagramSourceClass}>{source}</pre>
       </div>
     );
   } else {
     body = (
-      <div className="diagram-body diagram-body-html">
+      <div className={diagramBodyHtmlClass}>
         <iframe
-          className="diagram-html-iframe"
+          className={diagramHtmlIframeClass}
           title="HTML 图表预览"
           sandbox=""
           referrerPolicy="no-referrer"

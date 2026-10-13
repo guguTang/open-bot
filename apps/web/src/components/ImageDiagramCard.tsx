@@ -3,6 +3,7 @@
  * Auth attachment GET via ?access_token= on <img>; toolbar: copy URL · download · fullscreen.
  * No fake generated images — only real urls / attachments.
  */
+import { clamp } from "es-toolkit";
 import { Download, Maximize2, X } from "lucide-react";
 import {
   useCallback,
@@ -20,7 +21,25 @@ import {
   imageDownloadFilename,
 } from "../api";
 import { copyText } from "../lib/diagramExport";
+import { cn } from "@/lib/utils";
 import { DiagramCardFrame, type DiagramOverflowItem } from "./DiagramCardFrame";
+import {
+  diagramActionsClass,
+  diagramBodyImageClass,
+  diagramBodyImageFailClass,
+  diagramBtnIconClass,
+  diagramBtnTextClass,
+  diagramFsBackdropClass,
+  diagramFsBackdropImageClass,
+  diagramFsBodyClass,
+  diagramFsShellImageClass,
+  diagramFsToolbarClass,
+  diagramImageFailClass,
+  diagramImageImgClass,
+  diagramImageImgFsClass,
+  diagramImageSkeletonClass,
+  diagramPillClass,
+} from "./diagram/diagramUi";
 
 const diagramIcon = {
   size: 16,
@@ -91,7 +110,7 @@ function ImageFullscreen({
     const onWheel = (e: WheelEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
-      setScale((s) => Math.min(4, Math.max(0.25, s * Math.exp(-e.deltaY * 0.0015))));
+      setScale((s) => clamp(s * Math.exp(-e.deltaY * 0.0015), 0.25, 4));
     };
     let start: { dist: number; scale: number } | null = null;
     const dist = (t: TouchList) =>
@@ -102,7 +121,7 @@ function ImageFullscreen({
     const onTouchMove = (e: TouchEvent) => {
       if (!start || e.touches.length !== 2) return;
       e.preventDefault();
-      setScale(Math.min(4, Math.max(0.25, start.scale * (dist(e.touches) / start.dist))));
+      setScale(clamp(start.scale * (dist(e.touches) / start.dist), 0.25, 4));
     };
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) start = null;
@@ -123,21 +142,21 @@ function ImageFullscreen({
 
   return createPortal(
     <div
-      className="diagram-fs-backdrop diagram-fs-backdrop-image"
+      className={cn(diagramFsBackdropClass, diagramFsBackdropImageClass)}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="diagram-fs diagram-fs-image" role="dialog" aria-modal="true" aria-label="图片">
-        <div className="diagram-toolbar diagram-fs-toolbar">
-          <span className="diagram-pill">图片</span>
-          <div className="diagram-actions">
-            <button type="button" className="diagram-btn diagram-btn-text" onClick={onCopy}>
+      <div className={diagramFsShellImageClass} role="dialog" aria-modal="true" aria-label="图片">
+        <div className={diagramFsToolbarClass}>
+          <span className={diagramPillClass}>图片</span>
+          <div className={diagramActionsClass}>
+            <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
               复制
             </button>
             <button
               type="button"
-              className="diagram-btn diagram-btn-icon"
+              className={diagramBtnIconClass}
               aria-label="下载原图"
               title="下载原图"
               disabled={downloading}
@@ -148,7 +167,7 @@ function ImageFullscreen({
             <button
               ref={closeRef}
               type="button"
-              className="diagram-btn diagram-btn-icon"
+              className={diagramBtnIconClass}
               aria-label="关闭"
               title="关闭 (Esc)"
               onClick={onClose}
@@ -159,11 +178,11 @@ function ImageFullscreen({
         </div>
         <div
           ref={bodyRef}
-          className="diagram-fs-body is-image"
+          className={diagramFsBodyClass({ image: true })}
           onDoubleClick={() => setScale(1)}
         >
           <img
-            className="diagram-image-img diagram-image-img-fs"
+            className={diagramImageImgFsClass}
             src={src}
             alt={alt || name || "图片"}
             style={{ transform: `scale(${scale})` }}
@@ -230,7 +249,7 @@ export function ImageDiagramCard({ src, alt, name, mime }: ImageDiagramCardProps
     <>
       <button
         type="button"
-        className="diagram-btn diagram-btn-text"
+        className={diagramBtnTextClass}
         title={copyTarget ? "复制图片地址" : "暂不可复制"}
         disabled={!copyTarget}
         onClick={onCopy}
@@ -239,7 +258,7 @@ export function ImageDiagramCard({ src, alt, name, mime }: ImageDiagramCardProps
       </button>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-label="下载原图"
         title={ready || displaySrc ? "下载原图" : "图片就绪后可下载"}
         disabled={!displaySrc || downloading}
@@ -249,7 +268,7 @@ export function ImageDiagramCard({ src, alt, name, mime }: ImageDiagramCardProps
       </button>
       <button
         type="button"
-        className="diagram-btn diagram-btn-icon"
+        className={diagramBtnIconClass}
         aria-label="全屏"
         title={ready ? "全屏" : "图片就绪后可全屏"}
         disabled={!ready}
@@ -284,13 +303,13 @@ export function ImageDiagramCard({ src, alt, name, mime }: ImageDiagramCardProps
   let body: ReactNode;
   if (!displaySrc || status === "error") {
     body = (
-      <div className="diagram-body diagram-body-image diagram-body-image-fail">
-        <div className="diagram-image-fail" role="status">
+      <div className={diagramBodyImageFailClass}>
+        <div className={diagramImageFailClass} role="status">
           <span>图片加载失败</span>
           {displaySrc ? (
             <button
               type="button"
-              className="diagram-btn diagram-btn-text"
+              className={diagramBtnTextClass}
               onClick={() => setRetryKey((k) => k + 1)}
             >
               重试
@@ -302,13 +321,15 @@ export function ImageDiagramCard({ src, alt, name, mime }: ImageDiagramCardProps
   } else {
     body = (
       <div
-        className={`diagram-body diagram-body-image${status === "loading" ? " is-loading" : ""}`}
+        className={cn(diagramBodyImageClass, status === "loading" && "is-loading group/img")}
         aria-busy={status === "loading"}
       >
-        {status === "loading" ? <div className="diagram-image-skeleton" aria-hidden="true" /> : null}
+        {status === "loading" ? (
+          <div className={diagramImageSkeletonClass} aria-hidden="true" />
+        ) : null}
         <img
           key={`${displaySrc}#${retryKey}`}
-          className="diagram-image-img"
+          className={diagramImageImgClass}
           src={displaySrc}
           alt={alt || name || "图片"}
           onLoad={() => setStatus("ok")}

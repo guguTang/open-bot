@@ -4,6 +4,7 @@
  * so switching tabs keeps undo history and cursor.
  */
 import { useEffect, useRef } from "react";
+import { uniq } from "es-toolkit";
 import { EditorState, StateEffect, StateField, type Extension, RangeSetBuilder, Compartment } from "@codemirror/state";
 import {
   Decoration,
@@ -62,7 +63,7 @@ const errorLineField = StateField.define<DecorationSet>({
     for (const e of tr.effects) {
       if (e.is(setErrorLines)) {
         const b = new RangeSetBuilder<Decoration>();
-        const lines = [...new Set(e.value)].filter((n) => n >= 1 && n <= tr.state.doc.lines).sort((a, b) => a - b);
+        const lines = uniq(e.value).filter((n) => n >= 1 && n <= tr.state.doc.lines).sort((a, b) => a - b);
         for (const n of lines) b.add(tr.state.doc.line(n).from, tr.state.doc.line(n).from, Decoration.line({ class: "cm-skill-err-line" }));
         deco = b.finish();
       }

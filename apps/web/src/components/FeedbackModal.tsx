@@ -142,7 +142,7 @@ export function FeedbackModal({ target, onClose, onSubmit }: Props) {
             />
           </label>
 
-          {err ? <div className="new-chat-error">{err}</div> : null}
+          {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
 
           <div className="feedback-actions">
             <button type="button" className="ghost" onClick={onClose} disabled={busy}>

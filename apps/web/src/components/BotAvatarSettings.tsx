@@ -251,15 +251,15 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
                 ))}
               </select>
               {machinesLoaded && machines.length === 0 ? (
-                <div className="muted small new-chat-help-wrap">
+                <div className="muted small whitespace-normal leading-[1.45] [overflow-wrap:anywhere]">
                   还没有已连接的电脑。手机不能当作优先电脑。
                 </div>
               ) : (
-                <div className="muted small new-chat-help-wrap">
+                <div className="muted small whitespace-normal leading-[1.45] [overflow-wrap:anywhere]">
                   本地能力跟「你在哪台电脑上发这条消息」走，不会锁死创建时选的那台。优先电脑仅在路由需要兜底时使用。
                 </div>
               )}
-              {err ? <div className="auth-error">{err}</div> : null}
+              {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
             </div>
           </div>
 

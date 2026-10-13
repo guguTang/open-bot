@@ -4,6 +4,7 @@
  */
 
 import type { FormEvent, MouseEvent, RefObject } from "react";
+import { noop } from "es-toolkit";
 import type { Agent, ApprovalDecision, Channel } from "../api";
 import type { ConvSheetTarget } from "../components/app/AppOverlays";
 import type { OnboardingOption } from "../components/BotOnboardingCard";
@@ -70,7 +71,6 @@ export type SessionActions = {
   onStatusMessage: (msg: string) => void;
 };
 
-const noop = () => {};
 const asyncNoop = async () => {};
 const emptyFnRef: RefObject<(id: string) => void | Promise<void>> = { current: () => {} };
 const emptyBtnRef: RefObject<HTMLButtonElement | null> = { current: null };

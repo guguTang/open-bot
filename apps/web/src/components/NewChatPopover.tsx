@@ -2,6 +2,7 @@ import { Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Agent, Machine } from "../api";
 import { listMachines } from "../api";
+import { cn } from "@/lib/utils";
 import { machinePresenceLabel, preferHostMachines } from "../lib/clientEnv";
 import { AgentAvatar } from "./AgentAvatar";
 import {
@@ -35,6 +36,21 @@ export type NewChatPopoverProps = {
   /** When opening from + Action Sheet, jump straight into create form. */
   initialMode?: NewChatMode;
 };
+
+const fieldClass =
+  "flex flex-col gap-1.5 text-[13px] text-[var(--muted)] [&_input]:rounded-[var(--radius-md)] [&_input]:border [&_input]:border-[var(--border)] [&_input]:bg-[var(--bg-soft)] [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-[var(--text)] [&_input]:outline-none focus-within:[&_input]:border-[var(--border-strong)] focus-within:[&_input]:bg-white";
+
+const textareaClass =
+  "mt-1.5 w-full min-h-[72px] resize-y rounded-[10px] border border-[var(--border)] bg-[var(--bg-elevated,#f7f8fa)] px-2.5 py-2 font-inherit outline-none focus:border-[var(--border-strong)] focus:bg-white";
+
+const rowBtnClass =
+  "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border-none bg-transparent px-3 py-2.5 text-left text-[var(--text)] hover:bg-[var(--bg-hover)]";
+
+const submitClass =
+  "w-full cursor-pointer rounded-[var(--radius-md)] border-none bg-[var(--accent)] px-3.5 py-2.5 font-[560] text-white disabled:cursor-not-allowed disabled:opacity-55";
+
+const backClass =
+  "m-0 cursor-pointer rounded-lg border-none bg-transparent px-2 py-1 text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]";
 
 export function NewChatPopover({
   open,
@@ -133,7 +149,6 @@ export function NewChatPopover({
         }
       }
     };
-    // pointerdown covers mouse + touch; avoid mousedown-only close on touch devices.
     const onPointer = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panelRef.current?.contains(t)) return;
@@ -212,36 +227,44 @@ export function NewChatPopover({
   };
 
   const panelStyle = sheetForm ? undefined : { top: pos.top, left: pos.left };
+  const touchMin = sheetForm ? "min-h-11" : "";
 
   return (
     <div
-      className={`new-chat-layer${sheetForm ? " new-chat-layer-sheet" : ""}`}
+      className={cn(
+        "pointer-events-none fixed inset-0 z-40",
+        sheetForm && "pointer-events-auto z-[60] flex flex-col justify-end bg-transparent",
+      )}
       role="presentation"
     >
       {sheetForm ? (
         <button
           type="button"
-          className="new-chat-sheet-mask"
+          className="absolute inset-0 cursor-pointer border-none bg-slate-900/45 pointer-events-auto"
           aria-label="关闭"
           onClick={onClose}
         />
       ) : null}
       <div
         ref={panelRef}
-        className={`new-chat-popover${sheetForm ? " new-chat-popover-sheet" : ""}`}
+        className={cn(
+          "pointer-events-auto fixed flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] flex-col gap-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 shadow-[var(--shadow-lg)]",
+          sheetForm &&
+            "relative !top-auto !right-auto !left-auto z-[1] m-0 max-h-[min(90dvh,90vh)] !w-full !max-w-full gap-0 rounded-t-2xl rounded-b-none px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
+        )}
         style={panelStyle}
         role="dialog"
         aria-label="选择助手"
         aria-modal={sheetForm ? true : undefined}
       >
         {sheetForm ? (
-          <div className="new-chat-sheet-top">
-            <span className="new-chat-sheet-top-title">
+          <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 px-1 pt-3 pb-2">
+            <span className="text-base font-semibold">
               {mode === "bot" ? "创建新 Bot" : mode === "group" ? "创建群聊" : "新对话"}
             </span>
             <button
               type="button"
-              className="new-chat-sheet-close"
+              className="grid size-11 place-items-center rounded-[10px] border-none bg-transparent text-2xl leading-none text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)] active:bg-[var(--bg-hover)]"
               aria-label="关闭"
               onClick={onClose}
             >
@@ -252,10 +275,16 @@ export function NewChatPopover({
 
         {mode === "list" ? (
           <>
-            <label className="new-chat-search">
-              <span className="new-chat-search-prefix">收件人：</span>
+            <label
+              className={cn(
+                "flex items-center gap-0.5 rounded-[var(--radius-md)] border border-transparent bg-[var(--bg-soft)] px-3 py-2.5 focus-within:border-[var(--border-strong)] focus-within:bg-white",
+                sheetForm && "shrink-0",
+              )}
+            >
+              <span className="shrink-0 whitespace-nowrap text-[13px] text-[var(--muted)]">收件人：</span>
               <input
                 ref={searchRef}
+                className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索或创建 Bot"
@@ -263,10 +292,10 @@ export function NewChatPopover({
               />
             </label>
 
-            <div className="new-chat-actions">
+            <div className={cn("flex shrink-0 flex-col gap-0.5", sheetForm && "shrink-0")}>
               <button
                 type="button"
-                className="new-chat-action"
+                className={cn(rowBtnClass, "text-sm", touchMin)}
                 onClick={() => {
                   setMode("bot");
                   setError("");
@@ -280,70 +309,89 @@ export function NewChatPopover({
                   setBotColor(d.color);
                 }}
               >
-                <span className="new-chat-action-icon" aria-hidden>
+                <span
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bg-soft)] text-[var(--muted)]"
+                  aria-hidden
+                >
                   <Plus size={18} strokeWidth={2} aria-hidden />
                 </span>
                 <span>创建新 Bot</span>
               </button>
               <button
                 type="button"
-                className="new-chat-action"
+                className={cn(rowBtnClass, "text-sm", touchMin)}
                 onClick={() => {
                   setMode("group");
                   setError("");
                   setGroupName(query.trim());
                 }}
               >
-                <span className="new-chat-action-icon" aria-hidden>
+                <span
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bg-soft)] text-[var(--muted)]"
+                  aria-hidden
+                >
                   <Users size={18} strokeWidth={2} aria-hidden />
                 </span>
                 <span>创建群聊</span>
               </button>
             </div>
 
-            <div className="new-chat-list" role="listbox" aria-label="助手列表">
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain pb-1",
+                sheetForm && "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+              )}
+              role="listbox"
+              aria-label="助手列表"
+            >
               {filtered.length === 0 ? (
-                <div className="new-chat-empty muted">无匹配助手</div>
+                <div className="px-3 py-4 text-[13px] text-[var(--muted)]">无匹配助手</div>
               ) : (
                 filtered.map((a) => (
                   <button
                     key={a.id}
                     type="button"
-                    className="new-chat-row"
+                    className={cn(rowBtnClass, "group", touchMin)}
                     role="option"
                     onClick={() => void onSelectAgent(a)}
                   >
-                    <AgentAvatar id={a.id} name={a.name} size={36} shape={a.avatar_shape} color={a.avatar_color} online={a.online === true} />
-                    <div className="new-chat-row-main">
-                      <div className="new-chat-row-name">{a.name}</div>
+                    <AgentAvatar
+                      id={a.id}
+                      name={a.name}
+                      size={36}
+                      shape={a.avatar_shape}
+                      color={a.avatar_color}
+                      online={a.online === true}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-[560]">{a.name}</div>
                       {a.description ? (
-                        <div className="new-chat-row-desc">{a.description}</div>
+                        <div className="truncate text-xs text-[var(--muted)]">{a.description}</div>
                       ) : null}
                     </div>
-                    <span className="new-chat-row-cta">打开对话</span>
+                    <span className="shrink-0 text-xs font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100">
+                      打开对话
+                    </span>
                   </button>
                 ))
               )}
             </div>
           </>
         ) : mode === "bot" ? (
-          <div className="new-chat-group">
-            <div className="new-chat-group-scroll">
-              {!sheetForm ? (
-                <div className="new-chat-group-head">
-                  <button type="button" className="ghost new-chat-back" onClick={backToList}>
-                    ← 返回
-                  </button>
-                  <h4>创建新 Bot</h4>
-                </div>
-              ) : (
-                <div className="new-chat-group-head">
-                  <button type="button" className="ghost new-chat-back" onClick={backToList}>
-                    ← 返回
-                  </button>
-                </div>
-              )}
-              <label className="new-chat-field">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden overscroll-contain",
+              sheetForm && "min-h-0 flex-1 gap-0 overflow-hidden",
+            )}
+          >
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3">
+              <div className="flex items-center gap-2">
+                <button type="button" className={cn(backClass, touchMin)} onClick={backToList}>
+                  ← 返回
+                </button>
+                {!sheetForm ? <h4 className="m-0 text-[15px] font-semibold">创建新 Bot</h4> : null}
+              </div>
+              <label className={cn(fieldClass, sheetForm && "[&_input]:min-h-11 [&_input]:text-base")}>
                 名称
                 <input
                   autoFocus
@@ -352,7 +400,7 @@ export function NewChatPopover({
                   placeholder="Bot 名称（必填）"
                 />
               </label>
-              <label className="new-chat-field">
+              <label className={cn(fieldClass, sheetForm && "[&_input]:min-h-11 [&_input]:text-base")}>
                 描述（可选）
                 <input
                   value={botDesc}
@@ -360,18 +408,18 @@ export function NewChatPopover({
                   placeholder="简短介绍"
                 />
               </label>
-              <label className="new-chat-field">
+              <label className={fieldClass}>
                 人设 / System Prompt（可选）
                 <textarea
-                  className="new-chat-textarea"
+                  className={textareaClass}
                   rows={4}
                   value={botPrompt}
                   onChange={(e) => setBotPrompt(e.target.value)}
                   placeholder="你是……"
                 />
               </label>
-              <div className="new-chat-avatar-block">
-                <div className="bot-avatar-preview">
+              <div className="my-1 mb-2 flex flex-col gap-2 rounded-[10px] bg-black/[0.04] px-3 py-2.5">
+                <div className="flex flex-col items-center gap-2 px-0 pt-3 pb-1">
                   <AgentAvatar
                     id={botName || "new-bot"}
                     name={botName || "Bot"}
@@ -379,15 +427,19 @@ export function NewChatPopover({
                     shape={botShape}
                     color={botColor}
                   />
-                  <div className="muted small">形象预览（可改；不改则用自动分配）</div>
+                  <div className="text-xs text-[var(--muted)]">形象预览（可改；不改则用自动分配）</div>
                 </div>
-                <div className="bot-avatar-label">形状</div>
-                <div className="bot-avatar-shape-grid new-chat-shape-grid">
+                <div className="mt-1 text-xs text-[var(--muted)]">形状</div>
+                <div className="grid grid-cols-4 gap-2">
                   {AVATAR_SHAPES.map((s) => (
                     <button
                       key={s}
                       type="button"
-                      className={`bot-avatar-shape-opt${botShape === s ? " active" : ""}`}
+                      className={cn(
+                        "flex cursor-pointer flex-col items-center justify-center overflow-visible rounded-[10px] border border-[var(--border)] bg-[var(--bg-soft)] px-1 py-2",
+                        botShape === s && "border-[var(--accent,#6ea8fe)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent,#6ea8fe)_40%,transparent)]",
+                        sheetForm && "min-h-11 min-w-11",
+                      )}
                       onClick={() => setBotShape(s)}
                       title={AVATAR_SHAPE_LABELS[s]}
                       aria-label={AVATAR_SHAPE_LABELS[s]}
@@ -399,17 +451,28 @@ export function NewChatPopover({
                         shape={s}
                         color={botColor}
                       />
-                      <span className="bot-avatar-shape-label">{AVATAR_SHAPE_LABELS[s]}</span>
+                      <span
+                        className={cn(
+                          "mt-1 block text-center text-[10px] leading-tight text-[var(--muted)]",
+                          botShape === s && "text-[var(--text)]",
+                        )}
+                      >
+                        {AVATAR_SHAPE_LABELS[s]}
+                      </span>
                     </button>
                   ))}
                 </div>
-                <div className="bot-avatar-label">主色</div>
-                <div className="bot-avatar-color-grid">
+                <div className="mt-1 text-xs text-[var(--muted)]">主色</div>
+                <div className={cn("grid gap-2", sheetForm ? "grid-cols-4" : "grid-cols-6")}>
                   {AVATAR_COLOR_PALETTE.map((c) => (
                     <button
                       key={c}
                       type="button"
-                      className={`bot-avatar-color-opt${botColor.toLowerCase() === c.toLowerCase() ? " active" : ""}`}
+                      className={cn(
+                        "aspect-square w-full cursor-pointer rounded-full border-2 border-transparent p-0",
+                        botColor.toLowerCase() === c.toLowerCase() &&
+                          "border-white shadow-[0_0_0_2px_var(--accent,#6ea8fe)]",
+                      )}
                       style={{ background: c }}
                       onClick={() => setBotColor(c)}
                       title={c}
@@ -417,10 +480,10 @@ export function NewChatPopover({
                     />
                   ))}
                 </div>
-                <label className="new-chat-field">
+                <label className={cn(fieldClass, sheetForm && "[&_select]:min-h-11 [&_select]:text-base")}>
                   优先电脑
                   <select
-                    className="bot-machine-select"
+                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated,#fff)] px-2.5 py-2 font-inherit text-inherit outline-none focus:border-[var(--accent,#457b9d)]"
                     value={botMachineId}
                     onChange={(e) => setBotMachineId(e.target.value)}
                     disabled={busy}
@@ -434,17 +497,19 @@ export function NewChatPopover({
                   </select>
                 </label>
                 {machines.length === 0 ? (
-                  <div className="muted small">还没有已连接的电脑。手机不能当作优先电脑。</div>
+                  <div className="text-xs text-[var(--muted)]">还没有已连接的电脑。手机不能当作优先电脑。</div>
                 ) : (
-                  <div className="muted small new-chat-help-wrap">读文件、跑命令会在你当前发消息的电脑上执行。这里只是可选的默认优先机。</div>
+                  <div className="text-xs leading-[1.45] whitespace-normal text-[var(--muted)] [overflow-wrap:anywhere]">
+                    读文件、跑命令会在你当前发消息的电脑上执行。这里只是可选的默认优先机。
+                  </div>
                 )}
               </div>
-              {error ? <div className="new-chat-error">{error}</div> : null}
+              {error ? <div className="text-[13px] text-[var(--danger)]">{error}</div> : null}
             </div>
-            <div className="new-chat-group-footer">
+            <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
-                className="primary new-chat-group-submit"
+                className={cn(submitClass, touchMin)}
                 disabled={busy}
                 onClick={() => void submitBot()}
               >
@@ -453,23 +518,20 @@ export function NewChatPopover({
             </div>
           </div>
         ) : (
-          <div className="new-chat-group">
-            <div className="new-chat-group-scroll">
-              {!sheetForm ? (
-                <div className="new-chat-group-head">
-                  <button type="button" className="ghost new-chat-back" onClick={backToList}>
-                    ← 返回
-                  </button>
-                  <h4>创建群聊</h4>
-                </div>
-              ) : (
-                <div className="new-chat-group-head">
-                  <button type="button" className="ghost new-chat-back" onClick={backToList}>
-                    ← 返回
-                  </button>
-                </div>
-              )}
-              <label className="new-chat-field">
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden overscroll-contain",
+              sheetForm && "min-h-0 flex-1 gap-0 overflow-hidden",
+            )}
+          >
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3">
+              <div className="flex items-center gap-2">
+                <button type="button" className={cn(backClass, touchMin)} onClick={backToList}>
+                  ← 返回
+                </button>
+                {!sheetForm ? <h4 className="m-0 text-[15px] font-semibold">创建群聊</h4> : null}
+              </div>
+              <label className={cn(fieldClass, sheetForm && "[&_input]:min-h-11 [&_input]:text-base")}>
                 名称
                 <input
                   autoFocus
@@ -478,29 +540,44 @@ export function NewChatPopover({
                   placeholder="群聊名称"
                 />
               </label>
-              <div className="new-chat-members-label">选择成员（助手）</div>
-              <div className="new-chat-members">
+              <div className="text-xs text-[var(--muted)]">选择成员（助手）</div>
+              <div className="flex max-h-[280px] min-h-[120px] flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
                 {agents.map((a) => {
                   const checked = memberIds.includes(a.id);
                   return (
-                    <label key={a.id} className={`new-chat-member ${checked ? "on" : ""}`}>
+                    <label
+                      key={a.id}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm hover:bg-[var(--bg-hover)]",
+                        checked && "bg-[var(--bg-hover)]",
+                        touchMin,
+                      )}
+                    >
                       <input
                         type="checkbox"
+                        className="accent-[var(--accent)]"
                         checked={checked}
                         onChange={() => toggleMember(a.id)}
                       />
-                      <AgentAvatar id={a.id} name={a.name} size={28} shape={a.avatar_shape} color={a.avatar_color} online={a.online === true} />
+                      <AgentAvatar
+                        id={a.id}
+                        name={a.name}
+                        size={28}
+                        shape={a.avatar_shape}
+                        color={a.avatar_color}
+                        online={a.online === true}
+                      />
                       <span>{a.name}</span>
                     </label>
                   );
                 })}
               </div>
-              {error ? <div className="new-chat-error">{error}</div> : null}
+              {error ? <div className="text-[13px] text-[var(--danger)]">{error}</div> : null}
             </div>
-            <div className="new-chat-group-footer">
+            <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
-                className="primary new-chat-group-submit"
+                className={cn(submitClass, touchMin)}
                 disabled={busy}
                 onClick={() => void submitGroup()}
               >

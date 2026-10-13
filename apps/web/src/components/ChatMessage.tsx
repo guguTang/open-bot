@@ -355,8 +355,8 @@ function ChatMessageInner({
   if (isUser) {
     return (
       <div className={`chat-row chat-row-user${dense ? " chat-row-dense" : ""}`} data-msg-id={message.id} {...touchHandlers}>
-        <div className="bubble-stack bubble-stack-user">
-          <div className="bubble bubble-user">
+        <div className="bubble-stack bubble-stack-user has-[[data-diagram-card]]:w-full">
+          <div className="bubble bubble-user has-[[data-diagram-card]]:w-full has-[[data-diagram-card]]:max-w-full">
             {quoteEl}
             {(() => {
               const atts = message.attachments || [];
@@ -430,13 +430,13 @@ function ChatMessageInner({
       data-msg-id={message.id}
       {...touchHandlers}
     >
-      <div className="bubble-stack bubble-stack-assistant">
+      <div className="bubble-stack bubble-stack-assistant has-[[data-diagram-card]]:w-full">
         {speakerLabel ? (
           <div className="msg-speaker-name" title={speakerLabel}>
             {speakerLabel}
           </div>
         ) : null}
-        <div className="bubble bubble-assistant">
+        <div className="bubble bubble-assistant has-[[data-diagram-card]]:w-full has-[[data-diagram-card]]:max-w-full">
           {quoteEl}
           {isSummary ? <div className="msg-role">摘要</div> : null}
           <ResultOrientedMessage
