@@ -53,7 +53,7 @@ func probeLLMModel(ctx context.Context, baseURL, apiKey, model string) LLMModelP
 			{"role": "user", "content": "Reply with exactly: ok"},
 		},
 	}
-	r, err := postUpstreamChat(ctx, baseURL, apiKey, model, payload)
+	r, err := postUpstreamChat(ctx, baseURL, apiKey, payload)
 	latency := int(time.Since(started).Milliseconds())
 	if err != nil {
 		return LLMModelProbeResult{

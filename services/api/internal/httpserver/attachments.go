@@ -458,7 +458,7 @@ func (s *Server) ensureAttachmentRows(uid, convID string, refs []AttachmentRef) 
 		}
 		if _, err := s.db.GetMessageAttachment(uid, convID, id); err == nil {
 			continue
-		} else if err != nil && !errors.Is(err, db.ErrNotFound) {
+		} else if !errors.Is(err, db.ErrNotFound) {
 			return err
 		}
 		abs, err := resolveAttachmentPath(uid, convID, ref)

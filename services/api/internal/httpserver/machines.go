@@ -264,7 +264,14 @@ func hostActivityLabel(label, op, path, dest string) string {
 	case "ssh_exec":
 		action = "在远程主机上运行命令"
 	}
-	return "正在" + label + "上" + action
+	msg := "正在" + label + "上" + action
+	if path == "" {
+		return msg
+	}
+	if op == "move" && dest != "" {
+		return msg + "：" + path + " → " + dest
+	}
+	return msg + "：" + path
 }
 
 func hostActivityText(label, op, path, dest string, needsConfirm bool) string {

@@ -7,6 +7,14 @@ import {
   setApiBase,
   type ApiHealthProbeResult,
 } from "../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -56,22 +64,17 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
       ? "与电脑同一局域网，或填 ngrok 等 https 隧道。改地址后先「检测连接」，通过再保存；切换后保留本机登录态，连不上请退出重登。"
       : "填写电脑上的 API 地址以配对（局域网如 http://192.168.x.x:18080，或 ngrok https 隧道）。先检测连接，通过后再登录。";
 
-  const btnSecondary =
-    "min-h-10 cursor-pointer rounded-[10px] border border-(--border) bg-(--bg-soft) px-3 py-2.5 text-(--text) hover:bg-(--bg-hover) disabled:opacity-55";
-  const btnPrimary =
-    "min-h-10 cursor-pointer rounded-xl border-none bg-(--accent) px-3.5 py-2.5 text-white disabled:opacity-55";
-
   return (
-    <div
+    <FieldGroup
       className={cn(
-        "mt-1 flex flex-col gap-2",
-        variant === "login" && "mt-3 border-t border-(--border) pt-3",
+        "gap-2",
+        variant === "login" && "mt-3 border-t border-border pt-3",
       )}
     >
-      <label className="flex flex-col gap-1.5 text-[13px] text-(--muted)">
-        服务器地址
-        <input
-          className="box-border min-h-11 w-full rounded-[10px] border border-(--border) bg-white px-3 py-2.5 text-sm text-(--text) outline-none focus:border-(--accent) focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
+      <Field>
+        <FieldLabel htmlFor="api-server-url">服务器地址</FieldLabel>
+        <Input
+          id="api-server-url"
           type="url"
           inputMode="url"
           autoComplete="url"
@@ -89,35 +92,34 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
             }
           }}
         />
-      </label>
-      <p className="m-0 text-xs leading-[1.45] text-(--muted)">{help}</p>
+        <FieldDescription>{help}</FieldDescription>
+      </Field>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={btnSecondary} disabled={busy} onClick={() => void runProbe(draft)}>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => void runProbe(draft)}>
           {busy ? "检测中…" : "检测连接"}
-        </button>
-        <button type="button" className={btnPrimary} disabled={busy} onClick={() => void apply()}>
+        </Button>
+        <Button type="button" disabled={busy} onClick={() => void apply()}>
           {variant === "settings" ? "保存并使用" : "使用此服务器"}
-        </button>
+        </Button>
         {draft.trim().replace(/\/$/, "") !== DEFAULT_API_BASE ? (
-          <button type="button" className={btnSecondary} disabled={busy} onClick={resetDefault}>
+          <Button type="button" variant="ghost" disabled={busy} onClick={resetDefault}>
             恢复默认
-          </button>
+          </Button>
         ) : null}
       </div>
       {probe ? (
         <p
           className={cn(
-            "m-0 text-[13px] leading-[1.4]",
-            probe.ok ? "text-(--success,#1a7f37)" : "text-(--danger)",
-
+            "m-0 text-sm leading-snug",
+            probe.ok ? "text-green-700 dark:text-green-400" : "text-destructive",
           )}
           role="status"
         >
           {formatApiHealthProbe(probe)}
         </p>
       ) : (
-        <p className="m-0 text-xs text-(--muted)">当前：{getApiBase()}</p>
+        <FieldDescription>当前：{getApiBase()}</FieldDescription>
       )}
-    </div>
+    </FieldGroup>
   );
 }

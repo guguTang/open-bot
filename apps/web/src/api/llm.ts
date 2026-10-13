@@ -22,6 +22,14 @@ export async function listLLMConnections(): Promise<LLMConnection[]> {
   return data.connections ?? [];
 }
 
+/** Personal default, or org default when the user has no connection — same as chat runs. */
+export async function fetchEffectiveLLMConnection(): Promise<LLMConnection | null> {
+  const res = await fetch(`${API_BASE}/v1/llm-connections/effective`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  const data = await res.json();
+  return (data.connection as LLMConnection | null | undefined) ?? null;
+}
+
 export type LLMInput = {
   name: string;
   base_url: string;

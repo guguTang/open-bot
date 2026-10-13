@@ -1,5 +1,15 @@
 import type { FormEvent, RefObject } from "react";
 import type { Skill } from "../../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -49,6 +59,8 @@ export function SkillsSettingsTab({
   onSkillFolderChange,
   onSkillZipChange,
 }: SkillsSettingsTabProps) {
+  const bodyDisabled = Boolean(skillZip) || skillFolder.length > 0;
+
   return (
     <SettingsPage>
       <SettingsHint>
@@ -57,64 +69,77 @@ export function SkillsSettingsTab({
       </SettingsHint>
       <SettingsSection title="上传自定义 Skill">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={(e) => void onUploadSkill(e)}>
-            <label>
-              名称（可选，若 SKILL.md frontmatter 已有可省略）
-              <input
-                placeholder="如 my-helper"
-                value={skillName}
-                onChange={(e) => setSkillName(e.target.value)}
-              />
-            </label>
-            <label>
-              描述（可选，若 frontmatter 已有可省略）
-              <input
-                placeholder="简要说明适用场景"
-                value={skillDesc}
-                onChange={(e) => setSkillDesc(e.target.value)}
-              />
-            </label>
-            <label>
-              正文（单文件 Markdown；与文件夹/zip 三选一）
-              <textarea
-                placeholder="可省略 frontmatter，会自动补全"
-                value={skillBody}
-                onChange={(e) => onSkillBodyChange(e.target.value)}
-                rows={6}
-                disabled={Boolean(skillZip) || skillFolder.length > 0}
-              />
-            </label>
-            <label>
-              上传文件夹
-              <input
-                ref={skillFolderInputRef}
-                type="file"
-                multiple
-                {...({
-                  webkitdirectory: "",
-                  directory: "",
-                } as Record<string, string>)}
-                onChange={(e) => onSkillFolderChange(Array.from(e.target.files || []))}
-              />
-              {skillFolder.length > 0 ? (
-                <span className="agent-desc">已选 {skillFolder.length} 个文件</span>
-              ) : null}
-            </label>
-            <label>
-              上传 .zip 压缩包
-              <input
-                ref={skillZipInputRef}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={(e) => onSkillZipChange(e.target.files?.[0] || null)}
-              />
-              {skillZip ? <span className="agent-desc">{skillZip.name}</span> : null}
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={skillsBusy}>
-                {skillsBusy ? "上传中…" : "上传并启用"}
-              </button>
-            </div>
+          <form onSubmit={(e) => void onUploadSkill(e)}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="skill-name">
+                  名称（可选，若 SKILL.md frontmatter 已有可省略）
+                </FieldLabel>
+                <Input
+                  id="skill-name"
+                  placeholder="如 my-helper"
+                  value={skillName}
+                  onChange={(e) => setSkillName(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="skill-desc">
+                  描述（可选，若 frontmatter 已有可省略）
+                </FieldLabel>
+                <Input
+                  id="skill-desc"
+                  placeholder="简要说明适用场景"
+                  value={skillDesc}
+                  onChange={(e) => setSkillDesc(e.target.value)}
+                />
+              </Field>
+              <Field data-disabled={bodyDisabled || undefined}>
+                <FieldLabel htmlFor="skill-body">
+                  正文（单文件 Markdown；与文件夹/zip 三选一）
+                </FieldLabel>
+                <Textarea
+                  id="skill-body"
+                  placeholder="可省略 frontmatter，会自动补全"
+                  value={skillBody}
+                  onChange={(e) => onSkillBodyChange(e.target.value)}
+                  rows={6}
+                  disabled={bodyDisabled}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="skill-folder">上传文件夹</FieldLabel>
+                <Input
+                  id="skill-folder"
+                  ref={skillFolderInputRef}
+                  type="file"
+                  multiple
+                  {...({
+                    webkitdirectory: "",
+                    directory: "",
+                  } as Record<string, string>)}
+                  onChange={(e) => onSkillFolderChange(Array.from(e.target.files || []))}
+                />
+                {skillFolder.length > 0 ? (
+                  <FieldDescription>已选 {skillFolder.length} 个文件</FieldDescription>
+                ) : null}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="skill-zip">上传 .zip 压缩包</FieldLabel>
+                <Input
+                  id="skill-zip"
+                  ref={skillZipInputRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  onChange={(e) => onSkillZipChange(e.target.files?.[0] || null)}
+                />
+                {skillZip ? <FieldDescription>{skillZip.name}</FieldDescription> : null}
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={skillsBusy}>
+                  {skillsBusy ? "上传中…" : "上传并启用"}
+                </Button>
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
@@ -136,25 +161,28 @@ export function SkillsSettingsTab({
                     </div>
                     <div className="agent-desc">{s.description}</div>
                   </div>
-                  <div className="llm-actions">
-                    <label className="check skill-toggle">
-                      <input
-                        type="checkbox"
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Field orientation="horizontal" className="w-auto gap-2">
+                      <Switch
+                        id={`skill-enabled-${s.name}`}
                         checked={s.enabled}
                         disabled={skillsBusy}
-                        onChange={(e) => void onToggleSkill(s.name, e.target.checked)}
+                        onCheckedChange={(checked) => void onToggleSkill(s.name, checked)}
                       />
-                      {s.enabled ? "已启用" : "已关闭"}
-                    </label>
+                      <FieldLabel htmlFor={`skill-enabled-${s.name}`} className="font-normal">
+                        {s.enabled ? "已启用" : "已关闭"}
+                      </FieldLabel>
+                    </Field>
                     {s.custom ? (
-                      <button
+                      <Button
                         type="button"
-                        className="ghost danger"
+                        variant="destructive"
+                        size="sm"
                         disabled={skillsBusy}
                         onClick={() => void onDeleteSkill(s.name)}
                       >
                         删除
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </div>
@@ -162,7 +190,7 @@ export function SkillsSettingsTab({
             )}
           </div>
         </SettingsCard>
-        {skillsMsg ? <div className="settings-status">{skillsMsg}</div> : null}
+        {skillsMsg ? <p className="settings-status m-0">{skillsMsg}</p> : null}
       </SettingsSection>
     </SettingsPage>
   );

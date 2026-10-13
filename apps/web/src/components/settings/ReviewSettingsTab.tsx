@@ -1,4 +1,5 @@
 import { REVIEW_EMPTY_COPY, type ToolAllowEntry } from "../../lib/toolAllowlist";
+import { Button } from "@/components/ui/button";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -39,14 +40,15 @@ export function ReviewSettingsTab({
                       <span className="review-allow-sub">{entry.tool}</span>
                     ) : null}
                   </div>
-                  <button
+                  <Button
                     type="button"
-                    className="settings-pill review-allow-revoke"
+                    variant="outline"
+                    size="sm"
                     disabled={toolAllowBusy}
                     onClick={() => onRevokeEntry(entry)}
                   >
                     撤销
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>

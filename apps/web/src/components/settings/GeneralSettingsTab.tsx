@@ -1,4 +1,10 @@
+import { ChevronDown, Copy } from "lucide-react";
 import type { UserSettings } from "../../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldLabel,
+} from "@/components/ui/field";
 import { accountInitials } from "../app/accountInitials";
 import { ApiServerField } from "../ApiServerField";
 import { GeneralBotSettings } from "../GeneralBotSettings";
@@ -49,24 +55,23 @@ export function GeneralSettingsTab({
               {email ? (
                 <div className="settings-account-email">
                   <span>{email}</span>
-                  <button
+                  <Button
                     type="button"
-                    className="settings-icon-btn"
+                    variant="ghost"
+                    size="icon"
+                    className="settings-icon-btn size-7"
                     title={emailCopied ? "已复制" : "复制邮箱"}
                     aria-label="复制邮箱"
                     onClick={onCopyEmail}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                      <rect x="8" y="8" width="12" height="12" rx="2" />
-                      <path d="M4 16V6a2 2 0 0 1 2-2h10" />
-                    </svg>
-                  </button>
+                    <Copy data-icon="inline-start" aria-hidden />
+                  </Button>
                 </div>
               ) : null}
             </div>
-            <button type="button" className="settings-pill" onClick={onLogout}>
+            <Button type="button" variant="outline" size="sm" onClick={onLogout}>
               退出登录
-            </button>
+            </Button>
           </SettingsCard>
         </SettingsSection>
       )}
@@ -80,15 +85,13 @@ export function GeneralSettingsTab({
       {!sheetForm ? (
         <SettingsSection title="模型">
           <SettingsCard>
-            <div className="settings-row">
-              <span>默认模型</span>
-              <button type="button" className="settings-pill" onClick={onOpenLlmSettings}>
+            <Field orientation="horizontal" className="settings-row px-1">
+              <FieldLabel>默认模型</FieldLabel>
+              <Button type="button" variant="outline" size="sm" onClick={onOpenLlmSettings}>
                 {defaultModelLabel}
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-            </div>
+                <ChevronDown data-icon="inline-end" aria-hidden />
+              </Button>
+            </Field>
           </SettingsCard>
         </SettingsSection>
       ) : null}

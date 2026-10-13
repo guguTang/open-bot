@@ -85,7 +85,7 @@ func decisionEffectiveK(k, memberCount int, countHint int) int {
 // remap choice=all → capable subset; who-can / specialty mismatch vs Member capability
 // profiles rematches or fail-opens. On soft failure the caller fail-opens to heuristic
 // (not lead-only).
-func autoPickDecision(ctx context.Context, deps *autoPickDecisionDeps, userText string, members []string, agents []*db.Agent, leadID string, k int, synopsis string) (groupAutoPickResult, bool) {
+func autoPickDecision(ctx context.Context, deps *autoPickDecisionDeps, userText string, members []string, agents []*db.Agent, k int, synopsis string) (groupAutoPickResult, bool) {
 	method := "decision"
 	whoCan := isWhoCanIntent(userText)
 	if deps == nil {

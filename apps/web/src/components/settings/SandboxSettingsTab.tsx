@@ -1,5 +1,13 @@
 import type { FormEvent } from "react";
 import type { Sandbox } from "../../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
   SettingsHint,
@@ -78,30 +86,31 @@ export function SandboxSettingsTab({
                   </div>
                 ) : null}
               </div>
-              <div className="llm-actions">
-                <button type="button" onClick={() => void onEnsureSandbox()} disabled={sandboxBusy}>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void onEnsureSandbox()} disabled={sandboxBusy}>
                   确保启动
-                </button>
-                <button type="button" onClick={() => void onOpenDesktop()} disabled={sandboxBusy}>
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onOpenDesktop()} disabled={sandboxBusy}>
                   打开桌面
-                </button>
-                <button type="button" onClick={() => void onCheckpointSandbox()} disabled={sandboxBusy}>
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onCheckpointSandbox()} disabled={sandboxBusy}>
                   快照
-                </button>
-                <button type="button" onClick={() => void onStopSandbox()} disabled={sandboxBusy}>
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onStopSandbox()} disabled={sandboxBusy}>
                   停止
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="danger"
+                  variant="destructive"
+                  size="sm"
                   onClick={() => void onResetSandbox()}
                   disabled={sandboxBusy}
                 >
                   重置
-                </button>
-                <button type="button" onClick={() => void onRefreshSandbox()}>
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshSandbox()}>
                   刷新
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -109,69 +118,75 @@ export function SandboxSettingsTab({
       </SettingsSection>
       <SettingsSection title="执行命令">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onExecSandbox}>
-            <label>
-              命令
-              <input
-                value={sandboxCmd}
-                onChange={(e) => setSandboxCmd(e.target.value)}
-                placeholder="echo hi"
-                required
-              />
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={sandboxBusy}>
-                运行
-              </button>
-            </div>
-            {sandboxExecOut ? <pre className="settings-status">{sandboxExecOut}</pre> : null}
+          <form onSubmit={onExecSandbox}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="sandbox-cmd">命令</FieldLabel>
+                <Input
+                  id="sandbox-cmd"
+                  value={sandboxCmd}
+                  onChange={(e) => setSandboxCmd(e.target.value)}
+                  placeholder="echo hi"
+                  required
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={sandboxBusy}>
+                  运行
+                </Button>
+              </div>
+              {sandboxExecOut ? <pre className="settings-status m-0">{sandboxExecOut}</pre> : null}
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="文件">
         <SettingsCard padded>
-          <div className="llm-form">
-            <label>
-              目录路径
-              <input
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="sandbox-path">目录路径</FieldLabel>
+              <Input
+                id="sandbox-path"
                 value={sandboxPath}
                 onChange={(e) => setSandboxPath(e.target.value)}
                 placeholder="."
               />
-            </label>
-            <div className="llm-actions">
-              <button type="button" onClick={() => void onLsSandbox()} disabled={sandboxBusy}>
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => void onLsSandbox()} disabled={sandboxBusy}>
                 列出
-              </button>
+              </Button>
             </div>
-            {sandboxLsOut ? <pre className="settings-status">{sandboxLsOut}</pre> : null}
-            <label>
-              文件路径
-              <input
+            {sandboxLsOut ? <pre className="settings-status m-0">{sandboxLsOut}</pre> : null}
+            <Field>
+              <FieldLabel htmlFor="sandbox-file-path">文件路径</FieldLabel>
+              <Input
+                id="sandbox-file-path"
                 value={sandboxFilePath}
                 onChange={(e) => setSandboxFilePath(e.target.value)}
                 placeholder="hello.txt"
               />
-            </label>
-            <label>
-              内容
-              <textarea
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="sandbox-file-content">内容</FieldLabel>
+              <Textarea
+                id="sandbox-file-content"
                 rows={3}
                 value={sandboxFileContent}
                 onChange={(e) => setSandboxFileContent(e.target.value)}
               />
-            </label>
-            <div className="llm-actions">
-              <button type="button" onClick={() => void onWriteSandboxFile()} disabled={sandboxBusy}>
+            </Field>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => void onWriteSandboxFile()} disabled={sandboxBusy}>
                 写入
-              </button>
-              <button type="button" onClick={() => void onReadSandboxFile()} disabled={sandboxBusy}>
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void onReadSandboxFile()} disabled={sandboxBusy}>
                 读取
-              </button>
+              </Button>
             </div>
-          </div>
+          </FieldGroup>
         </SettingsCard>
-        {sandboxMsg ? <div className="settings-status">{sandboxMsg}</div> : null}
+        {sandboxMsg ? <p className="settings-status m-0">{sandboxMsg}</p> : null}
       </SettingsSection>
     </SettingsPage>
   );

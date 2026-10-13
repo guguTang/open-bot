@@ -102,7 +102,7 @@ func postUpstreamChatTools(
 	payload map[string]any,
 ) (*upstreamChatResult, error) {
 	applyToolsReasoningEffort(payload, model)
-	r, err := postUpstreamChat(ctx, baseURL, apiKey, model, payload)
+	r, err := postUpstreamChat(ctx, baseURL, apiKey, payload)
 	if err != nil {
 		return r, err
 	}
@@ -110,7 +110,7 @@ func postUpstreamChatTools(
 		isReasoningEffortToolsRejectBody(r.body) &&
 		payload["reasoning_effort"] != "none" {
 		payload["reasoning_effort"] = "none"
-		return postUpstreamChat(ctx, baseURL, apiKey, model, payload)
+		return postUpstreamChat(ctx, baseURL, apiKey, payload)
 	}
 	return r, nil
 }
@@ -137,7 +137,7 @@ type upstreamChatResult struct {
 
 func postUpstreamChat(
 	ctx context.Context,
-	baseURL, apiKey, model string,
+	baseURL, apiKey string,
 	payload map[string]any,
 ) (*upstreamChatResult, error) {
 	url := normalizeLLMBaseURL(baseURL) + "/chat/completions"
@@ -315,7 +315,7 @@ func probeLLMTools(ctx context.Context, baseURL, apiKey, model string) LLMToolsP
 	}
 
 	// Attempt 3: plain completion — proves the endpoint works at all.
-	r3, err := postUpstreamChat(ctx, baseURL, apiKey, model, map[string]any{
+	r3, err := postUpstreamChat(ctx, baseURL, apiKey, map[string]any{
 		"model":    model,
 		"stream":   false,
 		"messages": []map[string]any{{"role": "user", "content": "ping"}},

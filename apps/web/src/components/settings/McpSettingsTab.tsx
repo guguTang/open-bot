@@ -1,5 +1,15 @@
 import type { FormEvent } from "react";
 import type { MCPServer, MCPServerInput } from "../../api";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -80,153 +90,174 @@ export function McpSettingsTab({
                         : ` · ${s.url}`}
                     </div>
                   </div>
-                  <div className="llm-actions">
-                    <button type="button" onClick={() => void onTestMcp(s.id)} disabled={mcpBusy}>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => void onTestMcp(s.id)} disabled={mcpBusy}>
                       测试连接
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={() => void onToggleMcp(s, !s.enabled)}
                       disabled={mcpBusy}
                     >
                       {s.enabled ? "停用" : "启用"}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className="danger"
+                      variant="destructive"
+                      size="sm"
                       onClick={() => void onRemoveMcp(s.id)}
                       disabled={mcpBusy}
                     >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
             )}
           </div>
         </SettingsCard>
-        {mcpTestResult ? <div className="settings-status">{mcpTestResult}</div> : null}
-        {mcpMsg ? <div className="settings-status">{mcpMsg}</div> : null}
+        {mcpTestResult ? <p className="settings-status m-0">{mcpTestResult}</p> : null}
+        {mcpMsg ? <p className="settings-status m-0">{mcpMsg}</p> : null}
       </SettingsSection>
       <SettingsSection title="新增 MCP server">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onSaveMcp}>
-            <label>
-              名称
-              <input
-                value={mcpForm.name}
-                onChange={(e) => setMcpForm({ ...mcpForm, name: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              传输
-              <select
-                value={mcpForm.transport}
-                onChange={(e) =>
-                  setMcpForm({
-                    ...mcpForm,
-                    transport: e.target.value as MCPServerInput["transport"],
-                  })
-                }
-              >
-                <option value="stdio">stdio</option>
-                <option value="sse">sse</option>
-                <option value="http">http</option>
-              </select>
-            </label>
-            {mcpForm.transport === "stdio" ? (
-              <>
-                <label>
-                  command（绝对路径或 python3/node/npx/uv…）
-                  <input
-                    value={mcpForm.command || ""}
-                    onChange={(e) => setMcpForm({ ...mcpForm, command: e.target.value })}
-                    placeholder="python3"
-                    required
-                  />
-                </label>
-                <label>
-                  args（JSON 数组）
-                  <input
-                    value={mcpArgsText}
-                    onChange={(e) => setMcpArgsText(e.target.value)}
-                    placeholder='["/path/to/server.py"]'
-                  />
-                </label>
-              </>
-            ) : (
-              <label>
-                URL
-                <input
-                  value={mcpForm.url || ""}
-                  onChange={(e) => setMcpForm({ ...mcpForm, url: e.target.value })}
-                  placeholder="http://127.0.0.1:8000/sse"
+          <form onSubmit={onSaveMcp}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="mcp-name">名称</FieldLabel>
+                <Input
+                  id="mcp-name"
+                  value={mcpForm.name}
+                  onChange={(e) => setMcpForm({ ...mcpForm, name: e.target.value })}
                   required
                 />
-              </label>
-            )}
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={mcpForm.enabled !== false}
-                onChange={(e) => setMcpForm({ ...mcpForm, enabled: e.target.checked })}
-              />
-              启用
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={mcpBusy}>
-                {mcpBusy ? "保存中…" : "新增"}
-              </button>
-              <button type="button" onClick={onFillEchoExample}>
-                填入 echo 示例
-              </button>
-            </div>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mcp-transport">传输</FieldLabel>
+                <NativeSelect
+                  id="mcp-transport"
+                  value={mcpForm.transport}
+                  onChange={(e) =>
+                    setMcpForm({
+                      ...mcpForm,
+                      transport: e.target.value as MCPServerInput["transport"],
+                    })
+                  }
+                >
+                  <NativeSelectOption value="stdio">stdio</NativeSelectOption>
+                  <NativeSelectOption value="sse">sse</NativeSelectOption>
+                  <NativeSelectOption value="http">http</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              {mcpForm.transport === "stdio" ? (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="mcp-command">
+                      command（绝对路径或 python3/node/npx/uv…）
+                    </FieldLabel>
+                    <Input
+                      id="mcp-command"
+                      value={mcpForm.command || ""}
+                      onChange={(e) => setMcpForm({ ...mcpForm, command: e.target.value })}
+                      placeholder="python3"
+                      required
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="mcp-args">args（JSON 数组）</FieldLabel>
+                    <Input
+                      id="mcp-args"
+                      value={mcpArgsText}
+                      onChange={(e) => setMcpArgsText(e.target.value)}
+                      placeholder='["/path/to/server.py"]'
+                    />
+                  </Field>
+                </>
+              ) : (
+                <Field>
+                  <FieldLabel htmlFor="mcp-url">URL</FieldLabel>
+                  <Input
+                    id="mcp-url"
+                    value={mcpForm.url || ""}
+                    onChange={(e) => setMcpForm({ ...mcpForm, url: e.target.value })}
+                    placeholder="http://127.0.0.1:8000/sse"
+                    required
+                  />
+                </Field>
+              )}
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="mcp-enabled"
+                  checked={mcpForm.enabled !== false}
+                  onCheckedChange={(checked) =>
+                    setMcpForm({ ...mcpForm, enabled: checked === true })
+                  }
+                />
+                <FieldLabel htmlFor="mcp-enabled" className="font-normal">
+                  启用
+                </FieldLabel>
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={mcpBusy}>
+                  {mcpBusy ? "保存中…" : "新增"}
+                </Button>
+                <Button type="button" variant="outline" onClick={onFillEchoExample}>
+                  填入 echo 示例
+                </Button>
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="手动调用工具">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onRunCallMcp}>
-            <label>
-              Server
-              <select
-                value={mcpCallServerId}
-                onChange={(e) => setMcpCallServerId(e.target.value)}
-              >
-                <option value="">选择…</option>
-                {mcpServers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Tool 名
-              <input
-                value={mcpCallToolName}
-                onChange={(e) => setMcpCallToolName(e.target.value)}
-                placeholder="echo"
-                required
-              />
-            </label>
-            <label>
-              Arguments（JSON）
-              <textarea
-                rows={3}
-                value={mcpCallArgs}
-                onChange={(e) => setMcpCallArgs(e.target.value)}
-              />
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={mcpBusy}>
-                调用
-              </button>
-            </div>
-            {mcpCallResult ? (
-              <pre className="settings-status">{mcpCallResult}</pre>
-            ) : null}
+          <form onSubmit={onRunCallMcp}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="mcp-call-server">Server</FieldLabel>
+                <NativeSelect
+                  id="mcp-call-server"
+                  value={mcpCallServerId}
+                  onChange={(e) => setMcpCallServerId(e.target.value)}
+                >
+                  <NativeSelectOption value="">选择…</NativeSelectOption>
+                  {mcpServers.map((s) => (
+                    <NativeSelectOption key={s.id} value={s.id}>
+                      {s.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mcp-call-tool">Tool 名</FieldLabel>
+                <Input
+                  id="mcp-call-tool"
+                  value={mcpCallToolName}
+                  onChange={(e) => setMcpCallToolName(e.target.value)}
+                  placeholder="echo"
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="mcp-call-args">Arguments（JSON）</FieldLabel>
+                <Textarea
+                  id="mcp-call-args"
+                  rows={3}
+                  value={mcpCallArgs}
+                  onChange={(e) => setMcpCallArgs(e.target.value)}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={mcpBusy}>
+                  调用
+                </Button>
+              </div>
+              {mcpCallResult ? (
+                <pre className="settings-status m-0">{mcpCallResult}</pre>
+              ) : null}
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>

@@ -180,6 +180,7 @@ export {
   type LLMConnection,
   type LLMInput,
   listLLMConnections,
+  fetchEffectiveLLMConnection,
   createLLMConnection,
   updateLLMConnection,
   deleteLLMConnection,

@@ -1,5 +1,14 @@
 import type { FormEvent } from "react";
 import type { LLMConnection, LLMInput } from "../../api";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -47,6 +56,14 @@ export function LlmSettingsTab({
   onResetForm,
   onProbeTools,
 }: LlmSettingsTabProps) {
+  const modelHint = llmModelsLoading
+    ? "正在拉取模型列表…"
+    : llmModelsError
+      ? `${llmModelsError}（仍可手动输入）`
+      : llmModelOptions.length > 0
+        ? `已加载 ${llmModelOptions.length} 个模型，可下拉选择或手动输入`
+        : undefined;
+
   return (
     <SettingsPage>
       <SettingsHint>
@@ -73,18 +90,23 @@ export function LlmSettingsTab({
                       {c.enable_tools ? " · tools" : ""}
                     </div>
                   </div>
-                  <div className="llm-actions">
+                  <div className="flex flex-wrap gap-2">
                     {!c.is_default ? (
-                      <button type="button" onClick={() => onSetDefault(c.id)}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => onSetDefault(c.id)}>
                         设默认
-                      </button>
+                      </Button>
                     ) : null}
-                    <button type="button" onClick={() => onStartEdit(c)}>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onStartEdit(c)}>
                       编辑
-                    </button>
-                    <button type="button" className="danger" onClick={() => onDeleteConnection(c.id)}>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => onDeleteConnection(c.id)}
+                    >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -94,114 +116,123 @@ export function LlmSettingsTab({
       </SettingsSection>
       <SettingsSection title={editingId ? "编辑连接" : "新增连接"}>
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onSaveLlm}>
-            <label>
-              名称
-              <input
-                value={llmForm.name}
-                onChange={(e) => onLlmFormChange({ ...llmForm, name: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Base URL
-              <input
-                value={llmForm.base_url}
-                onChange={(e) => onLlmFormChange({ ...llmForm, base_url: e.target.value })}
-                placeholder="https://api.openai.com/v1"
-              />
-            </label>
-            <label>
-              API Key{editingId ? "（留空不改）" : ""}
-              <input
-                type="password"
-                value={llmForm.api_key || ""}
-                onChange={(e) => onLlmFormChange({ ...llmForm, api_key: e.target.value })}
-                placeholder="sk-..."
-                autoComplete="off"
-              />
-            </label>
-            <label>
-              Model
-              <input
-                list="llm-model-options"
-                value={llmForm.model}
-                onChange={(e) => onLlmFormChange({ ...llmForm, model: e.target.value })}
-                placeholder={llmModelsLoading ? "加载模型列表…" : "gpt-4o-mini"}
-                autoComplete="off"
-              />
-              <datalist id="llm-model-options">
-                {llmModelOptions.map((id) => (
-                  <option key={id} value={id} />
-                ))}
-              </datalist>
-              {llmModelsLoading ? (
-                <span className="settings-status">正在拉取模型列表…</span>
-              ) : llmModelsError ? (
-                <span className="settings-status">{llmModelsError}（仍可手动输入）</span>
-              ) : llmModelOptions.length > 0 ? (
-                <span className="settings-status">
-                  已加载 {llmModelOptions.length} 个模型，可下拉选择或手动输入
-                </span>
-              ) : null}
-              {llmCacheProbing ? (
-                <span className="settings-status">正在检测 prompt cache…</span>
-              ) : llmCacheProbeMsg ? (
-                <span className="settings-status">{llmCacheProbeMsg}</span>
-              ) : null}
-            </label>
-            <label>
-              上下文窗口 (tokens)
-              <input
-                type="number"
-                min={0}
-                step={1024}
-                value={llmForm.context_window ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value.trim();
-                  if (!raw) {
-                    onLlmFormChange({ ...llmForm, context_window: null });
-                    return;
+          <form onSubmit={onSaveLlm}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="llm-name">名称</FieldLabel>
+                <Input
+                  id="llm-name"
+                  value={llmForm.name}
+                  onChange={(e) => onLlmFormChange({ ...llmForm, name: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="llm-base-url">Base URL</FieldLabel>
+                <Input
+                  id="llm-base-url"
+                  value={llmForm.base_url}
+                  onChange={(e) => onLlmFormChange({ ...llmForm, base_url: e.target.value })}
+                  placeholder="https://api.openai.com/v1"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="llm-api-key">
+                  API Key{editingId ? "（留空不改）" : ""}
+                </FieldLabel>
+                <Input
+                  id="llm-api-key"
+                  type="password"
+                  value={llmForm.api_key || ""}
+                  onChange={(e) => onLlmFormChange({ ...llmForm, api_key: e.target.value })}
+                  placeholder="sk-..."
+                  autoComplete="off"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="llm-model">Model</FieldLabel>
+                <Input
+                  id="llm-model"
+                  list="llm-model-options"
+                  value={llmForm.model}
+                  onChange={(e) => onLlmFormChange({ ...llmForm, model: e.target.value })}
+                  placeholder={llmModelsLoading ? "加载模型列表…" : "gpt-4o-mini"}
+                  autoComplete="off"
+                />
+                <datalist id="llm-model-options">
+                  {llmModelOptions.map((id) => (
+                    <option key={id} value={id} />
+                  ))}
+                </datalist>
+                {modelHint ? <FieldDescription>{modelHint}</FieldDescription> : null}
+                {llmCacheProbing ? (
+                  <FieldDescription>正在检测 prompt cache…</FieldDescription>
+                ) : llmCacheProbeMsg ? (
+                  <FieldDescription>{llmCacheProbeMsg}</FieldDescription>
+                ) : null}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="llm-context-window">上下文窗口 (tokens)</FieldLabel>
+                <Input
+                  id="llm-context-window"
+                  type="number"
+                  min={0}
+                  step={1024}
+                  value={llmForm.context_window ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (!raw) {
+                      onLlmFormChange({ ...llmForm, context_window: null });
+                      return;
+                    }
+                    const n = Number(raw);
+                    onLlmFormChange({
+                      ...llmForm,
+                      context_window: Number.isFinite(n) && n > 0 ? Math.floor(n) : null,
+                    });
+                  }}
+                  placeholder="留空=自动（按模型名推断）"
+                />
+              </Field>
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="llm-enable-tools"
+                  checked={Boolean(llmForm.enable_tools)}
+                  onCheckedChange={(checked) =>
+                    onLlmFormChange({ ...llmForm, enable_tools: checked === true })
                   }
-                  const n = Number(raw);
-                  onLlmFormChange({
-                    ...llmForm,
-                    context_window: Number.isFinite(n) && n > 0 ? Math.floor(n) : null,
-                  });
-                }}
-                placeholder="留空=自动（按模型名推断）"
-              />
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={Boolean(llmForm.enable_tools)}
-                onChange={(e) => onLlmFormChange({ ...llmForm, enable_tools: e.target.checked })}
-              />
-              启用 tools（需上游支持 function calling / 工具调用）
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={Boolean(llmForm.is_default)}
-                onChange={(e) => onLlmFormChange({ ...llmForm, is_default: e.target.checked })}
-              />
-              设为默认
-            </label>
-            {llmMsg ? <div className="settings-status">{llmMsg}</div> : null}
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={llmBusy}>
-                {llmBusy ? "保存中…" : "保存"}
-              </button>
-              <button type="button" disabled={llmBusy} onClick={() => void onProbeTools()}>
-                检测 tools 能力
-              </button>
-              {editingId ? (
-                <button type="button" onClick={onResetForm}>
-                  取消编辑
-                </button>
-              ) : null}
-            </div>
+                />
+                <FieldLabel htmlFor="llm-enable-tools" className="font-normal">
+                  启用 tools（需上游支持 function calling / 工具调用）
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="llm-is-default"
+                  checked={Boolean(llmForm.is_default)}
+                  onCheckedChange={(checked) =>
+                    onLlmFormChange({ ...llmForm, is_default: checked === true })
+                  }
+                />
+                <FieldLabel htmlFor="llm-is-default" className="font-normal">
+                  设为默认
+                </FieldLabel>
+              </Field>
+              {llmMsg ? <p className="settings-status m-0">{llmMsg}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={llmBusy}>
+                  {llmBusy ? "保存中…" : "保存"}
+                </Button>
+                <Button type="button" variant="outline" disabled={llmBusy} onClick={() => void onProbeTools()}>
+                  检测 tools 能力
+                </Button>
+                {editingId ? (
+                  <Button type="button" variant="ghost" onClick={onResetForm}>
+                    取消编辑
+                  </Button>
+                ) : null}
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>

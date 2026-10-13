@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChevronLeft, X } from "lucide-react";
 import type { Agent, User } from "../../api";
 import type { SettingsTab } from "../../types/app-ui";
 import { SETTINGS_TITLE } from "../../types/app-ui";
@@ -6,6 +7,14 @@ import { MobileSettingsHub, type SettingsHubNav } from "../MobileSettingsHub";
 import { SettingsGlyph } from "./SettingsGlyph";
 import { accountInitials } from "./accountInitials";
 import { getApiBase } from "../../api";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 const SETTINGS_NAV: ReadonlyArray<readonly [SettingsTab, string]> = [
   ["general", "通用"],
@@ -69,90 +78,119 @@ export function AppSettingsDialog({
   onSystemBack,
   children,
 }: AppSettingsDialogProps) {
-  if (!open) return null;
-
   const apiBaseLabel = (() => {
     const raw = getApiBase().replace(/^https?:\/\//i, "");
     return raw.length > 28 ? `${raw.slice(0, 27)}…` : raw;
   })();
 
+  const heading = sheetForm
+    ? settingsSubheadTitle(settingsTab, settingsGeneralPane)
+    : SETTINGS_TITLE[settingsTab];
+
   return (
-    <div
-      className={`modal-backdrop${sheetForm ? " settings-backdrop-shell" : ""}`}
-      onClick={onClose}
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
     >
-      <div
-        className={`modal settings-dialog${sheetForm ? " settings-dialog-shell" : ""}`}
-        onClick={(e) => e.stopPropagation()}
+      <DialogContent
+        showCloseButton={false}
+        overlayClassName={cn(sheetForm && "settings-backdrop-shell")}
+        className={cn(
+          "modal settings-dialog max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
+          sheetForm && "settings-dialog-shell",
+        )}
       >
+        <DialogDescription className="sr-only">应用设置</DialogDescription>
         {sheetForm && settingsShellHub ? (
-          <MobileSettingsHub
-            username={user?.username || "账户"}
-            email={user?.email}
-            accountInitials={accountInitials(user?.username || "")}
-            focusBot={activeAgent || agents[0] || null}
-            preferredMachineLabel={preferredMachineLabel}
-            apiBaseLabel={apiBaseLabel}
-            onClose={onClose}
-            onOpenBotAvatar={onOpenBotAvatar}
-            onLogout={() => {
-              onClose();
-              onLogout();
-            }}
-            onNavigate={onHubNavigate}
-          />
+          <>
+            <DialogTitle className="sr-only">设置</DialogTitle>
+            <MobileSettingsHub
+              username={user?.username || "账户"}
+              email={user?.email}
+              accountInitials={accountInitials(user?.username || "")}
+              focusBot={activeAgent || agents[0] || null}
+              preferredMachineLabel={preferredMachineLabel}
+              apiBaseLabel={apiBaseLabel}
+              onClose={onClose}
+              onOpenBotAvatar={onOpenBotAvatar}
+              onLogout={() => {
+                onClose();
+                onLogout();
+              }}
+              onNavigate={onHubNavigate}
+            />
+          </>
         ) : null}
         {sheetForm && !settingsShellHub ? (
           <div className="settings-shell-subhead">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               className="settings-shell-back"
               aria-label="返回"
               onClick={onSystemBack}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
-            <h2>{settingsSubheadTitle(settingsTab, settingsGeneralPane)}</h2>
-            <button type="button" className="settings-close" aria-label="关闭" onClick={onClose}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
-            </button>
+              <ChevronLeft aria-hidden />
+            </Button>
+            <DialogTitle>{heading}</DialogTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="settings-close"
+              aria-label="关闭"
+              onClick={onClose}
+            >
+              <X aria-hidden />
+            </Button>
           </div>
         ) : null}
         {!(sheetForm && settingsShellHub) ? (
           <>
-            <nav className={`settings-nav${sheetForm ? " settings-nav-hidden" : ""}`} aria-label="设置分类">
+            <nav
+              className={cn("settings-nav", sheetForm && "settings-nav-hidden")}
+              aria-label="设置分类"
+            >
               {SETTINGS_NAV.map(([id, label]) => (
-                <button
+                <Button
                   key={id}
                   type="button"
-                  className={settingsTab === id ? "active" : ""}
+                  variant="ghost"
+                  className={cn(
+                    "justify-start",
+                    settingsTab === id && "active",
+                  )}
                   onClick={() => onSelectTab(id)}
                 >
                   <SettingsGlyph id={id} />
                   <span>{label}</span>
-                </button>
+                </Button>
               ))}
             </nav>
             <div className="settings-main">
               {!sheetForm ? (
                 <div className="settings-main-head">
-                  <h2>{SETTINGS_TITLE[settingsTab]}</h2>
-                  <button type="button" className="settings-close" aria-label="关闭" onClick={onClose}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                      <path d="M6 6l12 12M18 6 6 18" />
-                    </svg>
-                  </button>
+                  <DialogTitle>{heading}</DialogTitle>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="settings-close"
+                    aria-label="关闭"
+                    onClick={onClose}
+                  >
+                    <X aria-hidden />
+                  </Button>
                 </div>
               ) : null}
               <div className="settings-main-body">{children}</div>
             </div>
           </>
         ) : null}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

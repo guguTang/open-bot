@@ -274,7 +274,7 @@ function ChatTranscript({
             <p>
               {agents.length === 0
                 ? "暂无助手，点击左上角「+」创建一个。"
-                : "从左侧选择一位助手进入连续对话；群聊里可用 @ 点名助手。回复经 Go API 流式代理到 Python runtime。"}
+                : "从左侧选择一位助手进入连续对话；群聊里可用 @ 点名助手。"}
             </p>
           </div>
         ) : null}

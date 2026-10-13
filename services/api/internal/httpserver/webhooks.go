@@ -141,9 +141,10 @@ func (s *Server) handleSlackWebhook(w http.ResponseWriter, r *http.Request) {
 		text, _ = payload["text"].(string)
 	}
 	matchType := evType
-	if matchType == "app_mention" {
+	switch matchType {
+	case "app_mention":
 		matchType = "app_mention"
-	} else if matchType == "message" {
+	case "message":
 		matchType = "message"
 	}
 	ev := db.EventMatch{

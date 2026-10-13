@@ -12,6 +12,18 @@ import {
   writeCachedUserSettings,
 } from "../lib/userSettings";
 import { setHostExecUserSettings } from "../lib/hostExec";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
 import { SettingsCard, SettingsSection } from "./SettingsLayout";
 
 type Props = {
@@ -107,135 +119,138 @@ export function GeneralBotSettings({ onSettingsChange, sectionTitle = "审核与
   return (
     <SettingsSection title={sectionTitle || undefined}>
       <SettingsCard padded>
-        <div className="bot-general-settings">
-          <div className="settings-row bot-settings-row">
-            <div className="bot-settings-copy">
-              <div className="bot-settings-title">时区</div>
-              <div className="bot-settings-desc">
+        <FieldGroup>
+          <Field orientation="responsive">
+            <FieldContent>
+              <FieldTitle>时区</FieldTitle>
+              <FieldDescription>
                 用于报告时间与例行任务。选择「自动检测」则跟随本机系统时区。
-              </div>
-            </div>
-            <select
-              className="bot-settings-select"
+              </FieldDescription>
+            </FieldContent>
+            <NativeSelect
               value={timezone}
               disabled={!loaded || busy}
+              aria-label="时区"
               onChange={(e) => {
                 const v = e.target.value;
                 setTimezone(v);
                 void persist({ timezone: v });
               }}
-              aria-label="时区"
             >
               {COMMON_TIMEZONES.map((z) => (
-                <option key={z.value || "auto"} value={z.value}>
+                <NativeSelectOption key={z.value || "auto"} value={z.value}>
                   {z.value === "" ? `${z.label}（${detected}）` : z.label}
-                </option>
+                </NativeSelectOption>
               ))}
               {timezone && !COMMON_TIMEZONES.some((z) => z.value === timezone) ? (
-                <option value={timezone}>{timezone}</option>
+                <NativeSelectOption value={timezone}>{timezone}</NativeSelectOption>
               ) : null}
-            </select>
-          </div>
+            </NativeSelect>
+          </Field>
 
-          <div className="settings-row bot-settings-row bot-settings-toggle-row">
-            <div className="bot-settings-copy">
-              <div className="bot-settings-title">自动审核</div>
-              <div className="bot-settings-desc">
+          <Field orientation="responsive">
+            <FieldContent>
+              <FieldTitle>自动审核</FieldTitle>
+              <FieldDescription>
                 每次执行操作前先检查，必要时询问你；可添加规则自定义哪些操作可自动执行
-              </div>
-            </div>
-            <label className="bot-settings-switch">
-              <input
-                type="checkbox"
-                checked={autoReview}
-                disabled={!loaded || busy}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setAutoReview(on);
-                  void persist({ auto_review_enabled: on });
-                }}
-              />
-              <span className="bot-settings-switch-ui" aria-hidden />
-              <span className="sr-only">{autoReview ? "已开启" : "已关闭"}</span>
-            </label>
-          </div>
+              </FieldDescription>
+            </FieldContent>
+            <Switch
+              id="auto-review-enabled"
+              checked={autoReview}
+              disabled={!loaded || busy}
+              onCheckedChange={(on) => {
+                setAutoReview(on);
+                void persist({ auto_review_enabled: on });
+              }}
+              aria-label={autoReview ? "已开启" : "已关闭"}
+            />
+          </Field>
 
           {autoReview ? (
-            <div className="bot-review-rules">
-              <div className="bot-settings-title">自动审核规则</div>
-              <div className="bot-settings-desc" style={{ marginBottom: 10 }}>
-                这些规则仅对你生效。内置安全检查始终有效。冲突时「先询问」优先于「自动允许」。匹配为关键词/意图（工具名 + 命令预览 + 原因），不是对话模型自行批准。
+            <div className="flex flex-col gap-3">
+              <div>
+                <FieldTitle>自动审核规则</FieldTitle>
+                <FieldDescription>
+                  这些规则仅对你生效。内置安全检查始终有效。冲突时「先询问」优先于「自动允许」。匹配为关键词/意图（工具名 + 命令预览 + 原因），不是对话模型自行批准。
+                </FieldDescription>
               </div>
-              <div className="bot-rule-add">
-                <label className="bot-rule-label" htmlFor="bot-rule-when-input">
-                  当 bot 想要:
-                </label>
-                <input
-                  id="bot-rule-when-input"
-                  className="bot-rule-when"
-                  value={draftWhen}
-                  disabled={busy}
-                  placeholder="替我回复邮件 / 本机只读命令"
-                  onChange={(e) => setDraftWhen(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addRule();
-                    }
-                  }}
-                />
-                <label className="bot-rule-label" htmlFor="bot-rule-action-select">
-                  它应该:
-                </label>
-                <select
-                  id="bot-rule-action-select"
-                  className="bot-settings-select bot-rule-action"
-                  value={draftAction}
-                  disabled={busy}
-                  onChange={(e) => setDraftAction(e.target.value as "ask_first" | "auto_allow")}
-                >
-                  <option value="auto_allow">自动允许</option>
-                  <option value="ask_first">先询问</option>
-                </select>
-                <button
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <Field className="min-w-48 flex-1">
+                  <FieldLabel htmlFor="bot-rule-when-input">当 bot 想要:</FieldLabel>
+                  <Input
+                    id="bot-rule-when-input"
+                    value={draftWhen}
+                    disabled={busy}
+                    placeholder="替我回复邮件 / 本机只读命令"
+                    onChange={(e) => setDraftWhen(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addRule();
+                      }
+                    }}
+                  />
+                </Field>
+                <Field className="w-auto">
+                  <FieldLabel htmlFor="bot-rule-action-select">它应该:</FieldLabel>
+                  <NativeSelect
+                    id="bot-rule-action-select"
+                    value={draftAction}
+                    disabled={busy}
+                    onChange={(e) => setDraftAction(e.target.value as "ask_first" | "auto_allow")}
+                  >
+                    <NativeSelectOption value="auto_allow">自动允许</NativeSelectOption>
+                    <NativeSelectOption value="ask_first">先询问</NativeSelectOption>
+                  </NativeSelect>
+                </Field>
+                <Button
                   type="button"
-                  className="primary"
                   disabled={busy || !draftWhen.trim()}
                   onClick={() => addRule()}
                 >
                   添加规则
-                </button>
+                </Button>
               </div>
               {rules.length > 0 ? (
-                <ul className="bot-rule-list">
+                <ul className="bot-rule-list m-0 flex list-none flex-col gap-2 p-0">
                   {rules.map((r) => (
-                    <li key={r.id} className="bot-rule-item">
+                    <li key={r.id} className="bot-rule-item flex flex-wrap items-center gap-2">
                       <span className="bot-rule-item-when">当 bot 想要「{r.when}」</span>
                       <span className="bot-rule-item-action">
                         {r.action === "ask_first" ? "先询问" : "自动允许"}
                       </span>
-                      <button
+                      <Button
                         type="button"
-                        className="ghost"
+                        variant="ghost"
+                        size="sm"
                         disabled={busy}
                         onClick={() => removeRule(r.id)}
                       >
                         删除
-                      </button>
+                      </Button>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="bot-settings-desc">暂无自定义规则；内置 deny / auto / confirm 档位仍生效。</div>
+                <FieldDescription>
+                  暂无自定义规则；内置 deny / auto / confirm 档位仍生效。
+                </FieldDescription>
               )}
             </div>
           ) : (
-            <div className="bot-settings-desc" style={{ padding: "0 4px 8px" }}>
-              已关闭：除硬拒绝外，本机/远程写删等操作都会先询问你。当前有效时区：{effectiveTimezone({ timezone, auto_review_enabled: autoReview, auto_review_rules: rules })}（{tzLabel}）
-            </div>
+            <FieldDescription>
+              已关闭：除硬拒绝外，本机/远程写删等操作都会先询问你。当前有效时区：
+              {effectiveTimezone({
+                timezone,
+                auto_review_enabled: autoReview,
+                auto_review_rules: rules,
+              })}
+              （{tzLabel}）
+            </FieldDescription>
           )}
-          {msg ? <div className="settings-status">{msg}</div> : null}
-        </div>
+          {msg ? <p className="settings-status m-0">{msg}</p> : null}
+        </FieldGroup>
       </SettingsCard>
     </SettingsSection>
   );

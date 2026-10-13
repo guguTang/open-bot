@@ -1,5 +1,16 @@
 import type { FormEvent } from "react";
 import type { Agent, InboundHook, Routine, RoutineInput } from "../../api";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -60,7 +71,7 @@ export function RoutinesSettingsTab({
             ) : (
               routines.map((r) => (
                 <div key={r.id} className="llm-item">
-                  <div style={{ flex: 1 }}>
+                  <div className="min-w-0 flex-1">
                     <div className="agent-name">
                       {r.name}
                       {r.enabled ? <span className="tag">启用</span> : <span className="tag">停用</span>}
@@ -77,32 +88,45 @@ export function RoutinesSettingsTab({
                       {r.conversation_id ? " · 已绑定会话" : ""}
                       {r.last_run_at ? ` · 上次 ${r.last_run_at}` : ""}
                     </div>
-                    <div className="agent-desc" style={{ marginTop: 4 }}>
+                    <div className="agent-desc mt-1">
                       prompt: {r.prompt.slice(0, 120)}
                       {r.prompt.length > 120 ? "…" : ""}
                     </div>
                     {r.last_run ? (
-                      <pre className="settings-status" style={{ marginTop: 8, maxHeight: 160 }}>
+                      <pre className="settings-status mt-2 max-h-40">
                         [{r.last_run.status}] {r.last_run.result_text}
                       </pre>
                     ) : null}
                   </div>
-                  <div className="llm-actions">
-                    <label className="check">
-                      <input
-                        type="checkbox"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Field orientation="horizontal" className="w-auto gap-2">
+                      <Switch
+                        id={`routine-enabled-${r.id}`}
                         checked={r.enabled}
-                        onChange={(e) => void onToggleRoutine(r, e.target.checked)}
                         disabled={routinesBusy}
+                        onCheckedChange={(checked) => void onToggleRoutine(r, checked)}
                       />
-                      启用
-                    </label>
-                    <button type="button" onClick={() => void onRunRoutineNow(r.id)} disabled={routinesBusy}>
+                      <FieldLabel htmlFor={`routine-enabled-${r.id}`} className="font-normal">
+                        启用
+                      </FieldLabel>
+                    </Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void onRunRoutineNow(r.id)}
+                      disabled={routinesBusy}
+                    >
                       立即运行
-                    </button>
-                    <button type="button" className="danger" onClick={() => void onRemoveRoutine(r.id)}>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => void onRemoveRoutine(r.id)}
+                    >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -112,87 +136,103 @@ export function RoutinesSettingsTab({
       </SettingsSection>
       <SettingsSection title="新建例行任务">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onSaveRoutine}>
-            <label>
-              名称
-              <input
-                value={routineForm.name}
-                onChange={(e) => setRoutineForm({ ...routineForm, name: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Prompt
-              <textarea
-                rows={3}
-                value={routineForm.prompt}
-                onChange={(e) => setRoutineForm({ ...routineForm, prompt: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              所属 Bot
-              <select
-                value={routineForm.agent_id || agentId || ""}
-                onChange={(e) => setRoutineForm({ ...routineForm, agent_id: e.target.value })}
-              >
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Cron（5 字段，纯事件可留空）
-              <input
-                value={routineForm.schedule_cron}
-                onChange={(e) => setRoutineForm({ ...routineForm, schedule_cron: e.target.value })}
-                placeholder="0 9 * * *"
-              />
-            </label>
-            <label>
-              时区（IANA）
-              <input
-                value={routineForm.timezone || "Asia/Shanghai"}
-                onChange={(e) => setRoutineForm({ ...routineForm, timezone: e.target.value })}
-                placeholder="Asia/Shanghai"
-              />
-            </label>
-            <label>
-              事件触发器 JSON
-              <textarea
-                rows={3}
-                value={routineForm.triggers_json || "[]"}
-                onChange={(e) => setRoutineForm({ ...routineForm, triggers_json: e.target.value })}
-                placeholder='[{"source":"slack","type":"app_mention"}]'
-              />
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={!!routineForm.quiet_unchanged}
-                onChange={(e) => setRoutineForm({ ...routineForm, quiet_unchanged: e.target.checked })}
-              />
-              结果无变化时静默
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={routineForm.enabled !== false}
-                onChange={(e) => setRoutineForm({ ...routineForm, enabled: e.target.checked })}
-              />
-              创建后启用
-            </label>
-            {routinesMsg ? <div className="settings-status">{routinesMsg}</div> : null}
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={routinesBusy}>
-                {routinesBusy ? "处理中…" : "创建"}
-              </button>
-              <button type="button" onClick={() => void onRefreshRoutines()}>
-                刷新
-              </button>
-            </div>
+          <form onSubmit={onSaveRoutine}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="routine-name">名称</FieldLabel>
+                <Input
+                  id="routine-name"
+                  value={routineForm.name}
+                  onChange={(e) => setRoutineForm({ ...routineForm, name: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="routine-prompt">Prompt</FieldLabel>
+                <Textarea
+                  id="routine-prompt"
+                  rows={3}
+                  value={routineForm.prompt}
+                  onChange={(e) => setRoutineForm({ ...routineForm, prompt: e.target.value })}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="routine-agent">所属 Bot</FieldLabel>
+                <NativeSelect
+                  id="routine-agent"
+                  value={routineForm.agent_id || agentId || ""}
+                  onChange={(e) => setRoutineForm({ ...routineForm, agent_id: e.target.value })}
+                >
+                  {agents.map((a) => (
+                    <NativeSelectOption key={a.id} value={a.id}>
+                      {a.name}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="routine-cron">Cron（5 字段，纯事件可留空）</FieldLabel>
+                <Input
+                  id="routine-cron"
+                  value={routineForm.schedule_cron}
+                  onChange={(e) => setRoutineForm({ ...routineForm, schedule_cron: e.target.value })}
+                  placeholder="0 9 * * *"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="routine-timezone">时区（IANA）</FieldLabel>
+                <Input
+                  id="routine-timezone"
+                  value={routineForm.timezone || "Asia/Shanghai"}
+                  onChange={(e) => setRoutineForm({ ...routineForm, timezone: e.target.value })}
+                  placeholder="Asia/Shanghai"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="routine-triggers">事件触发器 JSON</FieldLabel>
+                <Textarea
+                  id="routine-triggers"
+                  rows={3}
+                  value={routineForm.triggers_json || "[]"}
+                  onChange={(e) => setRoutineForm({ ...routineForm, triggers_json: e.target.value })}
+                  placeholder='[{"source":"slack","type":"app_mention"}]'
+                />
+              </Field>
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="routine-quiet"
+                  checked={!!routineForm.quiet_unchanged}
+                  onCheckedChange={(checked) =>
+                    setRoutineForm({ ...routineForm, quiet_unchanged: checked === true })
+                  }
+                />
+                <FieldLabel htmlFor="routine-quiet" className="font-normal">
+                  结果无变化时静默
+                </FieldLabel>
+              </Field>
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="routine-enabled"
+                  checked={routineForm.enabled !== false}
+                  onCheckedChange={(checked) =>
+                    setRoutineForm({ ...routineForm, enabled: checked === true })
+                  }
+                />
+                <FieldLabel htmlFor="routine-enabled" className="font-normal">
+                  创建后启用
+                </FieldLabel>
+              </Field>
+              {routinesMsg ? <p className="settings-status m-0">{routinesMsg}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={routinesBusy}>
+                  {routinesBusy ? "处理中…" : "创建"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => void onRefreshRoutines()}>
+                  刷新
+                </Button>
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
@@ -208,35 +248,35 @@ export function RoutinesSettingsTab({
             ) : (
               inboundHooks.map((h) => (
                 <div key={h.id} className="llm-item">
-                  <div style={{ flex: 1 }}>
+                  <div className="min-w-0 flex-1">
                     <div className="agent-name">{h.label || h.provider}</div>
                     <div className="agent-desc">Slack: {h.url_slack}</div>
                     <div className="agent-desc">GitHub: {h.url_github}</div>
                     <div className="agent-desc">token: {h.token}</div>
                   </div>
-                  <div className="llm-actions">
-                    <button
+                  <div className="flex flex-wrap gap-2">
+                    <Button
                       type="button"
-                      className="danger"
+                      variant="destructive"
+                      size="sm"
                       onClick={() => void onDeleteInboundHook(h.id)}
                     >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
             )}
           </div>
-          {hooksMsg ? <div className="settings-status">{hooksMsg}</div> : null}
-          <div className="llm-actions" style={{ marginTop: 12 }}>
-            <button
+          {hooksMsg ? <p className="settings-status m-0">{hooksMsg}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
               type="button"
-              className="primary"
               disabled={routinesBusy}
               onClick={() => void onCreateInboundHook()}
             >
               创建 Hook
-            </button>
+            </Button>
           </div>
         </SettingsCard>
       </SettingsSection>

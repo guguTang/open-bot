@@ -34,13 +34,6 @@ type groupAutoPickResult struct {
 	AllowSecondFailOpen bool
 }
 
-// groupAutoPickOpts configures A-tier AutoPick for a no-@ group turn.
-type groupAutoPickOpts struct {
-	Enabled        bool
-	K              int
-	RecentSynopsis string // optional last 1–2 msg synopsis
-}
-
 func clampAutoPickK(k int) int {
 	if k <= 0 {
 		return autoPickDefaultK
@@ -630,7 +623,7 @@ func runAutoPickByMode(mode, userText string, members []string, agents []*db.Age
 	mode = db.NormalizeAutoPickMode(mode)
 	switch mode {
 	case db.AutoPickDecision:
-		if pick, ok := autoPickDecision(context.Background(), deps, userText, members, agents, leadID, k, synopsis); ok {
+		if pick, ok := autoPickDecision(context.Background(), deps, userText, members, agents, k, synopsis); ok {
 			return pick
 		}
 		// Decide failed (timeout/parse/low-conf/off). Specialty heuristic keeps capable

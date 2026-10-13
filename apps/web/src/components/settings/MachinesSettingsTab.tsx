@@ -12,6 +12,17 @@ import {
   normalizeMachineExecPolicy,
   type MachineExecPolicy,
 } from "../../lib/userSettings";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -78,9 +89,9 @@ function CurrentMachineSection({
     return (
       <SettingsSection title="当前电脑">
         <SettingsCard padded>
-          <div className="bot-settings-desc">
+          <FieldDescription>
             浏览器不能作为本机执行通道。请用桌面应用打开并保持在线。
-          </div>
+          </FieldDescription>
         </SettingsCard>
       </SettingsSection>
     );
@@ -93,27 +104,31 @@ function CurrentMachineSection({
     return (
       <SettingsSection title="当前设备">
         <SettingsCard padded>
-          <div className="bot-general-settings">
-            <div className="settings-row bot-settings-row">
-              <div className="bot-settings-copy">
-                <div className="bot-settings-title">{current?.label || deviceDisplayName || "本机"}</div>
-                <div className="bot-settings-desc">
+          <FieldGroup>
+            <Field orientation="responsive">
+              <FieldContent>
+                <FieldTitle>{current?.label || deviceDisplayName || "本机"}</FieldTitle>
+                <FieldDescription>
                   手机只用来登录聊天；本地文件和命令请在已连接的电脑上跑。
-                </div>
+                </FieldDescription>
+              </FieldContent>
+              <div className="flex flex-wrap gap-1">
+                <span className="tag machine-login-only">仅登录</span>
+                {current ? (
+                  machineIsOnline(current) ? (
+                    <span className="tag machine-online">在线</span>
+                  ) : (
+                    <span className="tag machine-offline">离线</span>
+                  )
+                ) : null}
               </div>
-              <span className="tag machine-login-only">仅登录</span>
-              {current ? (
-                machineIsOnline(current) ? (
-                  <span className="tag machine-online">在线</span>
-                ) : (
-                  <span className="tag machine-offline">离线</span>
-                )
-              ) : null}
-            </div>
+            </Field>
             {!current ? (
-              <div className="bot-settings-desc">尚未登记本机。点击下方「重新注册本机」以出现在设备列表。</div>
+              <FieldDescription>
+                尚未登记本机。点击下方「重新注册本机」以出现在设备列表。
+              </FieldDescription>
             ) : null}
-          </div>
+          </FieldGroup>
         </SettingsCard>
       </SettingsSection>
     );
@@ -122,25 +137,25 @@ function CurrentMachineSection({
   return (
     <SettingsSection title="当前电脑">
       <SettingsCard padded>
-        <div className="bot-general-settings">
-          <div className="settings-row bot-settings-row">
-            <div className="bot-settings-copy">
-              <div className="bot-settings-title">名称</div>
-              <div className="bot-settings-desc">
+        <FieldGroup>
+          <Field orientation="responsive">
+            <FieldContent>
+              <FieldTitle>名称</FieldTitle>
+              <FieldDescription>
                 显示给 Bot 的设备名（如系统主机名）。保存后同步到已注册列表。
-              </div>
-            </div>
-            <div className="bot-machine-name-edit">
-              <input
+              </FieldDescription>
+            </FieldContent>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                className="w-auto min-w-40"
                 value={currentMachineDraft}
                 onChange={(e) => onCurrentMachineDraftChange(e.target.value)}
                 maxLength={64}
                 placeholder={deviceDisplayName || "设备名称"}
                 disabled={machinesBusy || !current}
               />
-              <button
+              <Button
                 type="button"
-                className="primary"
                 disabled={
                   machinesBusy ||
                   !current ||
@@ -150,45 +165,46 @@ function CurrentMachineSection({
                 onClick={onSaveCurrentMachineName}
               >
                 保存
-              </button>
+              </Button>
             </div>
-          </div>
-          <div className="settings-row bot-settings-row">
-            <div className="bot-settings-copy">
-              <div className="bot-settings-title">在这台电脑上执行</div>
-              <div className="bot-settings-desc">
+          </Field>
+          <Field orientation="responsive">
+            <FieldContent>
+              <FieldTitle>在这台电脑上执行</FieldTitle>
+              <FieldDescription>
                 始终允许：除硬拒绝（curl|sh、rm -rf /、mkfs）外直接执行，不弹确认卡。用户规则「先询问」命中时仍会确认。
-              </div>
-            </div>
-            <select
-              className="bot-settings-select"
+              </FieldDescription>
+            </FieldContent>
+            <NativeSelect
               value={hostExecPolicy}
               disabled={machinesBusy || !current}
+              aria-label="在这台电脑上执行"
               onChange={(e) => {
                 if (!current) return;
                 onHostExecPolicyChange(normalizeMachineExecPolicy(e.target.value));
               }}
-              aria-label="在这台电脑上执行"
             >
               {MACHINE_EXEC_POLICY_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
+                <NativeSelectOption key={o.value} value={o.value}>
                   {o.label}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
-          </div>
+            </NativeSelect>
+          </Field>
           {!current ? (
-            <div className="bot-settings-desc">尚未登记本机。点击下方「重新注册本机」以启用。</div>
+            <FieldDescription>
+              尚未登记本机。点击下方「重新注册本机」以启用。
+            </FieldDescription>
           ) : (
-            <div className="bot-settings-desc">
+            <FieldDescription>
               状态：
               {machineIsOnline(current) ? "在线" : "离线"}
               {current.connected ? " · 可操作" : ""}
               {current.platform ? ` · ${current.platform}` : ""}
               {hostWritesOn ? "" : " · 本机写入已关"}
-            </div>
+            </FieldDescription>
           )}
-        </div>
+        </FieldGroup>
       </SettingsCard>
     </SettingsSection>
   );
@@ -254,13 +270,13 @@ export function MachinesSettingsTab({
         title="已注册"
         actions={
           <>
-            <button type="button" onClick={onRefreshMachines} disabled={machinesBusy}>
+            <Button type="button" variant="outline" size="sm" onClick={onRefreshMachines} disabled={machinesBusy}>
               刷新
-            </button>
+            </Button>
             {shouldRegisterAsHost(clientEnv) ? (
-              <button type="button" className="primary" disabled={machinesBusy} onClick={onReregisterHost}>
+              <Button type="button" size="sm" disabled={machinesBusy} onClick={onReregisterHost}>
                 重新注册本机
-              </button>
+              </Button>
             ) : null}
           </>
         }
@@ -274,19 +290,18 @@ export function MachinesSettingsTab({
                 <div className="llm-item" key={m.id}>
                   <div>
                     {renamingMachineId === m.id ? (
-                      <div className="llm-form" style={{ gap: 8, marginBottom: 4 }}>
-                        <label>
-                          设备名称
-                          <input
-                            value={renameDraft}
-                            onChange={(e) => onRenameDraftChange(e.target.value)}
-                            maxLength={64}
-                            placeholder="例如：MacBook Pro"
-                            autoFocus
-                            onKeyDown={(e) => onRenameKeyDown(m.id, e)}
-                          />
-                        </label>
-                      </div>
+                      <Field className="mb-1 max-w-sm">
+                        <FieldLabel htmlFor={`rename-${m.id}`}>设备名称</FieldLabel>
+                        <Input
+                          id={`rename-${m.id}`}
+                          value={renameDraft}
+                          onChange={(e) => onRenameDraftChange(e.target.value)}
+                          maxLength={64}
+                          placeholder="例如：MacBook Pro"
+                          autoFocus
+                          onKeyDown={(e) => onRenameKeyDown(m.id, e)}
+                        />
+                      </Field>
                     ) : (
                       <div className="agent-name">
                         {m.label}{" "}
@@ -316,45 +331,48 @@ export function MachinesSettingsTab({
                       {m.last_seen ? ` · 最近 ${m.last_seen}` : ""}
                     </div>
                   </div>
-                  <div className="llm-actions">
+                  <div className="flex flex-wrap gap-2">
                     {renamingMachineId === m.id ? (
                       <>
-                        <button
+                        <Button
                           type="button"
-                          className="primary"
+                          size="sm"
                           disabled={machinesBusy || !renameDraft.trim()}
                           onClick={() => onSaveRename(m.id)}
                         >
                           保存
-                        </button>
-                        <button type="button" disabled={machinesBusy} onClick={onCancelRename}>
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" disabled={machinesBusy} onClick={onCancelRename}>
                           取消
-                        </button>
+                        </Button>
                       </>
                     ) : (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         disabled={machinesBusy}
                         onClick={() => onStartRename(m.id, m.label)}
                       >
                         重命名
-                      </button>
+                      </Button>
                     )}
-                    <button
+                    <Button
                       type="button"
-                      className="danger"
+                      variant="destructive"
+                      size="sm"
                       disabled={machinesBusy}
                       onClick={() => onDeleteMachine(m)}
                     >
                       {isLoginOnlyMachine(m) ? "移除" : "删除"}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
             )}
           </div>
         </SettingsCard>
-        {machinesMsg ? <div className="settings-status">{machinesMsg}</div> : null}
+        {machinesMsg ? <p className="settings-status m-0">{machinesMsg}</p> : null}
       </SettingsSection>
     </SettingsPage>
   );

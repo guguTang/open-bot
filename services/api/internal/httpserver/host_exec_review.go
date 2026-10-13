@@ -895,14 +895,3 @@ func classifyHostExecReviewForMachine(op, path, dest string, settings db.UserSet
 	}
 }
 
-func hostExecNeedsChatConfirmForUser(op, path, dest string, settings db.UserSettings) bool {
-	return classifyHostExecReviewForUser(op, path, dest, settings).Tier == hostExecReviewConfirm
-}
-
-func hostExecHardDeniedForUser(op, path, dest string, settings db.UserSettings) (bool, hostExecReview) {
-	rev := classifyHostExecReviewForUser(op, path, dest, settings)
-	if rev.Tier == hostExecReviewDeny {
-		return true, rev
-	}
-	return false, rev
-}

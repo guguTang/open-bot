@@ -1,5 +1,12 @@
 import type { FormEvent } from "react";
 import type { BotSecretMeta, BotSecretRequest } from "../../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -42,28 +49,37 @@ export function SecretsSettingsTab({
       </SettingsHint>
       <SettingsSection title="添加密钥">
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={onSubmitSecret}>
-            <label>
-              名称
-              <input value={secretFormName} onChange={(e) => setSecretFormName(e.target.value)} />
-            </label>
-            <label>
-              Origin (HTTPS)
-              <input value={secretFormOrigin} onChange={(e) => setSecretFormOrigin(e.target.value)} />
-            </label>
-            <label>
-              值
-              <input
-                type="password"
-                value={secretFormValue}
-                onChange={(e) => setSecretFormValue(e.target.value)}
-              />
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary">
-                添加密钥
-              </button>
-            </div>
+          <form onSubmit={onSubmitSecret}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="secret-name">名称</FieldLabel>
+                <Input
+                  id="secret-name"
+                  value={secretFormName}
+                  onChange={(e) => setSecretFormName(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="secret-origin">Origin (HTTPS)</FieldLabel>
+                <Input
+                  id="secret-origin"
+                  value={secretFormOrigin}
+                  onChange={(e) => setSecretFormOrigin(e.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="secret-value">值</FieldLabel>
+                <Input
+                  id="secret-value"
+                  type="password"
+                  value={secretFormValue}
+                  onChange={(e) => setSecretFormValue(e.target.value)}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit">添加密钥</Button>
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
@@ -81,14 +97,15 @@ export function SecretsSettingsTab({
                       {s.origin || "(no origin)"} · {s.auth_type}
                     </div>
                   </div>
-                  <div className="llm-actions">
-                    <button
+                  <div className="flex flex-wrap gap-2">
+                    <Button
                       type="button"
-                      className="danger"
+                      variant="destructive"
+                      size="sm"
                       onClick={() => void onDeleteSecret(s.id)}
                     >
                       删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
@@ -96,9 +113,9 @@ export function SecretsSettingsTab({
           </div>
         </SettingsCard>
         {secretRequests.length ? (
-          <div className="settings-status">待处理请求：{secretRequests.length}</div>
+          <p className="settings-status m-0">待处理请求：{secretRequests.length}</p>
         ) : null}
-        {secretMsg ? <div className="settings-status">{secretMsg}</div> : null}
+        {secretMsg ? <p className="settings-status m-0">{secretMsg}</p> : null}
       </SettingsSection>
     </SettingsPage>
   );

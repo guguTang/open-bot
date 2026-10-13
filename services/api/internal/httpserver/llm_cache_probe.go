@@ -142,7 +142,7 @@ func probeLLMPromptCache(ctx context.Context, baseURL, apiKey, model string) LLM
 		heuristic = "key"
 	}
 
-	r, err := postUpstreamChat(ctx, baseURL, apiKey, model, payload)
+	r, err := postUpstreamChat(ctx, baseURL, apiKey, payload)
 	if err != nil {
 		return LLMPromptCacheProbeResult{
 			OK: false, Mode: "error", HeuristicMode: heuristic,
@@ -176,7 +176,7 @@ func probeLLMPromptCache(ctx context.Context, baseURL, apiKey, model string) LLM
 	}
 
 	// Unrelated failure (auth, model not found, etc.) — still prove plain chat if possible.
-	rPlain, errPlain := postUpstreamChat(ctx, baseURL, apiKey, model, map[string]any{
+	rPlain, errPlain := postUpstreamChat(ctx, baseURL, apiKey, map[string]any{
 		"model":    model,
 		"stream":   false,
 		"messages": []map[string]any{{"role": "user", "content": "ping"}},

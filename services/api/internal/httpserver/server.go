@@ -162,6 +162,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/admin/compact-config", s.requireOrgAdmin(s.handleCompactConfig))
 
 	mux.HandleFunc("GET /v1/llm-connections", s.requireAuth(s.handleListLLM))
+	mux.HandleFunc("GET /v1/llm-connections/effective", s.requireAuth(s.handleEffectiveLLM))
 	mux.HandleFunc("POST /v1/llm-connections", s.requireAuth(s.handleCreateLLM))
 	mux.HandleFunc("PATCH /v1/llm-connections/{id}", s.requireAuth(s.handlePatchLLM))
 	mux.HandleFunc("DELETE /v1/llm-connections/{id}", s.requireAuth(s.handleDeleteLLM))
@@ -519,6 +520,22 @@ func (s *Server) handleListLLM(w http.ResponseWriter, r *http.Request) {
 		pub = append(pub, c.Public())
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"connections": pub})
+}
+
+// handleEffectiveLLM returns the LLM used for runs: personal default, else org default.
+// Matches ResolveEffectiveLLM so the UI label agrees with what chat actually uses.
+func (s *Server) handleEffectiveLLM(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	conn, err := s.db.ResolveEffectiveLLM(uid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if conn == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"connection": nil})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"connection": conn.Public()})
 }
 
 const (
@@ -972,16 +989,6 @@ func (s *Server) proxyJSON(w http.ResponseWriter, method, path string, query url
 	_, _ = w.Write(b)
 }
 
-func (s *Server) handleListSkills(w http.ResponseWriter, r *http.Request) {
-	uid := userIDFrom(r.Context())
-	list, err := s.db.ListUserSkills(uid)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"skills": list})
-}
-
 func (s *Server) handlePutSkill(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	name := r.PathValue("name")
@@ -1141,21 +1148,6 @@ func (s *Server) handleUploadSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, sk)
-}
-
-func (s *Server) handleGetUserSkillPackage(w http.ResponseWriter, r *http.Request) {
-	uid := userIDFrom(r.Context())
-	name := r.PathValue("name")
-	sk, err := s.db.GetUserSkillPackage(uid, name)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "custom skill not found"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, sk)
 }
 
 const maxSkillUploadBytes = 8 << 20

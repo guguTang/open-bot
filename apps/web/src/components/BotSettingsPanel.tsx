@@ -6,6 +6,16 @@ import {
   setAgentSkill,
   updateAgent,
 } from "../api";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -118,69 +128,80 @@ export function BotSettingsPanel({ agent, busy, onSaved, onClone, onOpenSkill, o
       </SettingsHint>
       <SettingsSection title={`Bot · ${agent.name}`}>
         <SettingsCard padded>
-          <form className="llm-form" onSubmit={(e) => void onSave(e)}>
-            <label>
-              名称
-              <input value={name} onChange={(e) => setName(e.target.value)} disabled={locked} required />
-            </label>
-            <label>
-              岗位描述
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={locked}
-                placeholder="这位助手负责什么"
-              />
-            </label>
-            <label>
-              系统提示（人设）
-              <textarea
-                rows={5}
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                disabled={locked}
-                placeholder="更细的行为约束"
-              />
-            </label>
-            <label>
-              电脑模式
-              <select
-                value={computerMode}
-                onChange={(e) => setComputerMode(e.target.value as "team" | "private")}
-                disabled={locked}
-              >
-                <option value="team">team · 账户共用文件</option>
-                <option value="private">private · 本 Bot 私有文件</option>
-              </select>
-            </label>
-            <div className="llm-actions">
-              <button type="submit" className="primary" disabled={locked}>
-                {saving ? "保存中…" : "保存"}
-              </button>
-              {onClone ? (
-                <button
-                  type="button"
-                  className="ghost"
+          <form onSubmit={(e) => void onSave(e)}>
+            <FieldGroup>
+              <Field data-disabled={locked || undefined}>
+                <FieldLabel htmlFor="bot-name">名称</FieldLabel>
+                <Input
+                  id="bot-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   disabled={locked}
-                  title="复制人设与技能为新助手；记忆、例行任务可选"
-                  onClick={() => onClone(agent)}
-                >
-                  复制助手
-                </button>
-              ) : null}
-              {onOpenAvatar ? (
-                <button
-                  type="button"
-                  className="ghost"
+                  required
+                />
+              </Field>
+              <Field data-disabled={locked || undefined}>
+                <FieldLabel htmlFor="bot-description">岗位描述</FieldLabel>
+                <Textarea
+                  id="bot-description"
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   disabled={locked}
-                  title="头像、形状与本 Bot 优先电脑"
-                  onClick={() => onOpenAvatar(agent)}
+                  placeholder="这位助手负责什么"
+                />
+              </Field>
+              <Field data-disabled={locked || undefined}>
+                <FieldLabel htmlFor="bot-system-prompt">系统提示（人设）</FieldLabel>
+                <Textarea
+                  id="bot-system-prompt"
+                  rows={5}
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  disabled={locked}
+                  placeholder="更细的行为约束"
+                />
+              </Field>
+              <Field data-disabled={locked || undefined}>
+                <FieldLabel htmlFor="bot-computer-mode">电脑模式</FieldLabel>
+                <NativeSelect
+                  id="bot-computer-mode"
+                  value={computerMode}
+                  onChange={(e) => setComputerMode(e.target.value as "team" | "private")}
+                  disabled={locked}
                 >
-                  形象与优先电脑
-                </button>
-              ) : null}
-            </div>
+                  <NativeSelectOption value="team">team · 账户共用文件</NativeSelectOption>
+                  <NativeSelectOption value="private">private · 本 Bot 私有文件</NativeSelectOption>
+                </NativeSelect>
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={locked}>
+                  {saving ? "保存中…" : "保存"}
+                </Button>
+                {onClone ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={locked}
+                    title="复制人设与技能为新助手；记忆、例行任务可选"
+                    onClick={() => onClone(agent)}
+                  >
+                    复制助手
+                  </Button>
+                ) : null}
+                {onOpenAvatar ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={locked}
+                    title="头像、形状与本 Bot 优先电脑"
+                    onClick={() => onOpenAvatar(agent)}
+                  >
+                    形象与优先电脑
+                  </Button>
+                ) : null}
+              </div>
+            </FieldGroup>
           </form>
         </SettingsCard>
       </SettingsSection>
@@ -190,47 +211,55 @@ export function BotSettingsPanel({ agent, busy, onSaved, onClone, onOpenSkill, o
             {visibleSkills.length === 0 ? (
               <SettingsEmpty>暂无可用技能（或尚未加载）。请先在管理端启用平台技能，并在账号侧保持可用。</SettingsEmpty>
             ) : (
-              visibleSkills.map((s) => (
-                <div key={s.name} className="llm-item bot-skill-row">
-                  <label className="check skill-toggle">
-                    <input
-                      type="checkbox"
-                      checked={s.enabled}
-                      disabled={locked || Boolean(s.disable_blocked || s.always_on)}
-                      title={
-                        s.disable_blocked || s.always_on
-                          ? "find-skills 为技能发现入口，不可关闭"
-                          : undefined
-                      }
-                      aria-label={`本 Bot 启用 ${s.name}`}
-                      onChange={(e) => void toggleSkill(s, e.target.checked)}
-                    />
-                  </label>
-                  <div className="bot-skill-main">
-                    <div className="agent-name">
-                      {onOpenSkill ? (
-                        <button type="button" className="skills-name-link" onClick={() => onOpenSkill(s.name)}>
-                          {s.name}
-                        </button>
-                      ) : (
-                        s.name
-                      )}
-                      <span className="bot-skill-source">
-                        {s.custom ? "自建" : "内置"}
-                        {s.always_on || s.disable_blocked ? " · 技能发现" : ""}
-                      </span>
+              visibleSkills.map((s) => {
+                const skillLocked = locked || Boolean(s.disable_blocked || s.always_on);
+                return (
+                  <div key={s.name} className="llm-item bot-skill-row">
+                    <Field orientation="horizontal" className="w-auto gap-2" data-disabled={skillLocked || undefined}>
+                      <Switch
+                        id={`bot-skill-${s.name}`}
+                        checked={s.enabled}
+                        disabled={skillLocked}
+                        title={
+                          s.disable_blocked || s.always_on
+                            ? "find-skills 为技能发现入口，不可关闭"
+                            : undefined
+                        }
+                        aria-label={`本 Bot 启用 ${s.name}`}
+                        onCheckedChange={(checked) => void toggleSkill(s, checked)}
+                      />
+                    </Field>
+                    <div className="bot-skill-main">
+                      <div className="agent-name">
+                        {onOpenSkill ? (
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="skills-name-link h-auto p-0"
+                            onClick={() => onOpenSkill(s.name)}
+                          >
+                            {s.name}
+                          </Button>
+                        ) : (
+                          s.name
+                        )}
+                        <span className="bot-skill-source">
+                          {s.custom ? "自建" : "内置"}
+                          {s.always_on || s.disable_blocked ? " · 技能发现" : ""}
+                        </span>
+                      </div>
+                      <div className="agent-desc">{s.description}</div>
                     </div>
-                    <div className="agent-desc">{s.description}</div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </SettingsCard>
         {hiddenCount > 0 ? (
-          <div className="settings-status">另有 {hiddenCount} 个技能已在「技能」页账号级关闭，不可勾选。</div>
+          <p className="settings-status m-0">另有 {hiddenCount} 个技能已在「技能」页账号级关闭，不可勾选。</p>
         ) : null}
-        {msg ? <div className="settings-status">{msg}</div> : null}
+        {msg ? <p className="settings-status m-0">{msg}</p> : null}
       </SettingsSection>
     </SettingsPage>
   );

@@ -262,11 +262,13 @@ export function Composer({
       setTrigger(null);
       return;
     }
-    if (t.kind === "slash" && !hasSkills) {
-      setTrigger(t);
-      setPickerIndex(0);
-      return;
-    }
+    // ArrowUp/Down only move pickerIndex; onKeyUp still re-detects the same
+    // trigger — do not reset the highlight or the selection snaps back to 0.
+    const unchanged =
+      trigger?.kind === t.kind &&
+      trigger.start === t.start &&
+      trigger.query === t.query;
+    if (unchanged) return;
     setTrigger(t);
     setPickerIndex(0);
   };
@@ -407,7 +409,16 @@ export function Composer({
               const caret = taRef.current?.selectionStart ?? value.length;
               refreshTrigger(value, caret);
             }}
-            onKeyUp={() => {
+            onKeyUp={(e) => {
+              if (
+                e.key === "ArrowDown" ||
+                e.key === "ArrowUp" ||
+                e.key === "Enter" ||
+                e.key === "Tab" ||
+                e.key === "Escape"
+              ) {
+                return;
+              }
               const caret = taRef.current?.selectionStart ?? value.length;
               refreshTrigger(value, caret);
             }}

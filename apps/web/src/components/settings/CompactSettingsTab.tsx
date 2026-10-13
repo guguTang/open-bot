@@ -1,4 +1,5 @@
 import type { CompactConfig, LLMConnection } from "../../api";
+import { Button } from "@/components/ui/button";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -26,9 +27,9 @@ export function CompactSettingsTab({
       <SettingsSection
         title="当前参数"
         actions={
-          <button type="button" onClick={() => void onRefreshCompact()}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshCompact()}>
             刷新
-          </button>
+          </Button>
         }
       >
         {compactCfg ? (

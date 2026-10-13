@@ -108,8 +108,8 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
   const review = useReviewSettings(userId);
 
   const defaultLLM = useMemo(
-    () => llm.llms.find((c) => c.is_default) ?? llm.llms[0],
-    [llm.llms],
+    () => llm.llms.find((c) => c.is_default) ?? llm.llms[0] ?? llm.effectiveLLM ?? undefined,
+    [llm.llms, llm.effectiveLLM],
   );
 
   const settingsRefreshApi = useMemo<SettingsRefreshApi>(

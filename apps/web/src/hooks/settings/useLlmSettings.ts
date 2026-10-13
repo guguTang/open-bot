@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { debounce } from "es-toolkit";
 import {
   createLLMConnection,
+  fetchEffectiveLLMConnection,
   formatLLMPromptCacheProbe,
   formatLLMToolsProbe,
   listLLMConnections,
@@ -16,6 +17,7 @@ import { emptyLLMForm } from "../../lib/app/constants";
 
 export function useLlmSettings() {
   const [llms, setLlms] = useState<LLMConnection[]>([]);
+  const [effectiveLLM, setEffectiveLLM] = useState<LLMConnection | null>(null);
   const [llmForm, setLLMForm] = useState<LLMInput>(emptyLLMForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [llmBusy, setLLMBusy] = useState(false);
@@ -29,12 +31,17 @@ export function useLlmSettings() {
   const llmCacheReqSeq = useRef(0);
 
   const refreshLLMs = useCallback(async () => {
-    const list = await listLLMConnections();
+    const [list, effective] = await Promise.all([
+      listLLMConnections(),
+      fetchEffectiveLLMConnection(),
+    ]);
     setLlms(list);
+    setEffectiveLLM(effective);
   }, []);
 
   const clearLlms = useCallback(() => {
     setLlms([]);
+    setEffectiveLLM(null);
   }, []);
 
   const startEdit = useCallback((c: LLMConnection) => {
@@ -222,6 +229,7 @@ export function useLlmSettings() {
 
   return {
     llms,
+    effectiveLLM,
     llmForm,
     setLLMForm,
     editingId,
