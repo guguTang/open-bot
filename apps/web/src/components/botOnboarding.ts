@@ -74,3 +74,11 @@ export function setOnboardingDismissed(key: string): void {
   map[key] = true;
   localStorage.setItem(DISMISS_KEY, JSON.stringify(map));
 }
+
+/** Clear dismiss so the job questionnaire can show again for this bot/conversation. */
+export function clearOnboardingDismissed(key: string): void {
+  const map = readDismissed();
+  if (!map[key]) return;
+  delete map[key];
+  localStorage.setItem(DISMISS_KEY, JSON.stringify(map));
+}

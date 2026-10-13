@@ -22,6 +22,8 @@ export function useLlmSettings() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [llmBusy, setLLMBusy] = useState(false);
   const [llmMsg, setLLMMsg] = useState("");
+  const [llmLoadError, setLLMLoadError] = useState("");
+  const [llmLoading, setLLMLoading] = useState(false);
   const [llmModelOptions, setLLMModelOptions] = useState<string[]>([]);
   const [llmModelsLoading, setLLMModelsLoading] = useState(false);
   const [llmModelsError, setLLMModelsError] = useState("");
@@ -31,12 +33,20 @@ export function useLlmSettings() {
   const llmCacheReqSeq = useRef(0);
 
   const refreshLLMs = useCallback(async () => {
-    const [list, effective] = await Promise.all([
-      listLLMConnections(),
-      fetchEffectiveLLMConnection(),
-    ]);
-    setLlms(list);
-    setEffectiveLLM(effective);
+    setLLMLoading(true);
+    setLLMLoadError("");
+    try {
+      const [list, effective] = await Promise.all([
+        listLLMConnections(),
+        fetchEffectiveLLMConnection(),
+      ]);
+      setLlms(list);
+      setEffectiveLLM(effective);
+    } catch (e) {
+      setLLMLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLLMLoading(false);
+    }
   }, []);
 
   const clearLlms = useCallback(() => {
@@ -236,6 +246,8 @@ export function useLlmSettings() {
     llmBusy,
     llmMsg,
     setLLMMsg,
+    llmLoading,
+    llmLoadError,
     llmModelOptions,
     llmModelsLoading,
     llmModelsError,

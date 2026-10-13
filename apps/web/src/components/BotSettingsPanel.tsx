@@ -34,9 +34,19 @@ type Props = {
   onOpenSkill?: (name: string) => void;
   /** Open BotAvatarSettings (形象 + 优先电脑) for this bot. */
   onOpenAvatar?: (agent: Agent) => void;
+  /** Re-show A–E job onboarding in chat after dismiss. */
+  onRestartOnboarding?: (agent: Agent) => void;
 };
 
-export function BotSettingsPanel({ agent, busy, onSaved, onClone, onOpenSkill, onOpenAvatar }: Props) {
+export function BotSettingsPanel({
+  agent,
+  busy,
+  onSaved,
+  onClone,
+  onOpenSkill,
+  onOpenAvatar,
+  onRestartOnboarding,
+}: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -200,6 +210,17 @@ export function BotSettingsPanel({ agent, busy, onSaved, onClone, onOpenSkill, o
                     形象与优先电脑
                   </Button>
                 ) : null}
+                {onRestartOnboarding ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={locked}
+                    title="重新显示岗位引导问卷（A–E）"
+                    onClick={() => onRestartOnboarding(agent)}
+                  >
+                    重新岗位引导
+                  </Button>
+                ) : null}
               </div>
             </FieldGroup>
           </form>
@@ -215,20 +236,19 @@ export function BotSettingsPanel({ agent, busy, onSaved, onClone, onOpenSkill, o
                 const skillLocked = locked || Boolean(s.disable_blocked || s.always_on);
                 return (
                   <div key={s.name} className="llm-item bot-skill-row">
-                    <Field orientation="horizontal" className="w-auto gap-2" data-disabled={skillLocked || undefined}>
-                      <Switch
-                        id={`bot-skill-${s.name}`}
-                        checked={s.enabled}
-                        disabled={skillLocked}
-                        title={
-                          s.disable_blocked || s.always_on
-                            ? "find-skills 为技能发现入口，不可关闭"
-                            : undefined
-                        }
-                        aria-label={`本 Bot 启用 ${s.name}`}
-                        onCheckedChange={(checked) => void toggleSkill(s, checked)}
-                      />
-                    </Field>
+                    <Switch
+                      id={`bot-skill-${s.name}`}
+                      className="mt-0.5 shrink-0"
+                      checked={s.enabled}
+                      disabled={skillLocked}
+                      title={
+                        s.disable_blocked || s.always_on
+                          ? "find-skills 为技能发现入口，不可关闭"
+                          : undefined
+                      }
+                      aria-label={`本 Bot 启用 ${s.name}`}
+                      onCheckedChange={(checked) => void toggleSkill(s, checked)}
+                    />
                     <div className="bot-skill-main">
                       <div className="agent-name">
                         {onOpenSkill ? (

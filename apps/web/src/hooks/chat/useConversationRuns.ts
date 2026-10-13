@@ -299,7 +299,8 @@ export function useConversationRuns(deps: {
                   ? nameLookup.find((a) => a.id === info.agent_id)?.name
                   : nameLookup.get(info.agent_id)) ||
                 info.agent_id;
-              setRunLabelForStream(`${name} 正在回复…`);
+              const auto = Boolean(runsRef.current.get(conv.id)?.autoPick);
+              setRunLabelForStream(auto ? `由 ${name} 回答（自动）` : `${name} 正在回复…`);
               if (info.agent_id) setFaceAgentForStream(info.agent_id);
               ensureStreamingBubble(info.agent_id, name);
             },
@@ -318,6 +319,11 @@ export function useConversationRuns(deps: {
             },
             onMeta: (meta) => {
               if (!isRunCurrent()) return;
+              if (meta.phase === "targets" && meta.auto_pick === true) {
+                const run = runsRef.current.get(conv.id);
+                if (run) run.autoPick = true;
+                setRunLabelForStream("正在自动选人…");
+              }
               if (meta.phase === "resumed") {
                 if (isViewingStream()) {
                   setSending(true);

@@ -11,12 +11,16 @@ import {
 export type CompactSettingsTabProps = {
   compactCfg: CompactConfig | null;
   defaultLLM: LLMConnection | null | undefined;
+  loading?: boolean;
+  loadError?: string;
   onRefreshCompact: () => void | Promise<void>;
 };
 
 export function CompactSettingsTab({
   compactCfg,
   defaultLLM,
+  loading,
+  loadError,
   onRefreshCompact,
 }: CompactSettingsTabProps) {
   return (
@@ -105,7 +109,20 @@ export function CompactSettingsTab({
           </SettingsCard>
         ) : (
           <SettingsCard>
-            <SettingsEmpty>无法读取（请确认服务已启动）</SettingsEmpty>
+            <SettingsEmpty>
+              {loading
+                ? "加载中…"
+                : loadError
+                  ? `无法读取：${loadError}`
+                  : "无法读取（请确认服务已启动）"}
+            </SettingsEmpty>
+            {!loading ? (
+              <div style={{ padding: "0 12px 12px" }}>
+                <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshCompact()}>
+                  重试
+                </Button>
+              </div>
+            ) : null}
           </SettingsCard>
         )}
       </SettingsSection>

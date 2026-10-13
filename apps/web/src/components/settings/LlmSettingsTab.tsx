@@ -24,6 +24,8 @@ export interface LlmSettingsTabProps {
   onLlmFormChange: (next: LLMInput) => void;
   llmMsg: string;
   llmBusy: boolean;
+  llmLoading?: boolean;
+  llmLoadError?: string;
   llmModelOptions: string[];
   llmModelsLoading: boolean;
   llmModelsError: string;
@@ -35,6 +37,7 @@ export interface LlmSettingsTabProps {
   onSaveLlm: (e: FormEvent) => void;
   onResetForm: () => void;
   onProbeTools: () => void;
+  onRefresh?: () => void | Promise<void>;
 }
 
 export function LlmSettingsTab({
@@ -44,6 +47,8 @@ export function LlmSettingsTab({
   onLlmFormChange,
   llmMsg,
   llmBusy,
+  llmLoading,
+  llmLoadError,
   llmModelOptions,
   llmModelsLoading,
   llmModelsError,
@@ -55,6 +60,7 @@ export function LlmSettingsTab({
   onSaveLlm,
   onResetForm,
   onProbeTools,
+  onRefresh,
 }: LlmSettingsTabProps) {
   const modelHint = llmModelsLoading
     ? "正在拉取模型列表…"
@@ -73,10 +79,28 @@ export function LlmSettingsTab({
       </SettingsHint>
       <SettingsSection title="已有连接">
         <SettingsCard>
+          {llmLoadError ? (
+            <div className="settings-status" style={{ padding: 12 }}>
+              <p>无法读取模型连接：{llmLoadError}</p>
+              {onRefresh ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={llmLoading || llmBusy}
+                  onClick={() => void onRefresh()}
+                >
+                  重试
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <div className="llm-list">
-            {llms.length === 0 ? (
-              <SettingsEmpty>暂无连接，请在下方新增。</SettingsEmpty>
-            ) : (
+            {llms.length === 0 && !llmLoadError ? (
+              <SettingsEmpty>
+                {llmLoading ? "加载中…" : "暂无连接，请在下方新增。"}
+              </SettingsEmpty>
+            ) : llms.length === 0 ? null : (
               llms.map((c) => (
                 <div key={c.id} className={`llm-item ${c.is_default ? "default" : ""}`}>
                   <div>

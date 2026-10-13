@@ -252,7 +252,7 @@ function AppSidebarInner() {
       <nav className={sidebarListClass(sheetForm)} aria-label="会话列表">
         {agents.length === 0 && channels.length === 0 ? (
           <div className="muted small" style={{ padding: "8px 10px", lineHeight: 1.5 }}>
-            暂无会话。点击右上角「+」创建助手或群聊。
+            暂无助手。点击「+」新建助手，选好岗位后即可开聊。
           </div>
         ) : convItems.length === 0 ? (
           <div className="muted small" style={{ padding: "4px 10px" }}>

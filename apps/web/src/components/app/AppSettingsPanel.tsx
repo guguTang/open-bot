@@ -6,6 +6,10 @@ import {
   type Agent,
 } from "../../api";
 import { setHostExecUserSettings } from "../../lib/hostExec";
+import {
+  clearOnboardingDismissed,
+  onboardingStorageKey,
+} from "../botOnboarding";
 import { BotSettingsPanel } from "../BotSettingsPanel";
 import {
   CompactSettingsTab,
@@ -158,6 +162,17 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
             closeSettings();
             openAvatarSettings(a);
           }}
+          onRestartOnboarding={(a) => {
+            clearOnboardingDismissed(onboardingStorageKey(null, a.id));
+            const conv = useWorkspaceStore.getState().conversation;
+            if (conv?.id && conv.agent_id === a.id) {
+              clearOnboardingDismissed(onboardingStorageKey(conv.id, a.id));
+            }
+            sessionActions().onSelectAgent(a.id);
+            patchShell({ onboardingDismissed: false });
+            closeSettings();
+            toast.success("已重置岗位引导；空对话中会再次显示问卷");
+          }}
           onSaved={(a) => {
             void refreshAgents().then(() => {
               toast.success(`已更新「${a.name}」`);
@@ -174,6 +189,8 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
           onLlmFormChange={llm.setLLMForm}
           llmMsg={llm.llmMsg}
           llmBusy={llm.llmBusy}
+          llmLoading={llm.llmLoading}
+          llmLoadError={llm.llmLoadError}
           llmModelOptions={llm.llmModelOptions}
           llmModelsLoading={llm.llmModelsLoading}
           llmModelsError={llm.llmModelsError}
@@ -194,6 +211,7 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
           onSaveLlm={llm.saveLLM}
           onResetForm={llm.resetForm}
           onProbeTools={() => void llm.probeLLMFormTools()}
+          onRefresh={() => void llm.refreshLLMs()}
         />
       )}
 
@@ -250,6 +268,8 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
         <CompactSettingsTab
           compactCfg={compact.compactCfg}
           defaultLLM={defaultLLM}
+          loading={compact.loading}
+          loadError={compact.loadError}
           onRefreshCompact={() => void compact.refreshCompact()}
         />
       )}
@@ -362,6 +382,8 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
         <IntegrationsSettingsTab
           gmail={integrations.gmail}
           busy={integrations.busy}
+          loading={integrations.loading}
+          loadError={integrations.loadError}
           msg={integrations.msg}
           onConnectGmail={integrations.connectGmail}
           onDisconnectGmail={integrations.disconnect}

@@ -151,7 +151,7 @@ export function SkillsSettingsTab({
             ) : (
               skills.map((s) => (
                 <div key={s.name} className="llm-item">
-                  <div>
+                  <div className="bot-skill-main">
                     <div className="agent-name">
                       {s.name}
                       {s.custom ? <span className="pill">自定义</span> : null}

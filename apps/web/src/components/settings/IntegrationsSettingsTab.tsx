@@ -10,6 +10,8 @@ import type { GmailIntegrationStatus } from "../../api";
 export type IntegrationsSettingsTabProps = {
   gmail: GmailIntegrationStatus | null;
   busy: boolean;
+  loading?: boolean;
+  loadError?: string;
   msg: string;
   onConnectGmail: () => void | Promise<void>;
   onDisconnectGmail: () => void | Promise<void>;
@@ -19,6 +21,8 @@ export type IntegrationsSettingsTabProps = {
 export function IntegrationsSettingsTab({
   gmail,
   busy,
+  loading,
+  loadError,
   msg,
   onConnectGmail,
   onDisconnectGmail,
@@ -36,7 +40,16 @@ export function IntegrationsSettingsTab({
       <SettingsSection title="Gmail">
         <SettingsCard padded>
           {!gmail ? (
-            <SettingsEmpty>加载中…</SettingsEmpty>
+            loading || !loadError ? (
+              <SettingsEmpty>加载中…</SettingsEmpty>
+            ) : (
+              <div className="settings-status">
+                <p>无法读取连接状态：{loadError}</p>
+                <button type="button" className="ghost" disabled={busy || loading} onClick={() => void onRefresh()}>
+                  重试
+                </button>
+              </div>
+            )
           ) : !configured ? (
             <div className="settings-status">
               服务端未配置 Google OAuth。请在 API 环境变量中设置{" "}

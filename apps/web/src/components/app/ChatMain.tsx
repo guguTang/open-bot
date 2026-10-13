@@ -273,9 +273,24 @@ function ChatTranscript({
             <h2>有什么可以帮你的？</h2>
             <p>
               {agents.length === 0
-                ? "暂无助手，点击左上角「+」创建一个。"
+                ? "还没有助手。点下方创建一位，再选岗位即可开始聊天。"
                 : "从左侧选择一位助手进入连续对话；群聊里可用 @ 点名助手。"}
             </p>
+            {agents.length === 0 ? (
+              <p style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    const s = overlaySessionActions();
+                    s.setNewChatInitialMode("bot");
+                    s.setShowNewChat(true);
+                  }}
+                >
+                  新建助手
+                </button>
+              </p>
+            ) : null}
           </div>
         ) : null}
         {indexed.mainTimeline.map((m) => (
@@ -399,9 +414,15 @@ function LiveRunStatus({
   }
   const runFaceAgent = resolveRunFaceAgent(runFaceAgentId, activeAgent, agents, activeChannel, agentNameById);
   const searchingHintNow = toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(hostActivity || "");
+  const statusLabel =
+    groupDecisionPending && (!runLabel || runLabel === "正在思考…")
+      ? "正在自动选人…"
+      : taskBusy && !sending && !viewingRunActive
+        ? runLabel || "正在做…"
+        : runLabel || "正在思考…";
   return (
     <RunStatus
-      label={taskBusy && !sending && !viewingRunActive ? runLabel || "正在做…" : runLabel || "正在思考…"}
+      label={statusLabel}
       agentId={runFaceAgent?.id}
       agentName={runFaceAgent?.name ?? (groupDecisionPending ? "选人中" : "助手")}
       shape={runFaceAgent?.avatar_shape}
@@ -436,7 +457,10 @@ function ChatComposerDock({
   const sending = useChatStore((s) => s.sending);
   const taskBusy = useChatStore((s) => s.taskBusy);
   const showScrollBottom = useChatStore((s) => s.showScrollBottom);
+  const defaultLLM = useWorkspaceStore((s) => s.defaultLLM);
   const chatProcessing = sending || taskBusy || viewingRunActive;
+  /** No user/org LLM connection — chatting would only return「无法调用模型」. */
+  const needsModelSetup = !defaultLLM;
 
   const scrollToBottom = (smooth = false) => {
     const el = messagesRef.current;
@@ -449,6 +473,20 @@ function ChatComposerDock({
 
   return (
     <div className="composer-wrap">
+      {needsModelSetup ? (
+        <div className="approval-gate-card" role="status">
+          <span className="approval-gate-text">尚未配置可用模型，聊天无法调用助手</span>
+          <div className="approval-gate-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void shellSessionActions().openSettings("llm")}
+            >
+              去配置模型
+            </button>
+          </div>
+        </div>
+      ) : null}
       {approvalGate && conversation?.id === approvalGate.conversationId ? (
         <div className="approval-gate-card" role="status">
           <span className="approval-gate-text">工具需要你确认后才能继续</span>
@@ -473,6 +511,7 @@ function ChatComposerDock({
         onSubmit={onSubmit}
         onStop={() => stopCurrentRun({ markStopped: true })}
         sending={chatProcessing}
+        disabled={needsModelSetup}
         agentName={activeChannel ? activeChannel.name : activeAgent?.name}
         files={pendingFiles}
         onFilesChange={setPendingFiles}

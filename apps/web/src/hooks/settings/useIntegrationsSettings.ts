@@ -10,15 +10,23 @@ import {
 export function useIntegrationsSettings() {
   const [gmail, setGmail] = useState<GmailIntegrationStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [msg, setMsg] = useState("");
 
   const refresh = useCallback(async () => {
     if (!getToken()) return;
+    setLoading(true);
+    setLoadError("");
     try {
       const st = await getGmailIntegrationStatus();
       setGmail(st);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
+      const text = e instanceof Error ? e.message : String(e);
+      setLoadError(text);
+      setMsg(text);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -53,6 +61,8 @@ export function useIntegrationsSettings() {
   return {
     gmail,
     busy,
+    loading,
+    loadError,
     msg,
     setMsg,
     refresh,

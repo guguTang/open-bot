@@ -813,6 +813,13 @@ body,
   color: var(--danger);
 }
 
+.composer-attach-hint {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0 2px;
+  line-height: 1.4;
+}
+
 /* Run status (thinking / tool) — AgentAvatar → RobotHead, not a separate spinner */
 .run-status-row {
   margin-top: 2px;
@@ -991,7 +998,8 @@ dialog.modal-backdrop:not([open]) {
 .modal h3 { margin-top: 0; }
 .modal ul { color: var(--muted); padding-left: 18px; }
 
-.modal button {
+/* Exclude shadcn/Radix primitives (Switch etc. render as <button>). */
+.modal button:not([data-slot="switch"]) {
   margin-top: 12px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -1096,7 +1104,8 @@ button.ghost {
 }
 .llm-item.default { border-color: var(--accent); }
 .llm-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.llm-actions button, .modal button {
+.llm-actions button,
+.modal button:not([data-slot="switch"]) {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -2818,9 +2827,16 @@ dialog.thread-panel:not([open]) {
   .bubble-stack-assistant { max-width: 92%; }
 }
 .msg-hover-slot { position: relative; }
-.msg-hover-picker {
-  top: calc(100% + 4px);
+/* Portaled to document.body so .messages { overflow: auto } cannot clip. */
+.msg-hover-menu-portal {
+  position: fixed;
   bottom: auto;
+  right: auto;
+  transform: none;
+  z-index: 80;
+}
+.msg-hover-picker.msg-hover-menu-portal {
+  top: 0;
   left: 0;
 }
 
@@ -3151,6 +3167,17 @@ dialog.action-sheet-root:not([open]) {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   padding: 4px;
   z-index: 8;
+}
+/* Must follow .msg-more-menu / .msg-reaction-picker so fixed + no-transform win. */
+.msg-more-menu.msg-hover-menu-portal,
+.msg-reaction-picker.msg-hover-menu-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
+  transform: none;
+  z-index: 80;
 }
 .msg-more-item {
   display: flex !important;
@@ -4484,24 +4511,24 @@ html.touch-ui .composer-quote-clear {
   font-size: 13px;
 }
 /* Checkbox left + copy right (Bot 启用的技能) — beat .llm-item { column } */
-.settings-dialog-shell .llm-list > .llm-item.bot-skill-row,
-.settings-dialog-shell .settings-card > .llm-list > .llm-item.bot-skill-row {
+.llm-list > .llm-item.bot-skill-row,
+.settings-card > .llm-list > .llm-item.bot-skill-row {
   flex-direction: row;
   align-items: flex-start;
   gap: 12px;
 }
-.settings-dialog-shell .bot-skill-row .skill-toggle {
+.bot-skill-row .skill-toggle {
   flex-shrink: 0;
   margin-top: 3px;
   padding: 0;
   display: grid;
   place-items: center;
 }
-.settings-dialog-shell .bot-skill-row .skill-toggle input {
+.bot-skill-row .skill-toggle input {
   width: 20px;
   height: 20px;
 }
-.settings-dialog-shell .bot-skill-main {
+.bot-skill-main {
   flex: 1;
   min-width: 0;
   width: auto;
@@ -4509,8 +4536,15 @@ html.touch-ui .composer-quote-clear {
   flex-direction: column;
   gap: 6px;
 }
-.settings-dialog-shell .bot-skill-main .agent-desc {
+/* Settings lists: wrap skill copy (sidebar .agent-desc stays nowrap+ellipsis) */
+.bot-skill-main .agent-desc {
   margin-top: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 .settings-dialog-shell .bot-skill-source,
 .settings-dialog-shell .llm-item .pill,

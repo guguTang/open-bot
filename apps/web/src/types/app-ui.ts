@@ -52,6 +52,8 @@ export type ConvRunState = {
   activeTool: string;
   /** Agent currently driving RunStatus / robot-heads face (from agent_start / tokens). */
   faceAgentId?: string;
+  /** Group turn used server AutoPick (no explicit @). Drives「由 X 回答（自动）」. */
+  autoPick?: boolean;
   selectionKey: string;
 };
 

@@ -298,6 +298,11 @@ export function Composer({
               </button>
             </div>
           ))}
+          {files.some((f) => f.file.type.startsWith("image/")) ? (
+            <p className="composer-attach-hint muted small" role="note">
+              图片仅作提及，模型暂不看图
+            </p>
+          ) : null}
         </div>
       ) : null}
       <div className={`composer-card${replyTo ? " has-quote" : ""}`}>

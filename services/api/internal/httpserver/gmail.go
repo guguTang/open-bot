@@ -781,15 +781,25 @@ func buildRFC822Message(from, to, cc, bcc, subject, body string, files []gmailAt
 	}
 	if len(files) == 0 {
 		var b strings.Builder
-		b.WriteString("From: " + from + "\r\n")
-		b.WriteString("To: " + to + "\r\n")
+		b.WriteString("From: ")
+		b.WriteString(from)
+		b.WriteString("\r\n")
+		b.WriteString("To: ")
+		b.WriteString(to)
+		b.WriteString("\r\n")
 		if cc != "" {
-			b.WriteString("Cc: " + cc + "\r\n")
+			b.WriteString("Cc: ")
+			b.WriteString(cc)
+			b.WriteString("\r\n")
 		}
 		if bcc != "" {
-			b.WriteString("Bcc: " + bcc + "\r\n")
+			b.WriteString("Bcc: ")
+			b.WriteString(bcc)
+			b.WriteString("\r\n")
 		}
-		b.WriteString("Subject: " + encodeHeader(subject) + "\r\n")
+		b.WriteString("Subject: ")
+		b.WriteString(encodeHeader(subject))
+		b.WriteString("\r\n")
 		b.WriteString("MIME-Version: 1.0\r\n")
 		b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
@@ -802,19 +812,33 @@ func buildRFC822Message(from, to, cc, bcc, subject, body string, files []gmailAt
 	}
 	boundary := "openbot_" + randomState()
 	var b strings.Builder
-	b.WriteString("From: " + from + "\r\n")
-	b.WriteString("To: " + to + "\r\n")
+	b.WriteString("From: ")
+	b.WriteString(from)
+	b.WriteString("\r\n")
+	b.WriteString("To: ")
+	b.WriteString(to)
+	b.WriteString("\r\n")
 	if cc != "" {
-		b.WriteString("Cc: " + cc + "\r\n")
+		b.WriteString("Cc: ")
+		b.WriteString(cc)
+		b.WriteString("\r\n")
 	}
 	if bcc != "" {
-		b.WriteString("Bcc: " + bcc + "\r\n")
+		b.WriteString("Bcc: ")
+		b.WriteString(bcc)
+		b.WriteString("\r\n")
 	}
-	b.WriteString("Subject: " + encodeHeader(subject) + "\r\n")
-	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\r\n")
+	b.WriteString("Subject: ")
+	b.WriteString(encodeHeader(subject))
 	b.WriteString("\r\n")
-	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("MIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: multipart/mixed; boundary=\"")
+	b.WriteString(boundary)
+	b.WriteString("\"\r\n")
+	b.WriteString("\r\n")
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("\r\n")
 	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 	b.WriteString("\r\n")
@@ -823,19 +847,27 @@ func buildRFC822Message(from, to, cc, bcc, subject, body string, files []gmailAt
 		b.WriteString("\r\n")
 	}
 	for _, f := range files {
-		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("--")
+		b.WriteString(boundary)
+		b.WriteString("\r\n")
 		ct := f.MIMEType
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		b.WriteString("Content-Type: " + ct + "\r\n")
+		b.WriteString("Content-Type: ")
+		b.WriteString(ct)
+		b.WriteString("\r\n")
 		b.WriteString("Content-Transfer-Encoding: base64\r\n")
-		b.WriteString("Content-Disposition: attachment; filename=\"" + mimeFilename(f.Filename) + "\"\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"")
+		b.WriteString(mimeFilename(f.Filename))
+		b.WriteString("\"\r\n")
 		b.WriteString("\r\n")
 		b.WriteString(chunkBase64(f.Data))
 		b.WriteString("\r\n")
 	}
-	b.WriteString("--" + boundary + "--\r\n")
+	b.WriteString("--")
+	b.WriteString(boundary)
+	b.WriteString("--\r\n")
 	return b.String(), nil
 }
 

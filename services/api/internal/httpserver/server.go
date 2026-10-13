@@ -1525,11 +1525,18 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	emit := newSSEEmitter(w, flusher, r.Context(), handle)
 
 	// Announce targets so UI can attribute replies.
-	emit("meta", map[string]any{
+	targetsMeta := map[string]any{
 		"phase":      "targets",
 		"agent_ids":  targetAgents,
 		"channel_id": conv.ChannelID,
-	})
+	}
+	if sendPlan.AutoPick != nil {
+		targetsMeta["auto_pick"] = true
+		if sendPlan.AutoPick.Method != "" {
+			targetsMeta["auto_pick_method"] = sendPlan.AutoPick.Method
+		}
+	}
+	emit("meta", targetsMeta)
 	// Debug「本轮将由谁回答」: names only, no agent_id; default off.
 	if sendPlan.ShowReplyCandidates && conv.ChannelID != "" {
 		emit("meta", map[string]any{

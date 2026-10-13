@@ -330,7 +330,8 @@ export async function sendUserTextImpl(
               info.agent_name ||
               d.agents.find((a) => a.id === info.agent_id)?.name ||
               info.agent_id;
-            setRunLabelForStream(`${name} 正在回复…`);
+            const auto = Boolean(d.runsRef.current.get(streamConvId!)?.autoPick);
+            setRunLabelForStream(auto ? `由 ${name} 回答（自动）` : `${name} 正在回复…`);
             if (info.agent_id) setFaceAgentForStream(info.agent_id);
             d.patchConvMessages(streamConvId!, (prev) => {
               const run = d.runsRef.current.get(streamConvId!);
@@ -394,6 +395,11 @@ export async function sendUserTextImpl(
               d.lastRequestIdRef.current = meta.request_id;
             } else if (typeof meta.run_id === "string" && meta.run_id) {
               d.lastRequestIdRef.current = meta.run_id;
+            }
+            if (meta.phase === "targets" && meta.auto_pick === true) {
+              const run = d.runsRef.current.get(streamConvId!);
+              if (run) run.autoPick = true;
+              setRunLabelForStream("正在自动选人…");
             }
             if (meta.waiting_approval && streamConvId && d.lastRequestIdRef.current) {
               setApprovalGate({
