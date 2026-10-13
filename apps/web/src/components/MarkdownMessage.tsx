@@ -9,12 +9,7 @@ import {
 } from "react";
 import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  downloadSandboxFile,
-  downloadTextFile,
-  isAttachmentAuthUrl,
-  readSandboxFile,
-} from "../api";
+import { isAttachmentAuthUrl } from "../api";
 import {
   isFencePending,
   isHtmlDiagramLang,
@@ -24,14 +19,8 @@ import {
 import { DiagramCard } from "./DiagramCard";
 import { ImageDiagramCard } from "./ImageDiagramCard";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
-import {
-  friendlyFileError,
-  friendlyOpenError,
-  looksLikeHtml,
-  normalizeWorkspacePath,
-  parseSandboxHref,
-  previewTitleFromPath,
-} from "./htmlPreviewModel";
+import { looksLikeHtml, parseSandboxHref, previewTitleFromPath } from "./htmlPreviewModel";
+import { useSandboxHtmlPreview } from "./useSandboxHtmlPreview";
 
 type Props = {
   content: string;
@@ -60,24 +49,6 @@ function urlTransform(url: string): string {
 }
 
 const PREVIEWABLE_LANGS = new Set(["htm", "svg", "xhtml"]); // `html` / `html-diagram` → DiagramCard
-
-type PreviewState = {
-  open: boolean;
-  title: string;
-  path: string | null;
-  html: string | null;
-  loading: boolean;
-  error: string | null;
-};
-
-const PREVIEW_CLOSED: PreviewState = {
-  open: false,
-  title: "",
-  path: null,
-  html: null,
-  loading: false,
-  error: null,
-};
 
 function CodeBlock({
   className,
@@ -150,89 +121,15 @@ function DiagramFenceBlock({
 
 export function MarkdownMessage({ content, streaming, agentId }: Props) {
   const text = content || (streaming ? "…" : "");
-  const [preview, setPreview] = useState<PreviewState>(PREVIEW_CLOSED);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-
-  const closePreview = useCallback(() => {
-    setPreview(PREVIEW_CLOSED);
-    setDownloadError(null);
-  }, []);
-
-  const openHtmlPreview = useCallback((html: string, title: string) => {
-    setDownloadError(null);
-    setPreview({ open: true, title, path: null, html, loading: false, error: null });
-  }, []);
-
-  const downloadPreview = useCallback(async () => {
-    setDownloading(true);
-    setDownloadError(null);
-    try {
-      if (preview.path) {
-        await downloadSandboxFile(preview.path, agentId ? { agent_id: agentId } : undefined);
-      } else if (preview.html) {
-        const name = preview.title && !preview.title.includes("/") ? preview.title : "preview.html";
-        const filename = /\.html?$/i.test(name) ? name : `${name}.html`;
-        downloadTextFile(filename, preview.html, "text/html;charset=utf-8");
-      }
-    } catch (err) {
-      setDownloadError(friendlyFileError(err, "下载"));
-    } finally {
-      setDownloading(false);
-    }
-  }, [agentId, preview.html, preview.path, preview.title]);
-
-  const openSandboxLink = useCallback(async (path: string) => {
-    const wp = normalizeWorkspacePath(path);
-    setDownloadError(null);
-    setPreview({
-      open: true,
-      title: previewTitleFromPath(wp),
-      path: wp,
-      html: null,
-      loading: true,
-      error: null,
-    });
-    try {
-      const { content: fileContent } = await readSandboxFile(wp, agentId ? { agent_id: agentId } : undefined);
-      if (!looksLikeHtml(fileContent, wp)) {
-        // Non-HTML: wrap plain text so the user still gets an in-app view.
-        const escaped = fileContent
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-        const wrapped = `<!doctype html><html><head><meta charset="utf-8"><title>${previewTitleFromPath(wp)}</title>
-<style>body{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:16px;white-space:pre-wrap;word-break:break-word;color:#1a1a1b;background:#fafafa}</style>
-</head><body>${escaped}</body></html>`;
-        setPreview({
-          open: true,
-          title: previewTitleFromPath(wp),
-          path: wp,
-          html: wrapped,
-          loading: false,
-          error: null,
-        });
-        return;
-      }
-      setPreview({
-        open: true,
-        title: previewTitleFromPath(wp),
-        path: wp,
-        html: fileContent,
-        loading: false,
-        error: null,
-      });
-    } catch (err) {
-      setPreview({
-        open: true,
-        title: previewTitleFromPath(wp),
-        path: wp,
-        html: null,
-        loading: false,
-        error: friendlyOpenError(err),
-      });
-    }
-  }, [agentId]);
+  const {
+    preview,
+    downloading,
+    downloadError,
+    openHtml: openHtmlPreview,
+    openPath: openSandboxLink,
+    download: downloadPreview,
+    close: closePreview,
+  } = useSandboxHtmlPreview(agentId);
 
   const components = useMemo<Components>(
     () => ({

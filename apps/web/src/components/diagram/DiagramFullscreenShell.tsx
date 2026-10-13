@@ -5,7 +5,7 @@
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
-import { useDialogOpen } from "@/components/useDialogOpen";
+import { useDialogChrome } from "@/components/useDialogOpen";
 import { DiagramIconClose } from "./diagramIcons";
 import {
   diagramActionsClass,
@@ -49,7 +49,7 @@ export function DiagramFullscreenShell({
   children,
 }: DiagramFullscreenShellProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useDialogOpen(true, onClose);
+  const { ref: dialogRef, maskProps } = useDialogChrome(true, onClose, { systemBack: true });
 
   useEffect(() => {
     const prevFocus = document.activeElement as HTMLElement | null;
@@ -69,7 +69,7 @@ export function DiagramFullscreenShell({
       )}
       aria-label={ariaLabel}
     >
-      <button type="button" className="modal-backdrop-mask" aria-label="关闭" onClick={onClose} />
+      <button {...maskProps} />
       <div
         className={cn(
           "relative z-1",

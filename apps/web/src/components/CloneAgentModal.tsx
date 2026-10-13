@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { Agent, CloneAgentResult } from "../api";
 import { cloneAgent } from "../api";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   agent: Agent | null;
@@ -22,7 +22,10 @@ function CloneAgentModalForm({ agent, onClose, onCloned }: FormProps) {
   const [copyRoutines, setCopyRoutines] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const dialogRef = useDialogOpen(true, onClose, { blockDismiss: busy });
+  const { ref: dialogRef, maskProps } = useDialogChrome(true, onClose, {
+    blockDismiss: busy,
+    systemBack: true,
+  });
 
   const submit = async () => {
     setBusy(true);
@@ -48,13 +51,7 @@ function CloneAgentModalForm({ agent, onClose, onCloned }: FormProps) {
       className="modal-backdrop"
       aria-labelledby="clone-agent-modal-title"
     >
-      <button
-        type="button"
-        className="modal-backdrop-mask"
-        aria-label="关闭"
-        disabled={busy}
-        onClick={onClose}
-      />
+      <button {...maskProps} />
       <div className="modal clone-agent-modal">
         <div className="modal-head">
           <h3 id="clone-agent-modal-title">复制助手「{agent.name}」</h3>

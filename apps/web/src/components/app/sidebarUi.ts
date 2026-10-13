@@ -24,15 +24,6 @@ export function sidebarIconBtnClass(opts: { sheetPlus?: boolean } = {}) {
   );
 }
 
-export function sidebarSearchFieldClass() {
-  return cn(
-    "flex flex-1 items-center gap-2 rounded-[var(--radius-pill)] border border-transparent bg-[var(--bg-soft)] px-3 py-2",
-    "focus-within:border-[var(--border-strong)] focus-within:bg-white",
-    "[&_svg]:shrink-0 [&_svg]:opacity-55",
-    "[&_input]:w-full border-0 bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--muted)]",
-  );
-}
-
 export function sidebarSectionLabelClass(sheetForm: boolean) {
   return cn(
     "shrink-0 text-[11px] uppercase tracking-[0.06em] text-[var(--muted)]",
@@ -56,6 +47,19 @@ export function sidebarConvRowClass(opts: { sheetForm: boolean; active: boolean;
     !opts.channel && "hover:bg-[var(--bg-soft)]",
     opts.active && "bg-[var(--bg-hover)]",
     opts.channel && "cursor-default opacity-[0.92] hover:bg-transparent",
+  );
+}
+
+/** Floating action cluster on the right of a conversation row (parent must be `relative`). */
+export function sidebarConvActionsFloatClass(opts: { active?: boolean; touchOrSheet?: boolean } = {}) {
+  return cn(
+    "absolute right-1.5 top-1/2 z-1 flex -translate-y-1/2 items-center gap-0.5 pl-4",
+    // Soft fade so ellipsized text doesn't collide with visible controls
+    "bg-gradient-to-l from-55% to-transparent group-hover:from-[var(--bg-soft)]",
+    opts.active ? "from-[var(--bg-hover)]" : "from-[var(--bg-elevated)]",
+    opts.touchOrSheet
+      ? "right-2"
+      : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
   );
 }
 

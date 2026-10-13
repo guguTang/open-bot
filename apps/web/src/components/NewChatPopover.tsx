@@ -1,9 +1,8 @@
 import { Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { Agent, Machine } from "../api";
-import { listMachines } from "../api";
+import type { Agent } from "../api";
 import { cn } from "@/lib/utils";
-import { machinePresenceLabel, preferHostMachines } from "../lib/clientEnv";
+import { usePreferHostMachines } from "../hooks/usePreferHostMachines";
 import { AgentAvatar } from "./AgentAvatar";
 import {
   AVATAR_COLOR_PALETTE,
@@ -12,19 +11,12 @@ import {
   pickDefaultAvatar,
   type AvatarShape,
 } from "./avatarColor";
+import { HostMachineSelect } from "./HostMachineSelect";
 import { useSheetFormUi } from "./useIsTouchUi";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
+import type { CreateBotInput, NewChatMode } from "./newChatTypes";
 
-export type CreateBotInput = {
-  name: string;
-  description: string;
-  system_prompt: string;
-  avatar_shape: string;
-  avatar_color: string;
-  machine_id?: string;
-};
-
-export type NewChatMode = "list" | "group" | "bot";
+export type { CreateBotInput, NewChatMode } from "./newChatTypes";
 
 export type NewChatPopoverProps = {
   open: boolean;
@@ -39,10 +31,10 @@ export type NewChatPopoverProps = {
 };
 
 const fieldClass =
-  "flex flex-col gap-1.5 text-[13px] text-(--muted) [&_input]:rounded-md [&_input]:border [&_input]:border-(--border) [&_input]:bg-(--bg-soft) [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-(--text) [&_input]:outline-none focus-within:[&_input]:border-(--border-strong) focus-within:[&_input]:bg-white";
+  "flex flex-col gap-1.5 text-[13px] text-(--muted) [&_input]:rounded-md [&_input]:border [&_input]:border-border [&_input]:bg-(--bg-soft) [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-(--text) [&_input]:outline-none focus-within:[&_input]:border-(--border-strong) focus-within:[&_input]:bg-white";
 
 const textareaClass =
-  "mt-1.5 w-full min-h-[72px] resize-y rounded-[10px] border border-(--border) bg-(--bg-elevated,#f7f8fa) px-2.5 py-2 font-inherit outline-none focus:border-(--border-strong) focus:bg-white";
+  "mt-1.5 w-full min-h-[72px] resize-y rounded-[10px] border border-border bg-(--bg-elevated,#f7f8fa) px-2.5 py-2 font-inherit outline-none focus:border-(--border-strong) focus:bg-white";
 
 const rowBtnClass =
   "flex w-full cursor-pointer items-center gap-3 rounded-md border-none bg-transparent px-3 py-2.5 text-left text-(--text) hover:bg-(--bg-hover)";
@@ -76,7 +68,7 @@ export function NewChatPopover({
   const [botShape, setBotShape] = useState<AvatarShape>("rectangle");
   const [botColor, setBotColor] = useState("#457b9d");
   const [botMachineId, setBotMachineId] = useState("");
-  const [machines, setMachines] = useState<Machine[]>([]);
+  const { machines } = usePreferHostMachines(open);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 24, left: 300 });
@@ -110,14 +102,6 @@ export function NewChatPopover({
     }
     setBusy(false);
     setError("");
-    let cancelled = false;
-    void listMachines()
-      .then((list) => {
-        if (!cancelled) setMachines(preferHostMachines(list));
-      })
-      .catch(() => {
-        if (!cancelled) setMachines([]);
-      });
     const place = () => {
       if (sheetForm) return;
       const el = anchorRef.current;
@@ -131,14 +115,16 @@ export function NewChatPopover({
     const t = window.setTimeout(() => searchRef.current?.focus(), 30);
     window.addEventListener("resize", place);
     return () => {
-      cancelled = true;
       window.clearTimeout(t);
       window.removeEventListener("resize", place);
     };
   }, [open, anchorRef, agents, sheetForm, initialMode]);
 
-  const panelRef = useDialogOpen(open, onClose, {
+  const { ref: panelRef, maskProps } = useDialogChrome(open, onClose, {
     modal: sheetForm,
+    lockScroll: sheetForm,
+    maskClassName:
+      "absolute inset-0 cursor-pointer border-none bg-slate-900/45 pointer-events-auto",
     onDismiss: () => {
       if (mode === "group" || mode === "bot") {
         setMode("list");
@@ -159,15 +145,6 @@ export function NewChatPopover({
     document.addEventListener("pointerdown", onPointer);
     return () => document.removeEventListener("pointerdown", onPointer);
   }, [open, onClose, sheetForm, anchorRef, panelRef]);
-
-  useEffect(() => {
-    if (!open || !sheetForm) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open, sheetForm]);
 
   if (!open) return null;
 
@@ -233,25 +210,19 @@ export function NewChatPopover({
         "border-none p-0 text-inherit",
         sheetForm
           ? "action-sheet-root pointer-events-auto z-60 flex max-h-none max-w-none flex-col justify-end bg-transparent"
-          : "pointer-events-auto fixed z-40 m-0 flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] max-w-none flex-col gap-2 overflow-hidden rounded-2xl border border-(--border) bg-(--bg-elevated) p-2.5 shadow-(--shadow-lg)",
+          : "pointer-events-auto fixed z-40 m-0 flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] max-w-none flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-(--bg-elevated) p-2.5 shadow-(--shadow-lg)",
         sheetForm &&
           "relative top-auto! right-auto! left-auto! m-0 max-h-[min(90dvh,90vh)] w-full! max-w-full! gap-0 rounded-t-2xl rounded-b-none px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
       )}
       style={panelStyle}
       aria-label="选择助手"
     >
-      {sheetForm ? (
-        <button
-          type="button"
-          className="absolute inset-0 cursor-pointer border-none bg-slate-900/45 pointer-events-auto"
-          aria-label="关闭"
-          onClick={onClose}
-        />
-      ) : null}
+      {sheetForm ? <button {...maskProps} /> : null}
       <div
         className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-hidden",
           sheetForm &&
-            "relative z-1 flex max-h-[min(90dvh,90vh)] w-full flex-col gap-0 overflow-hidden",
+            "relative z-1 max-h-[min(90dvh,90vh)] w-full gap-0 bg-(--bg-elevated)",
         )}
       >
         {sheetForm ? (
@@ -384,11 +355,11 @@ export function NewChatPopover({
         ) : mode === "bot" ? (
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden overscroll-contain",
-              sheetForm && "min-h-0 flex-1 gap-0 overflow-hidden",
+              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden",
+              sheetForm && "gap-0",
             )}
           >
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3 [-webkit-overflow-scrolling:touch]">
               <div className="flex items-center gap-2">
                 <button type="button" className={cn(backClass, touchMin)} onClick={backToList}>
                   ← 返回
@@ -440,7 +411,7 @@ export function NewChatPopover({
                       key={s}
                       type="button"
                       className={cn(
-                        "flex cursor-pointer flex-col items-center justify-center overflow-visible rounded-[10px] border border-(--border) bg-(--bg-soft) px-1 py-2",
+                        "flex cursor-pointer flex-col items-center justify-center overflow-visible rounded-[10px] border border-border bg-(--bg-soft) px-1 py-2",
                         botShape === s && "border-(--accent,#6ea8fe) shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent,#6ea8fe)_40%,transparent)]",
                         sheetForm && "min-h-11 min-w-11",
                       )}
@@ -485,34 +456,17 @@ export function NewChatPopover({
                     />
                   ))}
                 </div>
-                <label className={cn(fieldClass, sheetForm && "[&_select]:min-h-11 [&_select]:text-base")}>
-                  优先电脑
-                  <select
-                    className="mt-1 w-full rounded-lg border border-(--border) bg-(--bg-elevated,#fff) px-2.5 py-2 font-inherit text-inherit outline-none focus:border-(--accent,#457b9d)"
-
-                    value={botMachineId}
-                    onChange={(e) => setBotMachineId(e.target.value)}
-                    disabled={busy}
-                  >
-                    <option value="">不指定（在你发消息的那台电脑上运行）</option>
-                    {machines.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {(m.label || m.id) + " · " + machinePresenceLabel(m)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {machines.length === 0 ? (
-                  <div className="text-xs text-(--muted)">还没有已连接的电脑。手机不能当作优先电脑。</div>
-                ) : (
-                  <div className="text-xs leading-[1.45] whitespace-normal text-(--muted) wrap-anywhere">
-                    读文件、跑命令会在你当前发消息的电脑上执行。这里只是可选的默认优先机。
-                  </div>
-                )}
+                <HostMachineSelect
+                  value={botMachineId}
+                  onChange={setBotMachineId}
+                  machines={machines}
+                  disabled={busy}
+                  sheetForm={sheetForm}
+                />
               </div>
               {error ? <div className="text-[13px] text-(--danger)">{error}</div> : null}
             </div>
-            <div className="shrink-0 border-t border-(--border) bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <div className="shrink-0 border-t border-border bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
                 className={cn(submitClass, touchMin)}
@@ -527,11 +481,11 @@ export function NewChatPopover({
         ) : (
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden overscroll-contain",
-              sheetForm && "min-h-0 flex-1 gap-0 overflow-hidden",
+              "flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden",
+              sheetForm && "gap-0",
             )}
           >
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1 pb-3 [-webkit-overflow-scrolling:touch]">
               <div className="flex items-center gap-2">
                 <button type="button" className={cn(backClass, touchMin)} onClick={backToList}>
                   ← 返回
@@ -581,7 +535,7 @@ export function NewChatPopover({
               </div>
               {error ? <div className="text-[13px] text-(--danger)">{error}</div> : null}
             </div>
-            <div className="shrink-0 border-t border-(--border) bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <div className="shrink-0 border-t border-border bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
                 className={cn(submitClass, touchMin)}

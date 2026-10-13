@@ -1,6 +1,28 @@
 @import "tailwindcss/theme" layer(theme);
 @import "tailwindcss/utilities" layer(utilities);
 
+/* Map open-bot tokens → Tailwind utilities used by shadcn components (border-input, text-muted-foreground, …). */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-bg);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent-ui);
+  --color-accent-foreground: var(--accent-ui-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
 
 /* shadcn / Radix extras (do not override existing open-bot --border/--muted/etc.) */
 @layer base {
@@ -11,15 +33,20 @@
     --card-foreground: var(--text);
     --popover: var(--bg-elevated);
     --popover-foreground: var(--text);
-    --primary: var(--accent);
+    /* shadcn primary follows baseColor:neutral — not brand --accent blue */
+    --primary: var(--text);
     --primary-foreground: #ffffff;
     --secondary: var(--bg-soft);
     --secondary-foreground: var(--text);
+    --muted-bg: var(--bg-soft);
     --muted-foreground: var(--muted);
+    /* shadcn accent = hover/focus surface (not brand --accent) */
+    --accent-ui: var(--bg-hover);
+    --accent-ui-foreground: var(--text);
     --destructive: var(--danger);
     --destructive-foreground: #ffffff;
     --input: var(--border);
-    --ring: var(--accent);
+    --ring: var(--text);
     --radius: var(--radius-md);
   }
 }
@@ -78,14 +105,12 @@ body,
   color: var(--text);
 }
 
-button,
-textarea,
-input {
-  font: inherit;
-}
-
-button {
-  color: inherit;
+@layer base {
+  button,
+  textarea,
+  input {
+    font: inherit;
+  }
 }
 
 .app {

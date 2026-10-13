@@ -21,6 +21,12 @@ import {
 } from "./chatTimeline";
 import { isGroupDecisionPending, resolveRunFaceAgentId } from "../../lib/runFace";
 import {
+  agentNameMap,
+  channelMemberProfiles,
+  resolveActiveAgent,
+  resolveActiveChannel,
+} from "../../lib/app/workspaceDerived";
+import {
   chatScrollRef,
   setInput,
   setPendingFiles,
@@ -29,6 +35,13 @@ import {
   useChatStore,
 } from "../../stores/chat";
 import { botIsOnline, usePresenceStore } from "../../stores/presence";
+import {
+  chatSessionActions,
+  overlaySessionActions,
+  shellSessionActions,
+} from "../../stores/sessionActions";
+import { useShellStore } from "../../stores/shell";
+import { useWorkspaceStore } from "../../stores/workspace";
 import type { UiMessage } from "../../types/app-ui";
 
 export type ChatMainProps = {
@@ -501,4 +514,61 @@ function ChatScrollPin({
   return null;
 }
 
-export const ChatMain = memo(ChatMainInner);
+const ChatMainView = memo(ChatMainInner);
+
+/** Owns workspace/shell subscription + sessionActions — no prop-bag seam (aligned with AppOverlays). */
+export function ChatMain() {
+  const agents = useWorkspaceStore((s) => s.agents);
+  const agentId = useWorkspaceStore((s) => s.agentId);
+  const conversation = useWorkspaceStore((s) => s.conversation);
+  const channels = useWorkspaceStore((s) => s.channels);
+  const selectionHydrated = useWorkspaceStore((s) => s.selectionHydrated);
+  const viewingRunActive = useWorkspaceStore((s) => s.viewingRunActive);
+  const hostExecPolicy = useWorkspaceStore((s) => s.hostExecPolicy);
+  const composerMentionItems = useWorkspaceStore((s) => s.composerMentionItems);
+  const composerSkills = useWorkspaceStore((s) => s.composerSkills);
+  const hostActivity = useShellStore((s) => s.hostActivity);
+  const onboardingDismissed = useShellStore((s) => s.onboardingDismissed);
+
+  const agentNameById = useMemo(() => agentNameMap(agents), [agents]);
+  const activeAgent = resolveActiveAgent(agentId, agents);
+  const activeChannel = resolveActiveChannel(conversation, channels);
+  const chat = chatSessionActions();
+  const overlay = overlaySessionActions();
+  const shell = shellSessionActions();
+
+  return (
+    <ChatMainView
+      hostActivity={hostActivity}
+      onSystemBack={() => shell.onSystemBack()}
+      agents={agents}
+      activeChannel={activeChannel}
+      selectionHydrated={selectionHydrated}
+      activeAgent={activeAgent}
+      agentId={agentId}
+      conversation={conversation}
+      channelMemberProfiles={(ch) => channelMemberProfiles(ch, agents, agentNameById)}
+      agentNameById={agentNameById}
+      onOpenGroupSettings={(ch) => overlay.setGroupMembersChannel(ch)}
+      onOpenAvatarSettings={(agent) => overlay.openAvatarSettings(agent)}
+      onOpenTrain={(agent) => overlay.setTrainAgent(agent)}
+      onboardingDismissed={onboardingDismissed}
+      onOnboardingSelect={(opt) => chat.onOnboardingSelect(opt)}
+      onOnboardingCustom={(text) => chat.onOnboardingCustom(text)}
+      onOnboardingDismiss={() => chat.onOnboardingDismiss()}
+      settleHostConfirm={(message, decision) => chat.settleHostConfirm(message, decision)}
+      hostExecPolicy={hostExecPolicy}
+      setOpenThreadRootId={(id) => chat.setOpenThreadRootId(id)}
+      onToggleReaction={(messageId, emoji) => void chat.onToggleReaction(messageId, emoji)}
+      openFeedbackForMessage={(msg, source) => chat.openFeedbackForMessage(msg, source)}
+      viewingRunActive={viewingRunActive}
+      onApprovalDeny={() => chat.onApprovalDeny()}
+      onApprovalAllow={() => chat.onApprovalAllow()}
+      onSubmit={(e) => void chat.onSubmit(e)}
+      stopCurrentRun={(opts) => chat.stopCurrentRun(opts)}
+      composerMentionItems={composerMentionItems}
+      composerSkills={composerSkills}
+    />
+  );
+}
+

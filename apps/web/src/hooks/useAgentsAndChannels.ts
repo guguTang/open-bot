@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import { toast } from "sonner";
-import type { CreateBotInput } from "../components/NewChatPopover";
+import type { CreateBotInput } from "../components/newChatTypes";
 import {
   Agent,
   Channel,

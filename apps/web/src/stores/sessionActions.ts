@@ -1,75 +1,32 @@
 /**
  * 工作区动作。hooks 绑定，组件在事件里 getState() 调用。
  * 不要订阅这个 store：回调身份变化不该拖着侧栏/聊天重渲染。
+ *
+ * Domains (prefer these facades at call sites):
+ * - chatSessionActions() — transcript / composer / approval
+ * - overlaySessionActions() — create / avatar / train / feedback
+ * - shellSessionActions() — sidebar / settings / back
  */
 
-import type { FormEvent, MouseEvent, RefObject } from "react";
+import type { RefObject } from "react";
 import { noop } from "es-toolkit";
-import type { Agent, ApprovalDecision, Channel } from "../api";
-import type { ConvSheetTarget } from "../components/app/AppOverlays";
-import type { OnboardingOption } from "../components/botOnboarding";
-import type { CreateBotInput } from "../components/NewChatPopover";
-import type { FeedbackTarget } from "../components/feedbackModalTypes";
-import type { SettingsTab } from "../types/app-ui";
-import type { UiMessage } from "../types/app-ui";
 import { create } from "zustand";
+import {
+  pickChatSessionActions,
+  pickOverlaySessionActions,
+  pickShellSessionActions,
+  type ChatSessionActions,
+  type OverlaySessionActions,
+  type SessionActions,
+  type ShellSessionActions,
+} from "./sessionActionDomains";
 
-export type SessionActions = {
-  onSelectAgent: (id: string) => void;
-  openChannelChat: (id: string) => void | Promise<void>;
-  removeAgent: (a: Agent, e?: MouseEvent) => void | Promise<void>;
-  removeChannel: (ch: Channel, e?: MouseEvent) => void | Promise<void>;
-  openSettings: (tab?: SettingsTab) => void;
-  openAvatarSettings: (agent: Agent) => void;
-  setCloneTarget: (agent: Agent | null) => void;
-  setGroupMembersChannel: (ch: Channel | null) => void;
-  startChatWithAgent: (a: Agent) => void;
-  createBotFromPopover: (input: CreateBotInput) => void | Promise<void>;
-  createGroupFromPopover: (name: string, ids: string[]) => void | Promise<void>;
-  saveAvatarSettings: (
-    id: string,
-    patch: { avatar_shape: string; avatar_color: string; machine_id?: string },
-  ) => Promise<void>;
-  onLogout: () => void;
-  onSystemBack: () => void;
-  settleHostConfirm: (message: UiMessage, decision: ApprovalDecision) => void;
-  stopCurrentRun: (opts: { markStopped: boolean }) => void;
-  onSubmit: (e: FormEvent) => void | Promise<void>;
-  setOpenThreadRootId: (id: string | null) => void;
-  toggleAssistantsCollapsed: () => void;
-  toggleGroupsCollapsed: () => void;
-  onToggleCreateSheet: () => void;
-  onOpenNewChatList: () => void;
-  onOpenBotSettings: (id: string) => void;
-  onOnboardingSelect: (opt: OnboardingOption) => void;
-  onOnboardingCustom: (text: string) => void;
-  onOnboardingDismiss: () => void;
-  onToggleReaction: (messageId: string, emoji: string) => void;
-  openFeedbackForMessage: (msg: UiMessage, source: FeedbackTarget["source"]) => void;
-  onApprovalDeny: () => void;
-  onApprovalAllow: () => void;
-  setTrainAgent: (a: Agent | null) => void;
-  setShowNewChat: (open: boolean) => void;
-  setCreateSheetOpen: (open: boolean) => void;
-  setNewChatInitialMode: (mode: import("../components/NewChatPopover").NewChatMode) => void;
-  setConvSheet: (target: ConvSheetTarget) => void;
-  setFeedbackTarget: (t: FeedbackTarget | null) => void;
-  setAvatarSettingsAgent: (a: Agent | null) => void;
-  setChannels: React.Dispatch<React.SetStateAction<Channel[]>>;
-  refreshChannels: () => Promise<unknown>;
-  refreshAgents: () => Promise<unknown>;
-  submitFeedback: (input: {
-    polarity: FeedbackTarget["polarity"];
-    reasons: string[];
-    note: string;
-    source: FeedbackTarget["source"];
-  }) => Promise<void>;
-  onSelectAgentRef: RefObject<(id: string) => void | Promise<void>>;
-  newChatBtnRef: RefObject<HTMLButtonElement | null>;
-  setSettingsShellHub: (v: boolean) => void;
-  setSettingsGeneralPane: (pane: "account" | "server" | "review") => void;
-  onStatusMessage: (msg: string) => void;
-};
+export type {
+  ChatSessionActions,
+  OverlaySessionActions,
+  SessionActions,
+  ShellSessionActions,
+} from "./sessionActionDomains";
 
 const asyncNoop = async () => {};
 const emptyFnRef: RefObject<(id: string) => void | Promise<void>> = { current: () => {} };
@@ -132,4 +89,16 @@ export function bindSessionActions(partial: Partial<SessionActions>) {
 
 export function sessionActions(): SessionActions {
   return useSessionActions.getState();
+}
+
+export function chatSessionActions(): ChatSessionActions {
+  return pickChatSessionActions(sessionActions());
+}
+
+export function overlaySessionActions(): OverlaySessionActions {
+  return pickOverlaySessionActions(sessionActions());
+}
+
+export function shellSessionActions(): ShellSessionActions {
+  return pickShellSessionActions(sessionActions());
 }

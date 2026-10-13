@@ -10,12 +10,10 @@ import {
   runBusyDotClass,
   sidebarAsideClass,
   sidebarConvActionClass,
+  sidebarConvActionsFloatClass,
   sidebarConvRowClass,
   sidebarIconBtnClass,
   sidebarListClass,
-  sidebarSearchFieldClass,
-  sidebarSectionFoldHeadClass,
-  sidebarSectionLabelClass,
 } from "./sidebarUi";
 import { useConvLongPressHandlers } from "../../hooks/useConvLongPress";
 import { useChatStore } from "../../stores/chat";
@@ -25,6 +23,12 @@ import { useShellStore } from "../../stores/shell";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { agentNameMap, channelMemberProfiles, resolveActiveAgent } from "../../lib/app/workspaceDerived";
 import { cn } from "@/lib/utils";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { accountInitials } from "./accountInitials";
 
 export type ConvLongPressTarget =
@@ -39,14 +43,20 @@ export type ChannelMemberProfile = {
   online?: boolean;
 };
 
+type ConvListItem =
+  | { kind: "agent"; agent: Agent; sortAt: number }
+  | { kind: "channel"; channel: Channel; sortAt: number };
+
+function itemSortAt(iso?: string | null) {
+  return Date.parse(iso || "") || 0;
+}
+
 function AppSidebarInner() {
   const user = useWorkspaceStore((s) => s.user);
   const agents = useWorkspaceStore((s) => s.agents);
   const agentId = useWorkspaceStore((s) => s.agentId);
   const conversation = useWorkspaceStore((s) => s.conversation);
   const channels = useWorkspaceStore((s) => s.channels);
-  const assistantsCollapsed = useWorkspaceStore((s) => s.assistantsCollapsed);
-  const groupsCollapsed = useWorkspaceStore((s) => s.groupsCollapsed);
   const agentBusy = useWorkspaceStore((s) => s.agentBusy);
   const channelBusy = useWorkspaceStore((s) => s.channelBusy);
   const busySelectionKeys = useWorkspaceStore((s) => s.busySelectionKeys);
@@ -74,23 +84,35 @@ function AppSidebarInner() {
   const searchingHintNow = toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(hostActivity);
   const isBotOnline = (id?: string | null, snapshot?: boolean) => botIsOnline(onlineByAgent, agents, id, snapshot);
   const deferredConvSearch = useDeferredValue(convSearch);
-  const filteredAgents = useMemo(() => {
+  const convItems = useMemo(() => {
     const q = deferredConvSearch.trim().toLowerCase();
-    if (!q) return agents;
-    return agents.filter((a) => {
-      const hay = `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [agents, deferredConvSearch]);
-  const filteredChannels = useMemo(() => {
-    const q = deferredConvSearch.trim().toLowerCase();
-    if (!q) return channels;
-    return channels.filter((ch) => {
-      const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join(" ");
-      const hay = `${ch.name} ${memberNames}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [channels, deferredConvSearch, agentNameById]);
+    const items: ConvListItem[] = [];
+    for (const a of agents) {
+      if (q) {
+        const hay = `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      items.push({
+        kind: "agent",
+        agent: a,
+        sortAt: itemSortAt(a.conversation_updated_at || a.updated_at || a.created_at),
+      });
+    }
+    for (const ch of channels) {
+      if (q) {
+        const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join(" ");
+        const hay = `${ch.name} ${memberNames}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      items.push({
+        kind: "channel",
+        channel: ch,
+        sortAt: itemSortAt(ch.created_at),
+      });
+    }
+    items.sort((a, b) => b.sortAt - a.sortAt || a.kind.localeCompare(b.kind));
+    return items;
+  }, [agents, channels, deferredConvSearch, agentNameById]);
 
   const identityFocus =
     activeAgent || agents.find((a) => a.id === agentId) || agents[0] || null;
@@ -198,69 +220,55 @@ function AppSidebarInner() {
           </div>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center gap-2 px-1 py-0.5">
-          <label className={sidebarSearchFieldClass()}>
-            <Search size={16} strokeWidth={2} aria-hidden />
-            <input
+        <div className="flex shrink-0 px-1 py-0.5">
+          <InputGroup>
+            <InputGroupInput
               value={convSearch}
               onChange={(e) => setConvSearch(e.target.value)}
               placeholder="搜索助手 / 群聊"
               aria-label="搜索助手或群聊"
+              className="text-sm md:text-xs"
             />
-          </label>
-          <button
-            ref={actions.newChatBtnRef}
-            type="button"
-            className={sidebarIconBtnClass()}
-            title="新建聊天"
-            aria-haspopup="dialog"
-            aria-expanded={showNewChat}
-            onClick={() => sessionActions().onOpenNewChatList()}
-          >
-            <Plus size={18} strokeWidth={2} aria-hidden />
-          </button>
+            <InputGroupAddon align="inline-start">
+              <Search aria-hidden />
+            </InputGroupAddon>
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                ref={actions.newChatBtnRef}
+                size="icon-xs"
+                title="新建聊天"
+                aria-label="新建聊天"
+                aria-haspopup="dialog"
+                aria-expanded={showNewChat}
+                onClick={() => sessionActions().onOpenNewChatList()}
+              >
+                <Plus aria-hidden />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </div>
       )}
 
-      {sheetForm ? (
-        <button
-          type="button"
-          className={sidebarSectionFoldHeadClass()}
-          aria-expanded={!assistantsCollapsed}
-          onClick={() => sessionActions().toggleAssistantsCollapsed()}
-        >
-          <span className="min-w-0 flex-1">助手</span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-(--muted)">
-            {assistantsCollapsed ? (
-              <span className="text-xs font-medium opacity-85">{filteredAgents.length}</span>
-            ) : null}
-            <span className="inline-grid size-4.5 place-items-center opacity-70" aria-hidden>
-              {assistantsCollapsed ? "▸" : "▾"}
-            </span>
-          </span>
-        </button>
-      ) : (
-        <div className={sidebarSectionLabelClass(sheetForm)}>助手</div>
-      )}
-      {!(sheetForm && assistantsCollapsed) ? (
-        <nav className={sidebarListClass(sheetForm)} aria-label="助手列表">
-          {agents.length === 0 ? (
-            <div className="muted small" style={{ padding: "8px 10px", lineHeight: 1.5 }}>
-              暂无助手。点击右上角「+」创建第一个助手。
-            </div>
-          ) : filteredAgents.length === 0 ? (
-            <div className="muted small" style={{ padding: "4px 10px" }}>
-              无匹配助手
-            </div>
-          ) : (
-            filteredAgents.map((a) => {
+      <nav className={sidebarListClass(sheetForm)} aria-label="会话列表">
+        {agents.length === 0 && channels.length === 0 ? (
+          <div className="muted small" style={{ padding: "8px 10px", lineHeight: 1.5 }}>
+            暂无会话。点击右上角「+」创建助手或群聊。
+          </div>
+        ) : convItems.length === 0 ? (
+          <div className="muted small" style={{ padding: "4px 10px" }}>
+            无匹配会话
+          </div>
+        ) : (
+          convItems.map((item) => {
+            if (item.kind === "agent") {
+              const a = item.agent;
               const active =
                 !conversation?.channel_id &&
                 (conversation?.agent_id === a.id || (!conversation && a.id === agentId));
               const snippet = (a.last_message || a.description || "").trim();
               return (
                 <div
-                  key={a.id}
+                  key={`agent:${a.id}`}
                   className={sidebarConvRowClass({ sheetForm, active })}
                   onClick={() => sessionActions().onSelectAgent(a.id)}
                   role="button"
@@ -304,148 +312,115 @@ function AppSidebarInner() {
                     </div>
                     <div className={cn("agent-desc", sheetForm && "mt-0.5")}>{snippet || "尚未开始对话"}</div>
                   </div>
-                  <button
-                    type="button"
-                    className={sidebarConvActionClass({ touchOrSheet, variant: "settings" })}
-                    title="Bot 设置"
-                    aria-label="Bot 设置"
-                    disabled={agentBusy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      sessionActions().onOpenBotSettings(a.id);
-                    }}
-                  >
-                    <Settings size={14} strokeWidth={2} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className={sidebarConvActionClass({ touchOrSheet, variant: "clone" })}
-                    title="复制助手"
-                    aria-label="复制助手"
-                    disabled={agentBusy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      sessionActions().setCloneTarget(a);
-                    }}
-                  >
-                    <Copy size={14} strokeWidth={2} aria-hidden />
-                  </button>
+                  <div className={sidebarConvActionsFloatClass({ active, touchOrSheet })}>
+                    <button
+                      type="button"
+                      className={sidebarConvActionClass({ touchOrSheet, variant: "settings" })}
+                      title="Bot 设置"
+                      aria-label="Bot 设置"
+                      disabled={agentBusy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sessionActions().onOpenBotSettings(a.id);
+                      }}
+                    >
+                      <Settings size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className={sidebarConvActionClass({ touchOrSheet, variant: "clone" })}
+                      title="复制助手"
+                      aria-label="复制助手"
+                      disabled={agentBusy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sessionActions().setCloneTarget(a);
+                      }}
+                    >
+                      <Copy size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
+                      title="删除助手"
+                      disabled={agentBusy}
+                      onClick={(e) => void sessionActions().removeAgent(a, e)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            const ch = item.channel;
+            const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join("、");
+            const active =
+              conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id;
+            return (
+              <div
+                key={`channel:${ch.id}`}
+                className="group relative flex w-full items-center"
+                title={memberNames}
+              >
+                <button
+                  type="button"
+                  className={sidebarConvRowClass({ sheetForm, active })}
+                  onClick={() => void sessionActions().openChannelChat(ch.id)}
+                  onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
+                  onPointerMove={moveConvLongPress}
+                  onPointerUp={endConvLongPress}
+                  onPointerCancel={endConvLongPress}
+                  onContextMenu={(e) => {
+                    if (touchUi) e.preventDefault();
+                  }}
+                >
+                  <div className={channelMemberStackClass} aria-hidden>
+                    {channelMemberProfiles(ch, agents, agentNameById)
+                      .slice(0, 3)
+                      .map((p) => (
+                        <AgentAvatar
+                          key={p.agent_id}
+                          id={p.agent_id}
+                          name={p.name}
+                          size={sheetForm ? 28 : 22}
+                          shape={p.avatar_shape}
+                          color={p.avatar_color}
+                          online={isBotOnline(p.agent_id, p.online)}
+                        />
+                      ))}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className={cn("agent-name", sheetForm && "text-[15px]")}>
+                      {ch.name}
+                      {busyKeySet.has(`channel:${ch.id}`) ? (
+                        <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
+                      ) : null}
+                    </div>
+                    <div className={cn("agent-desc", sheetForm && "mt-0.5")}>
+                      {memberNames || "无成员"}
+                    </div>
+                  </div>
+                </button>
+                <div className={sidebarConvActionsFloatClass({ active, touchOrSheet })}>
                   <button
                     type="button"
                     className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
-                    title="删除助手"
-                    disabled={agentBusy}
-                    onClick={(e) => void sessionActions().removeAgent(a, e)}
+                    title="删除群聊"
+                    disabled={channelBusy}
+                    onClick={(e) => void sessionActions().removeChannel(ch, e)}
                   >
                     ×
                   </button>
                 </div>
-              );
-            })
-          )}
-        </nav>
-      ) : null}
-
-      {sheetForm && channels.length === 0 ? null : (
-        <>
-          {sheetForm ? (
-            <button
-              type="button"
-              className={sidebarSectionFoldHeadClass()}
-              aria-expanded={!groupsCollapsed}
-              onClick={() => sessionActions().toggleGroupsCollapsed()}
-            >
-              <span className="min-w-0 flex-1">群聊</span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-(--muted)">
-                {groupsCollapsed ? (
-                  <span className="text-xs font-medium opacity-85">{filteredChannels.length}</span>
-                ) : null}
-                <span className="inline-grid size-4.5 place-items-center opacity-70" aria-hidden>
-                  {groupsCollapsed ? "▸" : "▾"}
-                </span>
-              </span>
-            </button>
-          ) : (
-            <div className={sidebarSectionLabelClass(sheetForm)}>群聊</div>
-          )}
-          {!(sheetForm && groupsCollapsed) ? (
-            <ul className={cn(sidebarListClass(sheetForm), "m-0 list-none p-0")}>
-              {filteredChannels.length === 0 ? (
-                <li className="muted small" style={{ padding: "4px 10px", listStyle: "none" }}>
-                  {channels.length === 0 ? "暂无群聊，可从「+」创建" : "无匹配群聊"}
-                </li>
-              ) : (
-                filteredChannels.map((ch) => {
-                  const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join("、");
-                  return (
-                    <li key={ch.id} className="list-none" title={memberNames}>
-                      <div className="group relative flex w-full items-center">
-                        <button
-                          type="button"
-                          className={sidebarConvRowClass({
-                            sheetForm,
-                            active:
-                              conversation?.channel_id === ch.id ||
-                              conversation?.id === ch.conversation_id,
-                            channel: true,
-                          })}
-                          onClick={() => void sessionActions().openChannelChat(ch.id)}
-                          onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
-                          onPointerMove={moveConvLongPress}
-                          onPointerUp={endConvLongPress}
-                          onPointerCancel={endConvLongPress}
-                          onContextMenu={(e) => {
-                            if (touchUi) e.preventDefault();
-                          }}
-                        >
-                      <div className={channelMemberStackClass} aria-hidden>
-                        {channelMemberProfiles(ch, agents, agentNameById)
-                          .slice(0, 3)
-                          .map((p) => (
-                            <AgentAvatar
-                              key={p.agent_id}
-                              id={p.agent_id}
-                              name={p.name}
-                              size={22}
-                              shape={p.avatar_shape}
-                              color={p.avatar_color}
-                              online={isBotOnline(p.agent_id, p.online)}
-                            />
-                          ))}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className={cn("agent-name", sheetForm && "text-[15px]")}>
-                          {ch.name}
-                          {busyKeySet.has(`channel:${ch.id}`) ? (
-                            <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
-                          ) : null}
-                        </div>
-                        <div className={cn("agent-desc", sheetForm && "mt-0.5")}>
-                          {memberNames || "无成员"} · 点击打开群聊
-                        </div>
-                      </div>
-                        </button>
-                      <button
-                        type="button"
-                        className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
-                        title="删除群聊"
-                        disabled={channelBusy}
-                        onClick={(e) => void sessionActions().removeChannel(ch, e)}
-                      >
-                        ×
-                      </button>
-                      </div>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          ) : null}
-        </>
-      )}
+              </div>
+            );
+          })
+        )}
+      </nav>
 
       {!sheetForm ? (
-        <div className="flex shrink-0 items-center px-1 pb-0.5 pt-2">
+        <div className="mt-auto flex shrink-0 flex-col gap-2 pt-1">
           <AccountMenu
             username={user?.username || "账户"}
             llm={defaultLLM}

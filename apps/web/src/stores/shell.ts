@@ -7,7 +7,7 @@ import { create } from "zustand";
 import type { Agent, Channel } from "../api";
 import type { ConvSheetTarget } from "../components/app/AppOverlays";
 import type { FeedbackTarget } from "../components/feedbackModalTypes";
-import type { NewChatMode } from "../components/NewChatPopover";
+import type { NewChatMode } from "../components/newChatTypes";
 
 export type SettingsGeneralPane = "account" | "server" | "review";
 

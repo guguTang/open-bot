@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { withPreviewStorage } from "./htmlPreviewModel";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -26,7 +26,7 @@ export function HtmlPreviewModal({
   onDownload,
   onClose,
 }: Props) {
-  const dialogRef = useDialogOpen(open, onClose);
+  const { ref: dialogRef, maskProps } = useDialogChrome(open, onClose, { systemBack: true });
 
   if (!open) return null;
 
@@ -36,7 +36,7 @@ export function HtmlPreviewModal({
       className="modal-backdrop preview-backdrop"
       aria-label={title || "HTML 预览"}
     >
-      <button type="button" className="modal-backdrop-mask" aria-label="关闭" onClick={onClose} />
+      <button {...maskProps} />
       <div className="modal preview-modal">
         <div className="modal-head">
           <h3>{title || "HTML 预览"}</h3>

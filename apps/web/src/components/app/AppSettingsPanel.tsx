@@ -19,7 +19,6 @@ import {
   SecretsSettingsTab,
   SkillsSettingsTab,
 } from "../settings";
-import type { SettingsHubNav } from "../MobileSettingsHub";
 import type { AppSettingsBundle } from "../../hooks/useAppSettings";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { useSheetFormUi } from "../useIsTouchUi";
@@ -27,6 +26,7 @@ import { sessionActions } from "../../stores/sessionActions";
 import { patchShell, useShellStore } from "../../stores/shell";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { agentNameMap, resolveActiveAgent } from "../../lib/app/workspaceDerived";
+import { resolveSettingsHubNav } from "../../lib/settingsNav";
 
 export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) {
   const user = useWorkspaceStore((s) => s.user);
@@ -84,29 +84,12 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
     return m?.label || mid;
   })();
 
-  const onHubNavigate = (tab: SettingsHubNav) => {
-    if (tab === "account") {
-      setSettingsGeneralPane("account");
-      setSettingsTab("general");
-    } else if (tab === "server") {
-      setSettingsGeneralPane("server");
-      setSettingsTab("general");
-    } else if (tab === "review") {
-      setSettingsTab("review");
-    } else if (tab === "general") {
-      setSettingsGeneralPane("review");
-      setSettingsTab("general");
-    } else {
-      setSettingsTab(tab);
-    }
+  const onHubNavigate = (hub: Parameters<typeof resolveSettingsHubNav>[0]) => {
+    const target = resolveSettingsHubNav(hub);
+    if (target.generalPane) setSettingsGeneralPane(target.generalPane);
+    setSettingsTab(target.tab);
     setSettingsShellHub(false);
-    if (tab === "account" || tab === "server") {
-      prefetchSettingsTab("general");
-    } else if (tab !== "general") {
-      prefetchSettingsTab(tab);
-    } else {
-      prefetchSettingsTab("general");
-    }
+    prefetchSettingsTab(target.prefetch);
   };
 
   return (

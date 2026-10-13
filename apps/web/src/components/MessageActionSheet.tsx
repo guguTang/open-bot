@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { REACTION_EMOJIS } from "../api";
-import { OPENBOT_SYSTEM_BACK_EVENT } from "../lib/mobileSystemBack";
 import { IconCopy, IconFlag, IconReply, IconSmile } from "./MsgActionIcons";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -34,7 +33,9 @@ export function MessageActionSheet({
     setEmojiPage(false);
     onClose();
   }, [onClose]);
-  const dialogRef = useDialogOpen(open, close, {
+  const { ref: dialogRef, maskProps } = useDialogChrome(open, close, {
+    systemBack: true,
+    maskClassName: "action-sheet-mask",
     onDismiss: () => {
       if (emojiPage) {
         setEmojiPage(false);
@@ -42,21 +43,6 @@ export function MessageActionSheet({
       }
     },
   });
-
-  useEffect(() => {
-    if (!open) return;
-    const onSystemBack = (e: Event) => {
-      e.preventDefault();
-      close();
-    };
-    document.addEventListener(OPENBOT_SYSTEM_BACK_EVENT, onSystemBack);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener(OPENBOT_SYSTEM_BACK_EVENT, onSystemBack);
-      document.body.style.overflow = prev;
-    };
-  }, [open, close]);
 
   if (!open) return null;
 
@@ -92,7 +78,7 @@ export function MessageActionSheet({
 
   return (
     <dialog ref={dialogRef} className="action-sheet-root" aria-label="消息操作">
-      <button type="button" className="action-sheet-mask" aria-label="关闭" onClick={close} />
+      <button {...maskProps} />
       <div className="action-sheet">
         <div className="action-sheet-handle" aria-hidden />
         {emojiPage ? (

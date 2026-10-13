@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { BotSecretRequest } from "../api";
 import { resolveBotSecretRequest } from "../api";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   request: BotSecretRequest | null;
@@ -14,7 +14,9 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const dialogRef = useDialogOpen(request != null, onClose, { blockDismiss: busy });
+  const { ref: dialogRef, maskProps } = useDialogChrome(request != null, onClose, {
+    blockDismiss: busy,
+  });
 
   if (!request) return null;
 
@@ -58,13 +60,7 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
       className="modal-backdrop"
       aria-labelledby="secret-prompt-modal-title"
     >
-      <button
-        type="button"
-        className="modal-backdrop-mask"
-        aria-label="关闭"
-        disabled={busy}
-        onClick={onClose}
-      />
+      <button {...maskProps} />
       <div className="modal">
         <div className="modal-head">
           <h3 id="secret-prompt-modal-title">需要密钥：{request.name || "secret"}</h3>

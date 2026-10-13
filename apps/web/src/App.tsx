@@ -3,7 +3,7 @@ import { AppSidebar } from "./components/app/AppSidebar";
 import { AppAuthenticatedShell } from "./components/app/AppAuthenticatedShell";
 import { AppSettingsPanel } from "./components/app/AppSettingsPanel";
 import { AppOverlays } from "./components/app/AppOverlays";
-import { AppChatArea } from "./components/app/AppChatArea";
+import { ChatMain } from "./components/app/ChatMain";
 import { useWorkspaceAppSession } from "./hooks/useWorkspaceAppSession";
 
 /** Thin shell: workspace session module owns wiring; UI only mounts surfaces. */
@@ -18,7 +18,7 @@ export default function App() {
     <AppAuthenticatedShell>
       <AppSidebar />
       <AppOverlays settings={settings} />
-      <AppChatArea />
+      <ChatMain />
       <AppSettingsPanel settings={settings} />
     </AppAuthenticatedShell>
   );

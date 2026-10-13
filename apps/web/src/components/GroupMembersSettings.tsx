@@ -1,13 +1,12 @@
 import { ChevronLeft } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Agent, Channel } from "../api";
 import { addChannelMember, removeChannelMember } from "../api";
 import { AgentAvatar } from "./AgentAvatar";
 import { useConfirm } from "./ConfirmProvider";
 import { useSheetFormUi } from "./useIsTouchUi";
-import { OPENBOT_SYSTEM_BACK_EVENT } from "../lib/mobileSystemBack";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -40,8 +39,9 @@ function GroupMembersSettingsDialog({ channel, agents, onClose, onChanged }: Dia
   const [channelPatch, setChannelPatch] = useState<Channel | null>(null);
   const localChannel = channelPatch ?? channel;
 
-  const dialogRef = useDialogOpen(true, onClose, {
+  const { ref: dialogRef, maskProps } = useDialogChrome(true, onClose, {
     blockDismiss: busy,
+    systemBack: true,
     onDismiss: () => {
       if (view === "add") {
         setView("members");
@@ -49,24 +49,6 @@ function GroupMembersSettingsDialog({ channel, agents, onClose, onChanged }: Dia
       }
     },
   });
-
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onBack = (e: Event) => {
-      e.preventDefault();
-      if (view === "add") setView("members");
-      else onClose();
-    };
-    document.addEventListener(OPENBOT_SYSTEM_BACK_EVENT, onBack);
-    return () => document.removeEventListener(OPENBOT_SYSTEM_BACK_EVENT, onBack);
-  }, [onClose, view]);
 
   const memberIds = useMemo(() => new Set(localChannel?.members || []), [localChannel]);
 
@@ -169,13 +151,7 @@ function GroupMembersSettingsDialog({ channel, agents, onClose, onChanged }: Dia
       className={`modal-backdrop group-channel-backdrop${sheetForm ? " group-channel-backdrop-sheet" : ""}`}
       aria-label={`${title} ${localChannel.name}`}
     >
-      <button
-        type="button"
-        className="modal-backdrop-mask"
-        aria-label="关闭"
-        disabled={busy}
-        onClick={onClose}
-      />
+      <button {...maskProps} />
       <div className={`modal group-channel-modal${sheetForm ? " group-channel-modal-shell" : ""}`}>
         <div className="modal-head group-channel-modal-head">
           {sheetForm ? (

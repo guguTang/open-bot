@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type { Agent, Machine } from "../api";
-import { listMachines } from "../api";
-import { isLoginOnlyMachine, machinePresenceLabel, preferHostMachines } from "../lib/clientEnv";
+import { machinePresenceLabel } from "../lib/machineRoster";
+import { usePreferHostMachines } from "../hooks/usePreferHostMachines";
 import {
   AVATAR_COLOR_PALETTE,
   AVATAR_SHAPE_LABELS,
@@ -14,7 +14,7 @@ import {
 } from "./avatarColor";
 import { AgentAvatar } from "./AgentAvatar";
 import { useSheetFormUi } from "./useIsTouchUi";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 type Props = {
   agent: Agent | null;
@@ -52,8 +52,9 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
   const [shape, setShape] = useState<AvatarShape>("rectangle");
   const [color, setColor] = useState("#457b9d");
   const [machineId, setMachineId] = useState("");
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [machinesLoaded, setMachinesLoaded] = useState(false);
+  const { machines, loaded: machinesLoaded, error: machinesError } = usePreferHostMachines(
+    Boolean(agent && open),
+  );
   const [previewMode, setPreviewMode] = useState<PreviewMode>("idle");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -66,45 +67,23 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
     setMachineId(agent.machine_id || "");
     setPreviewMode("idle");
     setErr("");
-    setMachinesLoaded(false);
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await listMachines();
-        if (!cancelled) {
-          const hosts = preferHostMachines(list);
-          setMachines(hosts);
-          setMachinesLoaded(true);
-          setMachineId((prev) => {
-            if (!prev) return prev;
-            const bound = list.find((m) => m.id === prev);
-            if (bound && isLoginOnlyMachine(bound)) return "";
-            return prev;
-          });
-        }
-      } catch (ex) {
-        if (!cancelled) {
-          setMachines([]);
-          setMachinesLoaded(true);
-          setErr(ex instanceof Error ? ex.message : String(ex));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, [agent, open]);
 
   useEffect(() => {
-    if (!open || !sheetForm) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open, sheetForm]);
+    if (!machinesLoaded) return;
+    if (machinesError) setErr(machinesError);
+    setMachineId((prev) => {
+      if (!prev) return prev;
+      // Drop login-only / unknown binds (prefer-host list excludes phones).
+      if (!machines.some((m) => m.id === prev)) return "";
+      return prev;
+    });
+  }, [machinesLoaded, machines, machinesError]);
 
-  const dialogRef = useDialogOpen(open, onClose, { blockDismiss: busy });
+  const { ref: dialogRef, maskProps } = useDialogChrome(open, onClose, {
+    blockDismiss: busy,
+    lockScroll: sheetForm,
+  });
 
   if (!open || !agent) return null;
 
@@ -134,13 +113,7 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
       className={`modal-backdrop${sheetForm ? " bot-avatar-backdrop-sheet bot-avatar-backdrop-shell settings-backdrop-shell" : ""}`}
       aria-label={`Bot 形象 ${agent.name}`}
     >
-      <button
-        type="button"
-        className="modal-backdrop-mask"
-        aria-label="关闭"
-        disabled={busy}
-        onClick={onClose}
-      />
+      <button {...maskProps} />
       <div className={`modal bot-avatar-modal${sheetForm ? " bot-avatar-modal-sheet bot-avatar-modal-shell" : ""}`}>
         {sheetForm ? (
           <div className="settings-shell-subhead">

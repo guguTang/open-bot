@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -21,7 +20,7 @@ import {
 import { buttonVariants } from "@/components/ui/buttonVariants";
 import { cn } from "@/lib/utils";
 import { useSheetFormUi } from "./useIsTouchUi";
-import { useDialogOpen } from "./useDialogOpen";
+import { useDialogChrome } from "./useDialogOpen";
 
 export type ConfirmOptions = {
   title: string;
@@ -79,19 +78,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   const isOpen = useCallback(() => openRef.current, []);
 
-  useEffect(() => {
-    if (!open || !sheetUi) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open, sheetUi]);
-
   const cancelLabel = options?.cancelLabel ?? "取消";
   const confirmLabel = options?.confirmLabel ?? (options?.danger ? "删除" : "确认");
   const dismissConfirm = useCallback(() => settle(false), [settle]);
-  const confirmSheetRef = useDialogOpen(Boolean(open && options && sheetUi), dismissConfirm);
+  const { ref: confirmSheetRef, maskProps: confirmMaskProps } = useDialogChrome(
+    Boolean(open && options && sheetUi),
+    dismissConfirm,
+    { maskClassName: "action-sheet-mask" },
+  );
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -106,12 +100,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
             aria-labelledby="confirm-sheet-title"
             aria-describedby={options.description ? "confirm-sheet-desc" : undefined}
           >
-            <button
-              type="button"
-              className="action-sheet-mask"
-              aria-label="关闭"
-              onClick={() => settle(false)}
-            />
+            <button {...confirmMaskProps} />
             <div className="action-sheet confirm-action-sheet">
               <div className="action-sheet-handle" aria-hidden />
               <div id="confirm-sheet-title" className="confirm-sheet-title">
