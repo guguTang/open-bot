@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,10 +13,11 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/tangxin/open-bot/services/api/internal/auth"
 	"github.com/tangxin/open-bot/services/api/internal/crypto"
 	"github.com/tangxin/open-bot/services/api/internal/db"
 )
@@ -66,46 +69,77 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// ---- pending OAuth state (user binding) ----
+// ---- signed OAuth state (user binding; no in-memory / cookie-only dependency) ----
+//
+// Web (:5173) and API (:18080) are cross-origin. A SameSite=Lax CSRF cookie set on
+// POST /start is often never stored unless fetch uses credentials:"include", which
+// caused callback invalid_state after Google auth. State is therefore an HMAC-signed
+// token carrying user_id + expiry. Cookie remains optional double-submit: if present
+// it must match; if missing, signature verification alone is enough.
 
-type gmailOAuthPending struct {
-	UserID    string
-	ExpiresAt time.Time
+func issueGmailOAuthState(userID string) (string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "", errors.New("user id required")
+	}
+	nonce := randomState()
+	exp := time.Now().Add(gmailOAuthStateTTL).Unix()
+	payload := userID + "|" + strconv.FormatInt(exp, 10) + "|" + nonce
+	mac := gmailOAuthMAC([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + base64.RawURLEncoding.EncodeToString(mac), nil
 }
 
-var (
-	gmailOAuthMu    sync.Mutex
-	gmailOAuthPendingMap = map[string]gmailOAuthPending{}
-)
-
-func putGmailOAuthState(state, userID string) {
-	gmailOAuthMu.Lock()
-	defer gmailOAuthMu.Unlock()
-	gmailOAuthPendingMap[state] = gmailOAuthPending{
-		UserID:    userID,
-		ExpiresAt: time.Now().Add(gmailOAuthStateTTL),
+func parseGmailOAuthState(state string) (string, error) {
+	state = strings.TrimSpace(state)
+	parts := strings.Split(state, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", errors.New("malformed state")
 	}
-	// opportunistic prune
-	now := time.Now()
-	for k, v := range gmailOAuthPendingMap {
-		if now.After(v.ExpiresAt) {
-			delete(gmailOAuthPendingMap, k)
-		}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", errors.New("malformed state payload")
 	}
+	mac, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", errors.New("malformed state mac")
+	}
+	expected := gmailOAuthMAC(payload)
+	if !hmac.Equal(mac, expected) {
+		return "", errors.New("invalid state signature")
+	}
+	fields := strings.Split(string(payload), "|")
+	if len(fields) != 3 {
+		return "", errors.New("malformed state fields")
+	}
+	userID := strings.TrimSpace(fields[0])
+	expUnix, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil || userID == "" {
+		return "", errors.New("malformed state claims")
+	}
+	if time.Now().Unix() > expUnix {
+		return "", errors.New("state expired")
+	}
+	return userID, nil
 }
 
-func takeGmailOAuthState(state string) (string, bool) {
-	gmailOAuthMu.Lock()
-	defer gmailOAuthMu.Unlock()
-	p, ok := gmailOAuthPendingMap[state]
-	if !ok {
-		return "", false
+func gmailOAuthMAC(payload []byte) []byte {
+	m := hmac.New(sha256.New, []byte(auth.Secret()))
+	_, _ = m.Write([]byte("gmail_oauth_state|"))
+	_, _ = m.Write(payload)
+	return m.Sum(nil)
+}
+
+// verifyGmailOAuthStateCookie is optional CSRF double-submit. Missing cookie is OK
+// (cross-origin start often cannot set it); a present cookie must match state.
+func verifyGmailOAuthStateCookie(r *http.Request, state string) error {
+	c, err := r.Cookie(gmailOAuthStateCookie)
+	if err != nil || c == nil || c.Value == "" {
+		return nil
 	}
-	delete(gmailOAuthPendingMap, state)
-	if time.Now().After(p.ExpiresAt) {
-		return "", false
+	if c.Value != state {
+		return errors.New("invalid_state")
 	}
-	return p.UserID, true
+	return nil
 }
 
 // ---- JWT routes ----
@@ -133,8 +167,12 @@ func (s *Server) handleGmailStart(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	state := randomState()
-	putGmailOAuthState(state, uid)
+	state, err := issueGmailOAuthState(uid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue oauth state"})
+		return
+	}
+	// Best-effort CSRF cookie (works when client uses credentials:"include").
 	http.SetCookie(w, &http.Cookie{
 		Name:     gmailOAuthStateCookie,
 		Value:    state,
@@ -179,13 +217,17 @@ func (s *Server) handleGmailCallback(w http.ResponseWriter, r *http.Request) {
 		webFail("missing_code_or_state")
 		return
 	}
-	if c, err := r.Cookie(gmailOAuthStateCookie); err != nil || c.Value == "" || c.Value != state {
+	if err := verifyGmailOAuthStateCookie(r, state); err != nil {
 		webFail("invalid_state")
 		return
 	}
-	userID, ok := takeGmailOAuthState(state)
-	if !ok || userID == "" {
-		webFail("state_expired")
+	userID, err := parseGmailOAuthState(state)
+	if err != nil || userID == "" {
+		if err != nil && strings.Contains(err.Error(), "expired") {
+			webFail("state_expired")
+			return
+		}
+		webFail("invalid_state")
 		return
 	}
 	tok, err := exchangeGmailCode(r.Context(), cfg, code)

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -81,5 +82,65 @@ func TestLoadGmailOAuthConfigEnabled(t *testing.T) {
 	cfg := loadGmailOAuthConfig()
 	if !cfg.Enabled() {
 		t.Fatal("expected enabled")
+	}
+}
+
+
+func TestIssueParseGmailOAuthState(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-gmail-oauth-state-secret")
+	state, err := issueGmailOAuthState("user-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == "" || !strings.Contains(state, ".") {
+		t.Fatalf("unexpected state %q", state)
+	}
+	uid, err := parseGmailOAuthState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if uid != "user-123" {
+		t.Fatalf("uid=%q", uid)
+	}
+}
+
+func TestParseGmailOAuthStateRejectsTamper(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-gmail-oauth-state-secret")
+	state, err := issueGmailOAuthState("user-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Flip last character of MAC.
+	b := []byte(state)
+	if b[len(b)-1] == 'A' {
+		b[len(b)-1] = 'B'
+	} else {
+		b[len(b)-1] = 'A'
+	}
+	if _, err := parseGmailOAuthState(string(b)); err == nil {
+		t.Fatal("expected tamper rejection")
+	}
+	if _, err := parseGmailOAuthState("not-a-state"); err == nil {
+		t.Fatal("expected malformed rejection")
+	}
+}
+
+func TestVerifyGmailOAuthStateCookie(t *testing.T) {
+	state := "signed.state.value"
+	// Missing cookie is OK (cross-origin start often cannot set it).
+	req, _ := http.NewRequest(http.MethodGet, "/callback", nil)
+	if err := verifyGmailOAuthStateCookie(req, state); err != nil {
+		t.Fatalf("missing cookie should be ok: %v", err)
+	}
+	// Matching cookie OK.
+	req.AddCookie(&http.Cookie{Name: gmailOAuthStateCookie, Value: state})
+	if err := verifyGmailOAuthStateCookie(req, state); err != nil {
+		t.Fatalf("matching cookie: %v", err)
+	}
+	// Mismatch rejected.
+	req2, _ := http.NewRequest(http.MethodGet, "/callback", nil)
+	req2.AddCookie(&http.Cookie{Name: gmailOAuthStateCookie, Value: "other"})
+	if err := verifyGmailOAuthStateCookie(req2, state); err == nil {
+		t.Fatal("expected mismatch error")
 	}
 }
