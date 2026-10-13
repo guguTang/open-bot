@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   chatEventsWebSocketUrl,
   listMessagesWithStatus,
@@ -30,39 +30,63 @@ export function useChatEventsSocket(deps: {
   lastRequestIdRef: React.RefObject<string>;
   setHostActivity: (label: string) => void;
 }) {
+  const depsRef = useRef(deps);
+  useLayoutEffect(() => {
+    depsRef.current = deps;
+  });
+
+  // WebSocket is created inside connect() for reconnect; cleanup always calls closeSocket().
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- reconnect allocates WS inside nested connect(); effect cleanup owns closeSocket()
   useEffect(() => {
-    if (!deps.token) return;
+    const d = depsRef.current;
+    if (!d.token) {
+      return undefined;
+    }
     let stopped = false;
     let socket: WebSocket | null = null;
     let retry: number | undefined;
     const pullOpen = () => {
-      const id = deps.conversationRef.current?.id;
+      const live = depsRef.current;
+      const id = live.conversationRef.current?.id;
       if (!id) return;
       void listMessagesWithStatus(id)
         .then((listed) => {
-          if (deps.conversationRef.current?.id !== id) return;
-          deps.patchConvMessages(id, (prev) => {
+          const cur = depsRef.current;
+          if (cur.conversationRef.current?.id !== id) return;
+          cur.patchConvMessages(id, (prev) => {
             let next = prev;
             for (const m of listed.messages) {
               if (m.role === "summary") continue;
-              deps.applyRemoteHostDecisionRef.current(m);
+              cur.applyRemoteHostDecisionRef.current(m);
               next = mergeIncomingMessage(next, m);
             }
             return next;
           });
-          deps.noteTask(id, Boolean(listed.task_active));
+          cur.noteTask(id, Boolean(listed.task_active));
         })
         .catch(() => {});
     };
+    const closeSocket = () => {
+      if (!socket) return;
+      const ws = socket;
+      socket = null;
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.close();
+    };
     const connect = () => {
       if (stopped) return;
-      const ws = new WebSocket(chatEventsWebSocketUrl(deps.token!));
+      closeSocket();
+      const ws = new WebSocket(chatEventsWebSocketUrl(d.token!));
       socket = ws;
       ws.onopen = () => {
-        void deps.refreshAgents().catch(() => {});
+        void depsRef.current.refreshAgents().catch(() => {});
         pullOpen();
       };
       ws.onmessage = (ev) => {
+        const live = depsRef.current;
         let data: {
           type?: string;
           message?: Message;
@@ -76,24 +100,24 @@ export function useChatEventsSocket(deps: {
           return;
         }
         if (data.type === "conversation_message" && data.message) {
-          deps.acceptServerMessage(data.message);
-          void deps.refreshAgents().catch(() => {});
+          live.acceptServerMessage(data.message);
+          void live.refreshAgents().catch(() => {});
           return;
         }
         if (data.type === "task_status" && data.conversation_id) {
           const active = data.status === "running" || data.status === "queued";
-          deps.noteTask(data.conversation_id, active, data.label);
-          void deps.refreshAgents().catch(() => {});
+          live.noteTask(data.conversation_id, active, data.label);
+          void live.refreshAgents().catch(() => {});
           return;
         }
         if (data.type === "host_activity") {
           const row = data as { active?: boolean; label?: string };
-          deps.setHostActivity(row.active && row.label ? row.label : "");
+          live.setHostActivity(row.active && row.label ? row.label : "");
         }
         if (data.type === "bot_online") {
           const evt = data as unknown as BotOnlineEvent;
           if (evt.agent_id) {
-            deps.applyBotOnline(evt.agent_id, evt.online === true);
+            live.applyBotOnline(evt.agent_id, evt.online === true);
           }
           return;
         }
@@ -104,14 +128,14 @@ export function useChatEventsSocket(deps: {
             const st: BotPresenceStatus = normalizePresenceStatus(evt.status);
             usePresenceStore.getState().setPresence(evt.agent_id, st);
             if (st === "awaiting_approval") {
-              const rid = deps.lastRequestIdRef.current;
-              const cid = deps.conversationRef.current?.id;
+              const rid = live.lastRequestIdRef.current;
+              const cid = live.conversationRef.current?.id;
               if (rid && cid) {
                 setApprovalGate({ conversationId: cid, requestId: rid });
               }
             } else if (st === "idle" || st === "thinking" || st === "working") {
               setApprovalGate((prev) =>
-                prev && deps.conversationRef.current?.id === prev.conversationId ? null : prev,
+                prev && live.conversationRef.current?.id === prev.conversationId ? null : prev,
               );
             }
           }
@@ -120,7 +144,7 @@ export function useChatEventsSocket(deps: {
         if (data.type === "reaction_updated") {
           const evt = data as ReactionUpdatedEvent;
           if (evt.message_id && evt.emoji) {
-            deps.applyReactionEvent(evt);
+            live.applyReactionEvent(evt);
           }
         }
       };
@@ -129,21 +153,22 @@ export function useChatEventsSocket(deps: {
         retry = window.setTimeout(connect, 2000);
       };
     };
+    // react-doctor-disable-next-line react-doctor/no-pass-live-state-to-parent -- WebSocket pushes server-driven chat/presence updates
     connect();
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void deps.refreshAgents().catch(() => {});
+        void depsRef.current.refreshAgents().catch(() => {});
         pullOpen();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
-      if (retry) window.clearTimeout(retry);
+      if (retry !== undefined) window.clearTimeout(retry);
       document.removeEventListener("visibilitychange", onVisible);
-      socket?.close();
+      closeSocket();
     };
-  }, [deps.token, deps.refreshAgents]);
+  }, [deps.token]);
 
   useEffect(() => {
     const id = deps.conversationId;
@@ -151,17 +176,18 @@ export function useChatEventsSocket(deps: {
     const timer = window.setInterval(() => {
       void listMessagesWithStatus(id)
         .then((listed) => {
-          if (deps.conversationRef.current?.id !== id) return;
-          deps.patchConvMessages(id, (prev) => {
+          const live = depsRef.current;
+          if (live.conversationRef.current?.id !== id) return;
+          live.patchConvMessages(id, (prev) => {
             let next = prev;
             for (const m of listed.messages) {
               if (m.role === "summary") continue;
-              deps.applyRemoteHostDecisionRef.current(m);
+              live.applyRemoteHostDecisionRef.current(m);
               next = mergeIncomingMessage(next, m);
             }
             return next;
           });
-          deps.noteTask(id, Boolean(listed.task_active));
+          live.noteTask(id, Boolean(listed.task_active));
         })
         .catch(() => {});
     }, 4000);

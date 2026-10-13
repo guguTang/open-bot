@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { REACTION_EMOJIS } from "../api";
 import { OPENBOT_SYSTEM_BACK_EVENT } from "../lib/mobileSystemBack";
 import { IconCopy, IconFlag, IconReply, IconSmile } from "./MsgActionIcons";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -29,29 +30,33 @@ export function MessageActionSheet({
   const [emojiPage, setEmojiPage] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!open) setEmojiPage(false);
-  }, [open]);
+  const close = useCallback(() => {
+    setEmojiPage(false);
+    onClose();
+  }, [onClose]);
+  const dialogRef = useDialogOpen(open, close, {
+    onDismiss: () => {
+      if (emojiPage) {
+        setEmojiPage(false);
+        return false;
+      }
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const onSystemBack = (e: Event) => {
       e.preventDefault();
-      onClose();
+      close();
     };
-    document.addEventListener("keydown", onKey);
     document.addEventListener(OPENBOT_SYSTEM_BACK_EVENT, onSystemBack);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.removeEventListener(OPENBOT_SYSTEM_BACK_EVENT, onSystemBack);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open, close]);
 
   if (!open) return null;
 
@@ -61,7 +66,7 @@ export function MessageActionSheet({
     } catch {
       /* ignore */
     }
-    onClose();
+    close();
   };
 
   const copyId = async () => {
@@ -71,7 +76,7 @@ export function MessageActionSheet({
     } catch {
       /* ignore */
     }
-    onClose();
+    close();
   };
 
   const pick = async (emoji: string) => {
@@ -79,16 +84,16 @@ export function MessageActionSheet({
     setBusy(true);
     try {
       await onToggleReaction(emoji);
-      onClose();
+      close();
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="action-sheet-root" role="presentation">
-      <button type="button" className="action-sheet-mask" aria-label="关闭" onClick={onClose} />
-      <div className="action-sheet" role="dialog" aria-modal="true" aria-label="消息操作">
+    <dialog ref={dialogRef} className="action-sheet-root" aria-label="消息操作">
+      <button type="button" className="action-sheet-mask" aria-label="关闭" onClick={close} />
+      <div className="action-sheet">
         <div className="action-sheet-handle" aria-hidden />
         {emojiPage ? (
           <>
@@ -149,18 +154,18 @@ export function MessageActionSheet({
                 className="action-sheet-row action-sheet-row-icon"
                 onClick={() => {
                   onFeedback();
-                  onClose();
+                  close();
                 }}
               >
                 <IconFlag size={18} /> 反馈
               </button>
             ) : null}
-            <button type="button" className="action-sheet-row action-sheet-cancel" onClick={onClose}>
+            <button type="button" className="action-sheet-row action-sheet-cancel" onClick={close}>
               取消
             </button>
           </>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

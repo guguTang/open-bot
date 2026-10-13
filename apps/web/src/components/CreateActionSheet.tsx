@@ -1,5 +1,6 @@
 import { Plus, Users } from "lucide-react";
 import { useEffect } from "react";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -13,26 +14,23 @@ type Props = {
  * Only 新建 Bot / 新建群聊 — machine picker stays in create flow, not here.
  */
 export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }: Props) {
+  const dialogRef = useDialogOpen(open, onClose);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="action-sheet-root" role="presentation">
+    <dialog ref={dialogRef} className="action-sheet-root" aria-label="新建">
       <button type="button" className="action-sheet-mask" aria-label="关闭" onClick={onClose} />
-      <div className="action-sheet create-action-sheet" role="dialog" aria-modal="true" aria-label="新建">
+      <div className="action-sheet create-action-sheet">
         <div className="action-sheet-handle" aria-hidden />
         <button
           type="button"
@@ -65,6 +63,6 @@ export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }:
           取消
         </button>
       </div>
-    </div>
+    </dialog>
   );
 }

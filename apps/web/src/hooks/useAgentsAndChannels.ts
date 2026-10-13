@@ -1,7 +1,7 @@
 import {
   MouseEvent,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
@@ -30,7 +30,7 @@ import {
   writeLastActiveSelection,
   writeListFoldState,
 } from "../lib/app/storage";
-import type { LastActiveSelection } from "../types/app-ui";
+import type { LastActiveSelection, ListFoldState } from "../types/app-ui";
 import { usePresenceStore } from "../stores/presence";
 import { patchShell, setShell } from "../stores/shell";
 import {
@@ -100,8 +100,18 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
     [],
   );
   const setAvatarSettingsAgent = useCallback((agent: Agent | null) => patchShell({ avatarSettingsAgent: agent }), []);
-  const [assistantsCollapsed, setAssistantsCollapsed] = useState(false);
-  const [groupsCollapsed, setGroupsCollapsed] = useState(false);
+  const [foldOverrides, setFoldOverrides] = useState<Record<string, ListFoldState>>({});
+
+  const foldForUser = useCallback(
+    (uid: string | undefined): ListFoldState => {
+      if (!uid) return { assistantsCollapsed: false, groupsCollapsed: false };
+      return foldOverrides[uid] ?? readListFoldState(uid);
+    },
+    [foldOverrides],
+  );
+
+  const assistantsCollapsed = foldForUser(userId).assistantsCollapsed;
+  const groupsCollapsed = foldForUser(userId).groupsCollapsed;
 
   const didRestoreLastActive = useRef<string | null>(null);
   const onSelectAgentRef = useRef<(id: string) => void>(() => {});
@@ -119,36 +129,25 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
     usePresenceStore.getState().seedOnline(list);
   }, []);
 
-  useEffect(() => {
-    if (!userId) {
-      setAssistantsCollapsed(false);
-      setGroupsCollapsed(false);
-      return;
-    }
-    const saved = readListFoldState(userId);
-    setAssistantsCollapsed(saved.assistantsCollapsed);
-    setGroupsCollapsed(saved.groupsCollapsed);
+  const toggleAssistantsCollapsed = useCallback(() => {
+    if (!userId) return;
+    setFoldOverrides((prev) => {
+      const current = prev[userId] ?? readListFoldState(userId);
+      const next = { ...current, assistantsCollapsed: !current.assistantsCollapsed };
+      writeListFoldState(userId, next);
+      return { ...prev, [userId]: next };
+    });
   }, [userId]);
 
-  const toggleAssistantsCollapsed = useCallback(() => {
-    setAssistantsCollapsed((prev) => {
-      const next = !prev;
-      if (userId) {
-        writeListFoldState(userId, { assistantsCollapsed: next, groupsCollapsed });
-      }
-      return next;
-    });
-  }, [userId, groupsCollapsed]);
-
   const toggleGroupsCollapsed = useCallback(() => {
-    setGroupsCollapsed((prev) => {
-      const next = !prev;
-      if (userId) {
-        writeListFoldState(userId, { assistantsCollapsed, groupsCollapsed: next });
-      }
-      return next;
+    if (!userId) return;
+    setFoldOverrides((prev) => {
+      const current = prev[userId] ?? readListFoldState(userId);
+      const next = { ...current, groupsCollapsed: !current.groupsCollapsed };
+      writeListFoldState(userId, next);
+      return { ...prev, [userId]: next };
     });
-  }, [userId, assistantsCollapsed]);
+  }, [userId]);
 
   const refreshAgents = useCallback(async (): Promise<Agent[]> => {
     const list = await listAgents();
@@ -316,11 +315,11 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
         await refreshConversations().catch(() => {});
         if (bridge) {
           const agentKey = `agent:${a.id}`;
-          for (const [convId, run] of [...bridge.runsRef.current.entries()]) {
-            if (run.selectionKey === agentKey) {
-              await bridge.stopCurrentRun({ markStopped: true, conversationId: convId });
-            }
-          }
+          await Promise.all(
+            [...bridge.runsRef.current.entries()]
+              .filter(([, run]) => run.selectionKey === agentKey)
+              .map(([convId]) => bridge.stopCurrentRun({ markStopped: true, conversationId: convId })),
+          );
         }
         if (agentId === a.id) {
           setAgentId(list[0]?.id ?? "");
@@ -378,11 +377,15 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
         await refreshChannels();
         const channelKey = `channel:${ch.id}`;
         if (bridge) {
-          for (const [convId, run] of [...bridge.runsRef.current.entries()]) {
-            if (run.selectionKey === channelKey || (ch.conversation_id && convId === ch.conversation_id)) {
-              await bridge.stopCurrentRun({ markStopped: true, conversationId: convId });
-            }
-          }
+          await Promise.all(
+            [...bridge.runsRef.current.entries()]
+              .filter(
+                ([convId, run]) =>
+                  run.selectionKey === channelKey ||
+                  (ch.conversation_id != null && convId === ch.conversation_id),
+              )
+              .map(([convId]) => bridge.stopCurrentRun({ markStopped: true, conversationId: convId })),
+          );
         }
         if (conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id) {
           if (bridge) {
@@ -403,9 +406,11 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
     [chatBridgeRef, confirm, conversation?.channel_id, conversation?.id, refreshChannels, setStatus],
   );
 
-  onSelectAgentRef.current = (id: string) => {
-    chatBridgeRef.current?.onSelectAgent(id);
-  };
+  useLayoutEffect(() => {
+    onSelectAgentRef.current = (id: string) => {
+      chatBridgeRef.current?.onSelectAgent(id);
+    };
+  });
 
   return {
     agents,

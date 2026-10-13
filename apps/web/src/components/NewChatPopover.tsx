@@ -13,6 +13,7 @@ import {
   type AvatarShape,
 } from "./avatarColor";
 import { useSheetFormUi } from "./useIsTouchUi";
+import { useDialogOpen } from "./useDialogOpen";
 
 export type CreateBotInput = {
   name: string;
@@ -38,19 +39,19 @@ export type NewChatPopoverProps = {
 };
 
 const fieldClass =
-  "flex flex-col gap-1.5 text-[13px] text-[var(--muted)] [&_input]:rounded-[var(--radius-md)] [&_input]:border [&_input]:border-[var(--border)] [&_input]:bg-[var(--bg-soft)] [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-[var(--text)] [&_input]:outline-none focus-within:[&_input]:border-[var(--border-strong)] focus-within:[&_input]:bg-white";
+  "flex flex-col gap-1.5 text-[13px] text-(--muted) [&_input]:rounded-md [&_input]:border [&_input]:border-(--border) [&_input]:bg-(--bg-soft) [&_input]:px-3 [&_input]:py-2.5 [&_input]:text-(--text) [&_input]:outline-none focus-within:[&_input]:border-(--border-strong) focus-within:[&_input]:bg-white";
 
 const textareaClass =
-  "mt-1.5 w-full min-h-[72px] resize-y rounded-[10px] border border-[var(--border)] bg-[var(--bg-elevated,#f7f8fa)] px-2.5 py-2 font-inherit outline-none focus:border-[var(--border-strong)] focus:bg-white";
+  "mt-1.5 w-full min-h-[72px] resize-y rounded-[10px] border border-(--border) bg-(--bg-elevated,#f7f8fa) px-2.5 py-2 font-inherit outline-none focus:border-(--border-strong) focus:bg-white";
 
 const rowBtnClass =
-  "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-md)] border-none bg-transparent px-3 py-2.5 text-left text-[var(--text)] hover:bg-[var(--bg-hover)]";
+  "flex w-full cursor-pointer items-center gap-3 rounded-md border-none bg-transparent px-3 py-2.5 text-left text-(--text) hover:bg-(--bg-hover)";
 
 const submitClass =
-  "w-full cursor-pointer rounded-[var(--radius-md)] border-none bg-[var(--accent)] px-3.5 py-2.5 font-[560] text-white disabled:cursor-not-allowed disabled:opacity-55";
+  "w-full cursor-pointer rounded-md border-none bg-(--accent) px-3.5 py-2.5 font-[560] text-white disabled:cursor-not-allowed disabled:opacity-55";
 
 const backClass =
-  "m-0 cursor-pointer rounded-lg border-none bg-transparent px-2 py-1 text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]";
+  "m-0 cursor-pointer rounded-lg border-none bg-transparent px-2 py-1 text-(--muted) hover:bg-(--bg-hover) hover:text-(--text)";
 
 export function NewChatPopover({
   open,
@@ -62,13 +63,13 @@ export function NewChatPopover({
   onCreateGroup,
   initialMode = "list",
 }: NewChatPopoverProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const sheetForm = useSheetFormUi();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<NewChatMode>(initialMode);
   const [groupName, setGroupName] = useState("");
   const [memberIds, setMemberIds] = useState<string[]>([]);
+  const memberIdSet = useMemo(() => new Set(memberIds), [memberIds]);
   const [botName, setBotName] = useState("");
   const [botDesc, setBotDesc] = useState("");
   const [botPrompt, setBotPrompt] = useState("");
@@ -136,32 +137,28 @@ export function NewChatPopover({
     };
   }, [open, anchorRef, agents, sheetForm, initialMode]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (mode === "group" || mode === "bot") {
-          setMode("list");
-          setError("");
-        } else {
-          onClose();
-        }
+  const panelRef = useDialogOpen(open, onClose, {
+    modal: sheetForm,
+    onDismiss: () => {
+      if (mode === "group" || mode === "bot") {
+        setMode("list");
+        setError("");
+        return false;
       }
-    };
+    },
+  });
+
+  useEffect(() => {
+    if (!open || sheetForm) return;
     const onPointer = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panelRef.current?.contains(t)) return;
       if (anchorRef.current?.contains(t)) return;
       onClose();
     };
-    document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
-    };
-  }, [open, onClose, mode, anchorRef]);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [open, onClose, sheetForm, anchorRef, panelRef]);
 
   useEffect(() => {
     if (!open || !sheetForm) return;
@@ -230,12 +227,18 @@ export function NewChatPopover({
   const touchMin = sheetForm ? "min-h-11" : "";
 
   return (
-    <div
+    <dialog
+      ref={panelRef}
       className={cn(
-        "pointer-events-none fixed inset-0 z-40",
-        sheetForm && "pointer-events-auto z-[60] flex flex-col justify-end bg-transparent",
+        "border-none p-0 text-inherit",
+        sheetForm
+          ? "action-sheet-root pointer-events-auto z-60 flex max-h-none max-w-none flex-col justify-end bg-transparent"
+          : "pointer-events-auto fixed z-40 m-0 flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] max-w-none flex-col gap-2 overflow-hidden rounded-2xl border border-(--border) bg-(--bg-elevated) p-2.5 shadow-(--shadow-lg)",
+        sheetForm &&
+          "relative top-auto! right-auto! left-auto! m-0 max-h-[min(90dvh,90vh)] w-full! max-w-full! gap-0 rounded-t-2xl rounded-b-none px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
       )}
-      role="presentation"
+      style={panelStyle}
+      aria-label="选择助手"
     >
       {sheetForm ? (
         <button
@@ -246,16 +249,10 @@ export function NewChatPopover({
         />
       ) : null}
       <div
-        ref={panelRef}
         className={cn(
-          "pointer-events-auto fixed flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] flex-col gap-2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 shadow-[var(--shadow-lg)]",
           sheetForm &&
-            "relative !top-auto !right-auto !left-auto z-[1] m-0 max-h-[min(90dvh,90vh)] !w-full !max-w-full gap-0 rounded-t-2xl rounded-b-none px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
+            "relative z-1 flex max-h-[min(90dvh,90vh)] w-full flex-col gap-0 overflow-hidden",
         )}
-        style={panelStyle}
-        role="dialog"
-        aria-label="选择助手"
-        aria-modal={sheetForm ? true : undefined}
       >
         {sheetForm ? (
           <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 px-1 pt-3 pb-2">
@@ -264,7 +261,8 @@ export function NewChatPopover({
             </span>
             <button
               type="button"
-              className="grid size-11 place-items-center rounded-[10px] border-none bg-transparent text-2xl leading-none text-[var(--muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)] active:bg-[var(--bg-hover)]"
+              className="grid size-11 place-items-center rounded-[10px] border-none bg-transparent text-2xl leading-none text-(--muted) hover:bg-(--bg-hover) hover:text-(--text) active:bg-(--bg-hover)"
+
               aria-label="关闭"
               onClick={onClose}
             >
@@ -277,14 +275,16 @@ export function NewChatPopover({
           <>
             <label
               className={cn(
-                "flex items-center gap-0.5 rounded-[var(--radius-md)] border border-transparent bg-[var(--bg-soft)] px-3 py-2.5 focus-within:border-[var(--border-strong)] focus-within:bg-white",
+                "flex items-center gap-0.5 rounded-md border border-transparent bg-(--bg-soft) px-3 py-2.5 focus-within:border-(--border-strong) focus-within:bg-white",
+
                 sheetForm && "shrink-0",
               )}
             >
-              <span className="shrink-0 whitespace-nowrap text-[13px] text-[var(--muted)]">收件人：</span>
+              <span className="shrink-0 whitespace-nowrap text-[13px] text-(--muted)">收件人：</span>
               <input
                 ref={searchRef}
-                className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-[var(--text)] outline-none placeholder:text-[var(--muted)]"
+                className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-(--text) outline-none placeholder:text-(--muted)"
+
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索或创建 Bot"
@@ -310,7 +310,7 @@ export function NewChatPopover({
                 }}
               >
                 <span
-                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bg-soft)] text-[var(--muted)]"
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-(--bg-soft) text-(--muted)"
                   aria-hidden
                 >
                   <Plus size={18} strokeWidth={2} aria-hidden />
@@ -327,7 +327,8 @@ export function NewChatPopover({
                 }}
               >
                 <span
-                  className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--bg-soft)] text-[var(--muted)]"
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-(--bg-soft) text-(--muted)"
+
                   aria-hidden
                 >
                   <Users size={18} strokeWidth={2} aria-hidden />
@@ -345,7 +346,8 @@ export function NewChatPopover({
               aria-label="助手列表"
             >
               {filtered.length === 0 ? (
-                <div className="px-3 py-4 text-[13px] text-[var(--muted)]">无匹配助手</div>
+                <div className="px-3 py-4 text-[13px] text-(--muted)">无匹配助手</div>
+
               ) : (
                 filtered.map((a) => (
                   <button
@@ -353,6 +355,7 @@ export function NewChatPopover({
                     type="button"
                     className={cn(rowBtnClass, "group", touchMin)}
                     role="option"
+                    aria-selected={false}
                     onClick={() => void onSelectAgent(a)}
                   >
                     <AgentAvatar
@@ -366,10 +369,11 @@ export function NewChatPopover({
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-[560]">{a.name}</div>
                       {a.description ? (
-                        <div className="truncate text-xs text-[var(--muted)]">{a.description}</div>
+                        <div className="truncate text-xs text-(--muted)">{a.description}</div>
                       ) : null}
                     </div>
-                    <span className="shrink-0 text-xs font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100">
+                    <span className="shrink-0 text-xs font-medium text-(--accent) opacity-0 group-hover:opacity-100">
+
                       打开对话
                     </span>
                   </button>
@@ -418,7 +422,7 @@ export function NewChatPopover({
                   placeholder="你是……"
                 />
               </label>
-              <div className="my-1 mb-2 flex flex-col gap-2 rounded-[10px] bg-black/[0.04] px-3 py-2.5">
+              <div className="my-1 mb-2 flex flex-col gap-2 rounded-[10px] bg-black/4 px-3 py-2.5">
                 <div className="flex flex-col items-center gap-2 px-0 pt-3 pb-1">
                   <AgentAvatar
                     id={botName || "new-bot"}
@@ -427,17 +431,17 @@ export function NewChatPopover({
                     shape={botShape}
                     color={botColor}
                   />
-                  <div className="text-xs text-[var(--muted)]">形象预览（可改；不改则用自动分配）</div>
+                  <div className="text-xs text-(--muted)">形象预览（可改；不改则用自动分配）</div>
                 </div>
-                <div className="mt-1 text-xs text-[var(--muted)]">形状</div>
+                <div className="mt-1 text-xs text-(--muted)">形状</div>
                 <div className="grid grid-cols-4 gap-2">
                   {AVATAR_SHAPES.map((s) => (
                     <button
                       key={s}
                       type="button"
                       className={cn(
-                        "flex cursor-pointer flex-col items-center justify-center overflow-visible rounded-[10px] border border-[var(--border)] bg-[var(--bg-soft)] px-1 py-2",
-                        botShape === s && "border-[var(--accent,#6ea8fe)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent,#6ea8fe)_40%,transparent)]",
+                        "flex cursor-pointer flex-col items-center justify-center overflow-visible rounded-[10px] border border-(--border) bg-(--bg-soft) px-1 py-2",
+                        botShape === s && "border-(--accent,#6ea8fe) shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent,#6ea8fe)_40%,transparent)]",
                         sheetForm && "min-h-11 min-w-11",
                       )}
                       onClick={() => setBotShape(s)}
@@ -453,8 +457,8 @@ export function NewChatPopover({
                       />
                       <span
                         className={cn(
-                          "mt-1 block text-center text-[10px] leading-tight text-[var(--muted)]",
-                          botShape === s && "text-[var(--text)]",
+                          "mt-1 block text-center text-[10px] leading-tight text-(--muted)",
+                          botShape === s && "text-(--text)",
                         )}
                       >
                         {AVATAR_SHAPE_LABELS[s]}
@@ -462,7 +466,8 @@ export function NewChatPopover({
                     </button>
                   ))}
                 </div>
-                <div className="mt-1 text-xs text-[var(--muted)]">主色</div>
+                <div className="mt-1 text-xs text-(--muted)">主色</div>
+
                 <div className={cn("grid gap-2", sheetForm ? "grid-cols-4" : "grid-cols-6")}>
                   {AVATAR_COLOR_PALETTE.map((c) => (
                     <button
@@ -483,7 +488,8 @@ export function NewChatPopover({
                 <label className={cn(fieldClass, sheetForm && "[&_select]:min-h-11 [&_select]:text-base")}>
                   优先电脑
                   <select
-                    className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated,#fff)] px-2.5 py-2 font-inherit text-inherit outline-none focus:border-[var(--accent,#457b9d)]"
+                    className="mt-1 w-full rounded-lg border border-(--border) bg-(--bg-elevated,#fff) px-2.5 py-2 font-inherit text-inherit outline-none focus:border-(--accent,#457b9d)"
+
                     value={botMachineId}
                     onChange={(e) => setBotMachineId(e.target.value)}
                     disabled={busy}
@@ -497,22 +503,23 @@ export function NewChatPopover({
                   </select>
                 </label>
                 {machines.length === 0 ? (
-                  <div className="text-xs text-[var(--muted)]">还没有已连接的电脑。手机不能当作优先电脑。</div>
+                  <div className="text-xs text-(--muted)">还没有已连接的电脑。手机不能当作优先电脑。</div>
                 ) : (
-                  <div className="text-xs leading-[1.45] whitespace-normal text-[var(--muted)] [overflow-wrap:anywhere]">
+                  <div className="text-xs leading-[1.45] whitespace-normal text-(--muted) wrap-anywhere">
                     读文件、跑命令会在你当前发消息的电脑上执行。这里只是可选的默认优先机。
                   </div>
                 )}
               </div>
-              {error ? <div className="text-[13px] text-[var(--danger)]">{error}</div> : null}
+              {error ? <div className="text-[13px] text-(--danger)">{error}</div> : null}
             </div>
-            <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <div className="shrink-0 border-t border-(--border) bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
                 className={cn(submitClass, touchMin)}
                 disabled={busy}
                 onClick={() => void submitBot()}
               >
+
                 {busy ? "创建中…" : "创建并开始聊天"}
               </button>
             </div>
@@ -540,22 +547,22 @@ export function NewChatPopover({
                   placeholder="群聊名称"
                 />
               </label>
-              <div className="text-xs text-[var(--muted)]">选择成员（助手）</div>
-              <div className="flex max-h-[280px] min-h-[120px] flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
+              <div className="text-xs text-(--muted)">选择成员（助手）</div>
+              <div className="flex max-h-70 min-h-30 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
                 {agents.map((a) => {
-                  const checked = memberIds.includes(a.id);
+                  const checked = memberIdSet.has(a.id);
                   return (
                     <label
                       key={a.id}
                       className={cn(
-                        "flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm hover:bg-[var(--bg-hover)]",
-                        checked && "bg-[var(--bg-hover)]",
+                        "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm hover:bg-(--bg-hover)",
+                        checked && "bg-(--bg-hover)",
                         touchMin,
                       )}
                     >
                       <input
                         type="checkbox"
-                        className="accent-[var(--accent)]"
+                        className="accent-(--accent)"
                         checked={checked}
                         onChange={() => toggleMember(a.id)}
                       />
@@ -572,21 +579,22 @@ export function NewChatPopover({
                   );
                 })}
               </div>
-              {error ? <div className="text-[13px] text-[var(--danger)]">{error}</div> : null}
+              {error ? <div className="text-[13px] text-(--danger)">{error}</div> : null}
             </div>
-            <div className="shrink-0 border-t border-[var(--border)] bg-[var(--bg-elevated)] py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <div className="shrink-0 border-t border-(--border) bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
               <button
                 type="button"
                 className={cn(submitClass, touchMin)}
                 disabled={busy}
                 onClick={() => void submitGroup()}
               >
+
                 {busy ? "创建中…" : "创建群聊"}
               </button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

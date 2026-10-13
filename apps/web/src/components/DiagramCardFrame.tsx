@@ -1,6 +1,6 @@
 /**
- * Shared diagram-card shell (pill + toolbar + body). Used by Mermaid / HTML / 图片 cards.
- * P1-A: when the card is too narrow for pill + action buttons, collapse actions into a ⋯ menu.
+ * Shared diagram-card shell (pill + toolbar + body + overflow collapse).
+ * Used by Mermaid / HTML / 图片 adapters; interaction chrome lives under `./diagram`.
  */
 import { cn } from "@/lib/utils";
 import { Ellipsis } from "lucide-react";
@@ -24,22 +24,11 @@ import {
   diagramToolbarClass,
   diagramToolbarExtraClass,
 } from "./diagram/diagramUi";
-
-export type DiagramKind = "mermaid" | "html" | "image";
-
-export const KIND_LABEL: Record<DiagramKind, string> = {
-  mermaid: "Mermaid",
-  html: "HTML",
-  image: "图片",
-};
-
-/** Flat items shown in the toolbar ⋯ menu when inline actions do not fit. */
-export type DiagramOverflowItem = {
-  key: string;
-  label: string;
-  disabled?: boolean;
-  onClick: () => void;
-};
+import {
+  KIND_LABEL,
+  type DiagramKind,
+  type DiagramOverflowItem,
+} from "./diagramCardFrameModel";
 
 function IconMore() {
   return <Ellipsis size={16} aria-hidden focusable={false} />;

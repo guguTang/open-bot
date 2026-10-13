@@ -1,3 +1,7 @@
+/**
+ * Internal Tailwind class tokens for diagram cards.
+ * Prefer the diagram/ public helpers (chrome, toolbar, body) over importing these directly.
+ */
 import { cn } from "@/lib/utils";
 
 /** ≥44px controls on touch-ui / panel-compact (was --diagram-hit in styles.css). */

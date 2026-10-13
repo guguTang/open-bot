@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   open: boolean;
@@ -27,26 +28,23 @@ export function ConvActionSheet({
   onSettings,
   onGroupSettings,
 }: Props) {
+  const dialogRef = useDialogOpen(open, onClose);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="action-sheet-root" role="presentation">
+    <dialog ref={dialogRef} className="action-sheet-root" aria-label={title || "会话操作"}>
       <button type="button" className="action-sheet-mask" aria-label="关闭" onClick={onClose} />
-      <div className="action-sheet" role="dialog" aria-modal="true" aria-label={title || "会话操作"}>
+      <div className="action-sheet">
         <div className="action-sheet-handle" aria-hidden />
         {title ? <div className="action-sheet-title">{title}</div> : null}
         {onSettings ? (
@@ -99,6 +97,6 @@ export function ConvActionSheet({
           取消
         </button>
       </div>
-    </div>
+    </dialog>
   );
 }

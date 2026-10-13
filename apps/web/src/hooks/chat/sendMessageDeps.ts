@@ -1,3 +1,7 @@
+/**
+ * @internal Wiring bag for sendUserTextImpl — not a public seam.
+ * Built only inside useChatTurnSend; do not construct from App / controller.
+ */
 import type { MutableRefObject } from "react";
 import type { Agent, Conversation, Machine } from "../../api";
 import type { ClientContext } from "../../lib/clientEnv";

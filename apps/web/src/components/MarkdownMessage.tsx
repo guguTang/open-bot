@@ -23,15 +23,15 @@ import {
 } from "../lib/mermaidFence";
 import { DiagramCard } from "./DiagramCard";
 import { ImageDiagramCard } from "./ImageDiagramCard";
+import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import {
-  HtmlPreviewModal,
   friendlyFileError,
   friendlyOpenError,
   looksLikeHtml,
   normalizeWorkspacePath,
   parseSandboxHref,
   previewTitleFromPath,
-} from "./HtmlPreviewModal";
+} from "./htmlPreviewModel";
 
 type Props = {
   content: string;
@@ -282,12 +282,11 @@ export function MarkdownMessage({ content, streaming, agentId }: Props) {
         // Legacy in-message jump to footer anchor (#cite-{msg}-{n}).
         if (citeHref.startsWith("#cite-")) {
           return (
-            <a
-              href={citeHref}
+            <button
+              type="button"
               className="md-cite"
               title="查看来源"
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={() => {
                 const id = citeHref.slice(1);
                 const el = document.getElementById(id);
                 if (el) {
@@ -298,7 +297,7 @@ export function MarkdownMessage({ content, streaming, agentId }: Props) {
               }}
             >
               {children}
-            </a>
+            </button>
           );
         }
         // Numbered citation → open the source URL in a new tab (and flash footer if present).

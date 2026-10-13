@@ -14,6 +14,7 @@ import {
 } from "./avatarColor";
 import { AgentAvatar } from "./AgentAvatar";
 import { useSheetFormUi } from "./useIsTouchUi";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   agent: Agent | null;
@@ -124,20 +125,20 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
   };
 
   const closeIcon = <X size={16} strokeWidth={2} aria-hidden />;
+  const dialogRef = useDialogOpen(open, onClose, { blockDismiss: busy });
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       className={`modal-backdrop${sheetForm ? " bot-avatar-backdrop-sheet bot-avatar-backdrop-shell settings-backdrop-shell" : ""}`}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      aria-label={`Bot 形象 ${agent.name}`}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
       }}
     >
       <div
         className={`modal bot-avatar-modal${sheetForm ? " bot-avatar-modal-sheet bot-avatar-modal-shell" : ""}`}
-        onPointerDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Bot 形象 ${agent.name}`}
+        onClick={(e) => e.stopPropagation()}
       >
         {sheetForm ? (
           <div className="settings-shell-subhead">
@@ -199,7 +200,7 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
                 <div className="muted small">预览五态 + 检索动画变体（仅本地试看，不改真实 presence）</div>
               </div>
 
-              <label className="bot-avatar-label">形状</label>
+              <span className="bot-avatar-label">形状</span>
               <div className="bot-avatar-shape-grid">
                 {AVATAR_SHAPES.map((s) => (
                   <button
@@ -216,7 +217,7 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
                 ))}
               </div>
 
-              <label className="bot-avatar-label">主色</label>
+              <span className="bot-avatar-label">主色</span>
               <div className="bot-avatar-color-grid">
                 {AVATAR_COLOR_PALETTE.map((c) => (
                   <button
@@ -259,7 +260,7 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
                   本地能力跟「你在哪台电脑上发这条消息」走，不会锁死创建时选的那台。优先电脑仅在路由需要兜底时使用。
                 </div>
               )}
-              {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
+              {err ? <div className="text-[13px] text-(--danger)">{err}</div> : null}
             </div>
           </div>
 
@@ -273,6 +274,6 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 }

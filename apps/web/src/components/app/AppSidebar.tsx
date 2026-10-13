@@ -123,12 +123,13 @@ function AppSidebarInner() {
             <div className="flex items-center gap-1.5">
               <label
                 className={cn(
-                  "relative grid size-11 min-h-11 min-w-11 cursor-pointer place-items-center overflow-hidden rounded-full bg-[var(--bg-soft)] text-[var(--muted)]",
+                  "relative grid size-11 min-h-11 min-w-11 cursor-pointer place-items-center overflow-hidden rounded-full bg-(--bg-soft) text-(--muted)",
+
                   "box-border focus-within:flex focus-within:w-[min(180px,48vw)] focus-within:min-w-11 focus-within:items-center focus-within:justify-start focus-within:gap-1.5 focus-within:rounded-[22px] focus-within:px-3",
                   "[data-theme=dark]:bg-white/10 active:brightness-[0.96] [-webkit-tap-highlight-color:transparent]",
                   "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:opacity-70",
                   "[&_input]:absolute [&_input]:inset-0 [&_input]:size-full [&_input]:cursor-pointer [&_input]:border-0 [&_input]:bg-transparent [&_input]:opacity-0 [&_input]:text-base",
-                  "focus-within:[&_input]:static focus-within:[&_input]:min-w-0 focus-within:[&_input]:flex-1 focus-within:[&_input]:cursor-text focus-within:[&_input]:opacity-100 focus-within:[&_input]:text-[var(--text)] focus-within:[&_input]:outline-none",
+                  "focus-within:[&_input]:static focus-within:[&_input]:min-w-0 focus-within:[&_input]:flex-1 focus-within:[&_input]:cursor-text focus-within:[&_input]:opacity-100 focus-within:[&_input]:text-(--text) focus-within:[&_input]:outline-none",
                 )}
                 title="搜索"
               >
@@ -181,12 +182,14 @@ function AppSidebarInner() {
                 </span>
               )}
             </div>
-            <div className="max-w-full truncate text-xl font-bold tracking-tight text-[var(--text)]">
+            <div className="max-w-full truncate text-xl font-bold tracking-tight text-(--text)">
+
               {identityFocus?.name || user?.username || "open bot"}
             </div>
             <button
               type="button"
-              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-0 bg-transparent px-2 py-1 text-[13px] text-[var(--muted)] hover:bg-[var(--bg-soft)] active:bg-[var(--bg-soft)]"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-0 bg-transparent px-2 py-1 text-[13px] text-(--muted) hover:bg-(--bg-soft) active:bg-(--bg-soft)"
+
               aria-label="工作区"
             >
               open bot
@@ -227,11 +230,11 @@ function AppSidebarInner() {
           onClick={() => sessionActions().toggleAssistantsCollapsed()}
         >
           <span className="min-w-0 flex-1">助手</span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--muted)]">
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-(--muted)">
             {assistantsCollapsed ? (
               <span className="text-xs font-medium opacity-85">{filteredAgents.length}</span>
             ) : null}
-            <span className="inline-grid size-[18px] place-items-center opacity-70" aria-hidden>
+            <span className="inline-grid size-4.5 place-items-center opacity-70" aria-hidden>
               {assistantsCollapsed ? "▸" : "▾"}
             </span>
           </span>
@@ -353,11 +356,11 @@ function AppSidebarInner() {
               onClick={() => sessionActions().toggleGroupsCollapsed()}
             >
               <span className="min-w-0 flex-1">群聊</span>
-              <span className="inline-flex shrink-0 items-center gap-1.5 text-[var(--muted)]">
+              <span className="inline-flex shrink-0 items-center gap-1.5 text-(--muted)">
                 {groupsCollapsed ? (
                   <span className="text-xs font-medium opacity-85">{filteredChannels.length}</span>
                 ) : null}
-                <span className="inline-grid size-[18px] place-items-center opacity-70" aria-hidden>
+                <span className="inline-grid size-4.5 place-items-center opacity-70" aria-hidden>
                   {groupsCollapsed ? "▸" : "▾"}
                 </span>
               </span>
@@ -366,41 +369,35 @@ function AppSidebarInner() {
             <div className={sidebarSectionLabelClass(sheetForm)}>群聊</div>
           )}
           {!(sheetForm && groupsCollapsed) ? (
-            <div className={sidebarListClass(sheetForm)} role="list">
+            <ul className={cn(sidebarListClass(sheetForm), "m-0 list-none p-0")}>
               {filteredChannels.length === 0 ? (
-                <div className="muted small" style={{ padding: "4px 10px" }}>
+                <li className="muted small" style={{ padding: "4px 10px", listStyle: "none" }}>
                   {channels.length === 0 ? "暂无群聊，可从「+」创建" : "无匹配群聊"}
-                </div>
+                </li>
               ) : (
                 filteredChannels.map((ch) => {
                   const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join("、");
                   return (
-                    <div
-                      key={ch.id}
-                      className={sidebarConvRowClass({
-                        sheetForm,
-                        active:
-                          conversation?.channel_id === ch.id || conversation?.id === ch.conversation_id,
-                        channel: true,
-                      })}
-                      title={memberNames}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => void sessionActions().openChannelChat(ch.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          (e.currentTarget as HTMLElement).click();
-                        }
-                      }}
-                      onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
-                      onPointerMove={moveConvLongPress}
-                      onPointerUp={endConvLongPress}
-                      onPointerCancel={endConvLongPress}
-                      onContextMenu={(e) => {
-                        if (touchUi) e.preventDefault();
-                      }}
-                    >
+                    <li key={ch.id} className="list-none" title={memberNames}>
+                      <div className="group relative flex w-full items-center">
+                        <button
+                          type="button"
+                          className={sidebarConvRowClass({
+                            sheetForm,
+                            active:
+                              conversation?.channel_id === ch.id ||
+                              conversation?.id === ch.conversation_id,
+                            channel: true,
+                          })}
+                          onClick={() => void sessionActions().openChannelChat(ch.id)}
+                          onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
+                          onPointerMove={moveConvLongPress}
+                          onPointerUp={endConvLongPress}
+                          onPointerCancel={endConvLongPress}
+                          onContextMenu={(e) => {
+                            if (touchUi) e.preventDefault();
+                          }}
+                        >
                       <div className={channelMemberStackClass} aria-hidden>
                         {channelMemberProfiles(ch, agents, agentNameById)
                           .slice(0, 3)
@@ -427,6 +424,7 @@ function AppSidebarInner() {
                           {memberNames || "无成员"} · 点击打开群聊
                         </div>
                       </div>
+                        </button>
                       <button
                         type="button"
                         className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
@@ -436,11 +434,12 @@ function AppSidebarInner() {
                       >
                         ×
                       </button>
-                    </div>
+                      </div>
+                    </li>
                   );
                 })
               )}
-            </div>
+            </ul>
           ) : null}
         </>
       )}

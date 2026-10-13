@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
   approveConversation,
@@ -8,7 +8,7 @@ import {
   type ApprovalDecision,
   type Message,
 } from "../../api";
-import { parseHostConfirm } from "../../components/HostConfirmCard";
+import { parseHostConfirm } from "../../components/hostConfirmModel";
 import {
   ALWAYS_ALLOW_TOAST,
   grantToolFamilyAlwaysAllow,
@@ -62,60 +62,61 @@ export function useHostConfirmChat(deps: {
     [applyRemoteHostDecision, deps],
   );
 
-  applyRemoteHostDecisionRef.current = applyRemoteHostDecision;
-
-  askHostConfirmRef.current = (req) => {
-    const conversationId = req.conversation_id || deps.conversationRef.current?.id || "";
-    return new Promise<boolean>((resolve) => {
-      // Optimistic Always-allow skip (client cache / server list). exec_policy=ask forces a card.
-      const family = toolFamilyForHostOp(req.op, req.path || "");
-      const uid = deps.userId || "";
-      if (
-        deps.hostExecPolicy !== "ask" &&
-        (isToolFamilyAlwaysAllowed(uid, family) ||
-          deps.toolAllowEntries.some((e) => e.family === family))
-      ) {
-        resolve(true);
-        return;
-      }
-      hostConfirmResolvers.current.set(req.req_id, resolve);
-      if (!conversationId) return;
-      const raw = req.content || "";
-      let preview = raw.length > 180 ? `${raw.slice(0, 180)}…` : raw;
-      if (req.op === "shell" && req.dest === "terminal" && !preview) {
-        preview = "会打开终端窗口，你可以在里面输入密码或继续操作";
-      }
-      const review = classifyHostExecReview(req.op, req.path || "", req.dest || "");
-      void createHostConfirm(conversationId, {
-        req_id: req.req_id,
-        op: req.op,
-        path: req.path || "",
-        dest: req.dest || "",
-        preview,
-        reason: review.reason,
-        review_tier: review.tier,
-      })
-        .then((msg) => acceptServerMessage(msg))
-        .catch(() => {
-          acceptServerMessage({
-            id: `local-${req.req_id}`,
-            role: "host_confirm",
-            conversation_id: conversationId,
-            created_at: new Date().toISOString(),
-            content: JSON.stringify({
-              req_id: req.req_id,
-              op: req.op,
-              path: req.path || "",
-              dest: req.dest || "",
-              preview,
-              reason: review.reason,
-              review_tier: review.tier,
-              status: "pending",
-            }),
+  useLayoutEffect(() => {
+    applyRemoteHostDecisionRef.current = applyRemoteHostDecision;
+    askHostConfirmRef.current = (req) => {
+      const conversationId = req.conversation_id || deps.conversationRef.current?.id || "";
+      return new Promise<boolean>((resolve) => {
+        // Optimistic Always-allow skip (client cache / server list). exec_policy=ask forces a card.
+        const family = toolFamilyForHostOp(req.op, req.path || "");
+        const uid = deps.userId || "";
+        if (
+          deps.hostExecPolicy !== "ask" &&
+          (isToolFamilyAlwaysAllowed(uid, family) ||
+            deps.toolAllowEntries.some((e) => e.family === family))
+        ) {
+          resolve(true);
+          return;
+        }
+        hostConfirmResolvers.current.set(req.req_id, resolve);
+        if (!conversationId) return;
+        const raw = req.content || "";
+        let preview = raw.length > 180 ? `${raw.slice(0, 180)}…` : raw;
+        if (req.op === "shell" && req.dest === "terminal" && !preview) {
+          preview = "会打开终端窗口，你可以在里面输入密码或继续操作";
+        }
+        const review = classifyHostExecReview(req.op, req.path || "", req.dest || "");
+        void createHostConfirm(conversationId, {
+          req_id: req.req_id,
+          op: req.op,
+          path: req.path || "",
+          dest: req.dest || "",
+          preview,
+          reason: review.reason,
+          review_tier: review.tier,
+        })
+          .then((msg) => acceptServerMessage(msg))
+          .catch(() => {
+            acceptServerMessage({
+              id: `local-${req.req_id}`,
+              role: "host_confirm",
+              conversation_id: conversationId,
+              created_at: new Date().toISOString(),
+              content: JSON.stringify({
+                req_id: req.req_id,
+                op: req.op,
+                path: req.path || "",
+                dest: req.dest || "",
+                preview,
+                reason: review.reason,
+                review_tier: review.tier,
+                status: "pending",
+              }),
+            });
           });
-        });
-    });
-  };
+      });
+    };
+  });
 
   const settleHostConfirm = useCallback(
     (message: Message, decision: ApprovalDecision) => {

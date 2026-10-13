@@ -12,7 +12,7 @@ import {
 } from "../../api";
 import {
   setOnboardingDismissed,
-} from "../../components/BotOnboardingCard";
+} from "../../components/botOnboarding";
 import { buildHandoffContext } from "../../lib/app/handoff";
 import { isGroupPassContent } from "../../lib/app/groupPass";
 import { firstMentionedAgent, matchAgentByMentionToken, stripLeadingAtAgent } from "../../lib/app/mentions";
@@ -263,10 +263,9 @@ export async function sendUserTextImpl(
       void d.refreshAgents().catch(() => {});
       let uploaded: AttachmentMeta[] = [];
       if (filesToSend.length > 0) {
-        uploaded = [];
-        for (const pf of filesToSend) {
-          uploaded.push(await uploadConversationAttachment(conv.id, pf.file));
-        }
+        uploaded = await Promise.all(
+          filesToSend.map((pf) => uploadConversationAttachment(conv.id, pf.file)),
+        );
         d.patchConvMessages(streamConvId, (prev) =>
           prev.map((m) => {
             if (m.id !== userMsg.id) return m;

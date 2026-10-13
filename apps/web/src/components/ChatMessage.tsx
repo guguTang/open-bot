@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { AttachmentMeta, HandoffPayload, MessageSource, ReactionSummary } from "../api";
+import type { AttachmentMeta, HandoffPayload } from "../api";
 import {
   NEGATIVE_REACTION_EMOJIS,
   attachmentDisplayUrl,
@@ -16,32 +16,15 @@ import { ImageDiagramCard } from "./ImageDiagramCard";
 import { MessageReactions } from "./MessageReactions";
 import { stripThinkTags } from "../lib/stripThink";
 import { ResultOrientedMessage } from "./ArtifactCards";
-import { HostConfirmCard, parseHostConfirm, type ApprovalDecision } from "./HostConfirmCard";
+import { HostConfirmCard } from "./HostConfirmCard";
+import { parseHostConfirm } from "./hostConfirmModel";
+import type { ApprovalDecision } from "../lib/toolAllowlist";
+import { type ChatMessageData, formatMessageTime } from "./chatMessageModel";
 import { HandoffCard } from "./HandoffCard";
 import { MessageActionSheet } from "./MessageActionSheet";
 import { MessageHoverBar } from "./MessageHoverBar";
 import { useIsTouchUi } from "./useIsTouchUi";
 import { MessageSourcesFooter } from "./MessageSourcesFooter";
-
-export type ChatMessageData = {
-  id: string;
-  role: string;
-  content: string;
-  streaming?: boolean;
-  attachments?: AttachmentMeta[];
-  agent_id?: string;
-  agent_name?: string;
-  created_at?: string;
-  reply_to_id?: string;
-  thread_root_id?: string;
-  agent_message_id?: string;
-  /** Runtime run id on Bot replies (More → 复制请求 ID); absent on historical messages. */
-  request_id?: string;
-  /** Citation links when retrieval was used; omitted otherwise. */
-  sources?: MessageSource[];
-  reactions?: ReactionSummary[];
-  handoff?: HandoffPayload;
-};
 
 type Props = {
   message: ChatMessageData;
@@ -74,16 +57,6 @@ type Props = {
 const NEGATIVE_REACTION_SET = new Set<string>(NEGATIVE_REACTION_EMOJIS as readonly string[]);
 const LONG_PRESS_MS = 400;
 const MOVE_CANCEL_PX = 10;
-
-export function formatMessageTime(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const hm = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) return hm;
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
-}
 
 function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -340,6 +313,7 @@ function ChatMessageInner({
   const sheet =
     hasActions && touchUi ? (
       <MessageActionSheet
+        key={`${message.id}-${sheetOpen}`}
         open={sheetOpen}
         isBot={isBot}
         messageId={message.id}
@@ -355,8 +329,8 @@ function ChatMessageInner({
   if (isUser) {
     return (
       <div className={`chat-row chat-row-user${dense ? " chat-row-dense" : ""}`} data-msg-id={message.id} {...touchHandlers}>
-        <div className="bubble-stack bubble-stack-user has-[[data-diagram-card]]:w-full">
-          <div className="bubble bubble-user has-[[data-diagram-card]]:w-full has-[[data-diagram-card]]:max-w-full">
+        <div className="bubble-stack bubble-stack-user has-data-diagram-card:w-full">
+          <div className="bubble bubble-user has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
             {quoteEl}
             {(() => {
               const atts = message.attachments || [];
@@ -430,13 +404,13 @@ function ChatMessageInner({
       data-msg-id={message.id}
       {...touchHandlers}
     >
-      <div className="bubble-stack bubble-stack-assistant has-[[data-diagram-card]]:w-full">
+      <div className="bubble-stack bubble-stack-assistant has-data-diagram-card:w-full">
         {speakerLabel ? (
           <div className="msg-speaker-name" title={speakerLabel}>
             {speakerLabel}
           </div>
         ) : null}
-        <div className="bubble bubble-assistant has-[[data-diagram-card]]:w-full has-[[data-diagram-card]]:max-w-full">
+        <div className="bubble bubble-assistant has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
           {quoteEl}
           {isSummary ? <div className="msg-role">摘要</div> : null}
           <ResultOrientedMessage

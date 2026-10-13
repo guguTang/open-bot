@@ -12,7 +12,12 @@ type Props = {
   reloadToken?: number;
 };
 
-export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
+type BodyProps = {
+  agent: Agent;
+  onClose: () => void;
+};
+
+function TrainPanelBody({ agent, onClose }: BodyProps) {
   const [tab, setTab] = useState<Tab>("pending");
   const [lessons, setLessons] = useState<BotLesson[]>([]);
   const [busy, setBusy] = useState(false);
@@ -22,7 +27,6 @@ export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
   const [editBody, setEditBody] = useState("");
 
   const load = useCallback(async () => {
-    if (!agent) return;
     setBusy(true);
     setErr("");
     try {
@@ -33,21 +37,16 @@ export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [agent]);
+  }, [agent.id]);
 
   useEffect(() => {
-    if (!open || !agent) return;
-    setTab("pending");
-    setEdit(null);
     void load();
-  }, [open, agent, reloadToken, load]);
+  }, [load]);
 
   const filtered = useMemo(
     () => lessons.filter((l) => l.status === tab),
     [lessons, tab],
   );
-
-  if (!open || !agent) return null;
 
   const patchStatus = async (id: string, status: LessonStatus) => {
     setBusy(true);
@@ -150,7 +149,7 @@ export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
           ))}
         </div>
 
-        {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
+        {err ? <div className="text-[13px] text-(--danger)">{err}</div> : null}
 
         {edit ? (
           <form className="train-edit" onSubmit={(e) => void saveEdit(e)}>
@@ -244,4 +243,10 @@ export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
       </div>
     </div>
   );
+}
+
+export function TrainPanel({ agent, open, onClose, reloadToken = 0 }: Props) {
+  if (!open || !agent) return null;
+
+  return <TrainPanelBody key={`${agent.id}-${reloadToken}`} agent={agent} onClose={onClose} />;
 }

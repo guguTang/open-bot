@@ -1,15 +1,18 @@
 # Web API client
 
-`../api.ts` is currently a single module that wraps HTTP calls for the whole app.
+Domain modules under this folder implement the HTTP client. `../api.ts` is the **public barrel** — keep importing from `../api` / `./api` so existing call sites stay stable.
 
-Planned domain split (P4-3, documentation only — no migration yet):
+## Layout (P4-3 landed)
 
-- **agents** — bots, skills, onboarding, avatars
-- **chat** — conversations, messages, runs, reactions, feedback
-- **llm** — models and provider configuration
-- **mcp** — MCP server registry and tool calls
-- **sandbox** — sandbox settings and execution
-- **machines** — host machines and registration
-- **auth** — login, session, OIDC
+| Module | Responsibility |
+|--------|----------------|
+| `client.ts` | Shared HTTP/session helpers: `API_BASE`, auth headers, token/session, health probe, attachment URL helpers, download helpers (**internal** imports from domains; only previously public symbols are re-exported via the barrel) |
+| `auth.ts` | Login, register, session user settings, OIDC |
+| `agents.ts` | Bots, skills, onboarding, clone, avatars/presence types, routines, inbound hooks, bot secrets |
+| `chat.ts` | Conversations, messages, runs, reactions, feedback/lessons, streaming, channels, agent bus, tool allowlist, host confirms |
+| `llm.ts` | Models and provider configuration / probes |
+| `mcp.ts` | MCP server registry and tool calls |
+| `sandbox.ts` | Sandbox settings and execution |
+| `machines.ts` | Host machines and registration (`hostExecWebSocketUrl`) |
 
-New endpoints should stay in `api.ts` until that split lands; this folder holds notes and future modules.
+New endpoints should go in the matching domain module and be re-exported from `../api.ts`.

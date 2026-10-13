@@ -49,14 +49,7 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
   const openAvatarSettings = (agent: Agent) => sessionActions().openAvatarSettings(agent);
   const setCloneTarget = (agent: Agent | null) => sessionActions().setCloneTarget(agent);
   const {
-    showSettings,
-    closeSettings,
-    settingsTab,
-    selectSettingsTab,
-    prefetchSettingsTab,
-    setSettingsTab,
-    emailCopied,
-    onCopyEmail,
+    shell,
     defaultLLM,
     llm,
     skills,
@@ -70,6 +63,16 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
     hostMachineId,
     clientEnv,
   } = settings;
+  const {
+    show: showSettings,
+    close: closeSettings,
+    tab: settingsTab,
+    selectTab: selectSettingsTab,
+    prefetch: prefetchSettingsTab,
+    setTab: setSettingsTab,
+    emailCopied,
+    onCopyEmail,
+  } = shell;
 
   if (!showSettings) return null;
 

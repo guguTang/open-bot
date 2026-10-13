@@ -1,60 +1,39 @@
 /**
  * HTML diagram card — design bot-diagram-card-design-v2 §1.
  * Reuses DiagramCardFrame; preview via iframe sandbox="" + sanitized srcdoc.
+ * Interaction chrome from `./diagram`.
  */
-import { Download, Maximize2, X } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { diagramFilename } from "../lib/mermaidFence";
-import { copyText, downloadHtml } from "../lib/diagramExport";
+import { downloadHtml } from "../lib/diagramExport";
 import {
   HTML_DIAGRAM_MAX_BYTES,
   htmlSourceByteLength,
   sanitizeHtmlDiagram,
 } from "../lib/htmlDiagramSanitize";
-import { DiagramCardFrame, type DiagramOverflowItem } from "./DiagramCardFrame";
+import { DiagramCardFrame } from "./DiagramCardFrame";
+import { type DiagramOverflowItem } from "./diagramCardFrameModel";
 import {
-  diagramActionsClass,
-  diagramBodyClass,
+  copyDiagramText,
+  DiagramCopyButton,
+  DiagramDownloadIconButton,
+  DiagramExpandButton,
+  DiagramFullscreenShell,
+  DiagramPendingBody,
+  DiagramSourceBody,
+  DiagramSourceToggleButton,
+  diagramOverflowItems,
+  useDiagramCardChrome,
+} from "./diagram";
+import {
   diagramBodyHtmlClass,
-  diagramBodyPendingClass,
-  diagramBtnIconClass,
-  diagramBtnTextClass,
-  diagramFsBackdropClass,
   diagramFsBodyClass,
-  diagramFsShellClass,
-  diagramFsToolbarClass,
   diagramHtmlIframeClass,
   diagramHtmlIframeFsClass,
-  diagramPendingDotClass,
-  diagramPendingLabelClass,
-  diagramPillClass,
-  diagramSourceClass,
   diagramSourceFsClass,
-  diagramSourceTailClass,
-  diagramWarningClass,
 } from "./diagram/diagramUi";
 import { useAppTheme } from "./useAppTheme";
-
-const diagramIcon = {
-  size: 16,
-  strokeWidth: 1.5,
-  "aria-hidden": true as const,
-  focusable: false as const,
-};
-
-const IconDownload = () => <Download {...diagramIcon} />;
-const IconExpand = () => <Maximize2 {...diagramIcon} />;
-const IconClose = () => <X {...diagramIcon} />;
 
 type PreviewState =
   | { mode: "pending" }
@@ -97,107 +76,59 @@ function HtmlFullscreen({
   onDownload: () => void;
   onClose: () => void;
 }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const prevFocus = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
+  return (
+    <DiagramFullscreenShell
+      label="HTML"
+      ariaLabel="HTML 图表"
+      actions={
+        <>
+          <DiagramSourceToggleButton
+            viewSource={showSource}
+            ready
+            previewLabel="预览"
+            onClick={onToggle}
+          />
+          <DiagramCopyButton onClick={onCopy} />
+          <DiagramDownloadIconButton
+            ariaLabel="下载 HTML"
+            title="下载 HTML"
+            onClick={onDownload}
+          />
+        </>
       }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      prevFocus?.focus?.();
-    };
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className={diagramFsBackdropClass}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      bodyClassName={diagramFsBodyClass({ source: showSource, html: !showSource })}
+      onClose={onClose}
     >
-      <div className={diagramFsShellClass} role="dialog" aria-modal="true" aria-label="HTML 图表">
-        <div className={diagramFsToolbarClass}>
-          <span className={diagramPillClass}>HTML</span>
-          <div className={diagramActionsClass}>
-            <button
-              type="button"
-              className={diagramBtnTextClass}
-              aria-pressed={showSource}
-              onClick={onToggle}
-            >
-              {showSource ? "预览" : "源码"}
-            </button>
-            <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
-              复制
-            </button>
-            <button
-              type="button"
-              className={diagramBtnIconClass}
-              aria-label="下载 HTML"
-              title="下载 HTML"
-              onClick={onDownload}
-            >
-              <IconDownload />
-            </button>
-            <button
-              ref={closeRef}
-              type="button"
-              className={diagramBtnIconClass}
-              aria-label="关闭"
-              title="关闭 (Esc)"
-              onClick={onClose}
-            >
-              <IconClose />
-            </button>
-          </div>
-        </div>
-        <div className={diagramFsBodyClass({ source: showSource, html: !showSource })}>
-          {showSource ? (
-            <pre className={diagramSourceFsClass}>{source}</pre>
-          ) : (
-            <iframe
-              className={diagramHtmlIframeFsClass}
-              title="HTML 图表全屏预览"
-              sandbox=""
-              referrerPolicy="no-referrer"
-              srcDoc={srcdoc}
-            />
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+      {showSource ? (
+        <pre className={diagramSourceFsClass}>{source}</pre>
+      ) : (
+        <iframe
+          className={diagramHtmlIframeFsClass}
+          title="HTML 图表全屏预览"
+          sandbox=""
+          referrerPolicy="no-referrer"
+          srcDoc={srcdoc}
+        />
+      )}
+    </DiagramFullscreenShell>
   );
 }
 
 export function HtmlDiagramCard({ source, pending = false }: { source: string; pending?: boolean }) {
   const theme = useAppTheme();
-  const [showSource, setShowSource] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const toastOnceRef = useRef(false);
-  const tailRef = useRef<HTMLPreElement>(null);
+  const previewScope = useMemo(() => `${source}\0${theme}`, [source, theme]);
+  const [failedScope, setFailedScope] = useState<string | null>(null);
+  const previewFailed = failedScope === previewScope;
+  const toastShownScopeRef = useRef<string | null>(null);
 
   const preview = useMemo(() => buildPreview(source, theme, pending), [source, theme, pending]);
 
-  useEffect(() => {
-    setPreviewFailed(false);
-    toastOnceRef.current = false;
-  }, [source, theme]);
-
-  useLayoutEffect(() => {
-    const el = tailRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [source, pending]);
-
   const canPreview = preview.mode === "ok" && !previewFailed;
+  const ready = canPreview; // download / fullscreen only when previewable
+
+  const { showSource, toggleSource, fullscreen, openFullscreen, closeFullscreen } =
+    useDiagramCardChrome({ ready });
+
   const viewSource =
     preview.mode === "pending" ||
     preview.mode === "empty" ||
@@ -206,18 +137,7 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
     previewFailed ||
     (canPreview && showSource);
 
-  const ready = canPreview; // download / fullscreen only when previewable
-
-  useEffect(() => {
-    if (!ready) setFullscreen(false);
-  }, [ready]);
-
-  const onCopy = useCallback(() => {
-    copyText(source).then(
-      () => toast.success("已复制", { duration: 1500 }),
-      () => toast.error("复制失败，请手动选择源码复制"),
-    );
-  }, [source]);
+  const onCopy = useCallback(() => copyDiagramText(source), [source]);
 
   const onDownload = useCallback(() => {
     try {
@@ -227,58 +147,38 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
     }
   }, [source]);
 
-  const toggleSource = useCallback(() => setShowSource((v) => !v), []);
-  const closeFullscreen = useCallback(() => setFullscreen(false), []);
-
   const onIframePointer = useCallback(() => {
-    if (preview.mode !== "ok" || preview.blockedExternal <= 0 || toastOnceRef.current) return;
-    toastOnceRef.current = true;
+    if (preview.mode !== "ok" || preview.blockedExternal <= 0) return;
+    if (toastShownScopeRef.current === previewScope) return;
+    toastShownScopeRef.current = previewScope;
     toast.message("已拦截外链", { duration: 1800 });
-  }, [preview]);
+  }, [preview, previewScope]);
 
   const onIframeError = useCallback(() => {
-    setPreviewFailed(true);
-  }, []);
+    setFailedScope(previewScope);
+  }, [previewScope]);
 
   const actions = (
     <>
-      <button
-        type="button"
-        className={diagramBtnTextClass}
-        aria-pressed={viewSource && ready}
-        disabled={!ready}
-        title={!ready ? "预览就绪后可切换" : undefined}
+      <DiagramSourceToggleButton
+        viewSource={viewSource}
+        ready={ready}
+        disabledTitle="预览就绪后可切换"
+        previewLabel="预览"
         onClick={toggleSource}
-      >
-        {viewSource && ready ? "预览" : "源码"}
-      </button>
-      <button type="button" className={diagramBtnTextClass} onClick={onCopy}>
-        复制
-      </button>
-      <button
-        type="button"
-        className={diagramBtnIconClass}
-        aria-label="下载 HTML"
+      />
+      <DiagramCopyButton onClick={onCopy} />
+      <DiagramDownloadIconButton
+        ariaLabel="下载 HTML"
         title={ready ? "下载 HTML" : "图表就绪后可下载"}
         disabled={!ready}
         onClick={onDownload}
-      >
-        <IconDownload />
-      </button>
-      <button
-        type="button"
-        className={diagramBtnIconClass}
-        aria-label="全屏"
-        title={ready ? "全屏" : "图表就绪后可全屏"}
-        disabled={!ready}
-        onClick={() => setFullscreen(true)}
-      >
-        <IconExpand />
-      </button>
+      />
+      <DiagramExpandButton ready={ready} onClick={openFullscreen} />
     </>
   );
 
-  const overflowItems: DiagramOverflowItem[] = [
+  const overflowItems: DiagramOverflowItem[] = diagramOverflowItems(
     {
       key: "source",
       label: viewSource && ready ? "预览" : "源码",
@@ -296,50 +196,29 @@ export function HtmlDiagramCard({ source, pending = false }: { source: string; p
       key: "fs",
       label: "全屏",
       disabled: !ready,
-      onClick: () => setFullscreen(true),
+      onClick: openFullscreen,
     },
-  ];
+  );
 
   let body: ReactNode;
   if (preview.mode === "pending") {
-    body = (
-      <div className={diagramBodyPendingClass} aria-busy="true">
-        <div className={diagramPendingLabelClass}>
-          <span className={diagramPendingDotClass} aria-hidden="true" />
-          生成中…
-        </div>
-        <pre ref={tailRef} className={diagramSourceTailClass}>
-          {source}
-        </pre>
-      </div>
-    );
+    body = <DiagramPendingBody source={source} />;
   } else if (preview.mode === "empty") {
-    body = (
-      <div className={diagramBodyClass}>
-        <div className={diagramWarningClass} role="status">
-          无内容
-        </div>
-      </div>
-    );
+    body = <DiagramSourceBody warning="无内容" />;
   } else if (preview.mode === "oversized") {
-    body = (
-      <div className={diagramBodyClass}>
-        <div className={diagramWarningClass} role="status">
-          内容过大，仅显示源码
-        </div>
-        <pre className={diagramSourceClass}>{source}</pre>
-      </div>
-    );
+    body = <DiagramSourceBody source={source} warning="内容过大，仅显示源码" />;
   } else if (preview.mode === "source-only" || previewFailed || (ready && showSource)) {
     body = (
-      <div className={diagramBodyClass}>
-        {preview.mode === "source-only" || previewFailed ? (
-          <div className={diagramWarningClass} role="status">
-            {preview.mode === "source-only" ? preview.tip : "无法预览，已显示源码"}
-          </div>
-        ) : null}
-        <pre className={diagramSourceClass}>{source}</pre>
-      </div>
+      <DiagramSourceBody
+        source={source}
+        warning={
+          preview.mode === "source-only" || previewFailed
+            ? preview.mode === "source-only"
+              ? preview.tip
+              : "无法预览，已显示源码"
+            : null
+        }
+      />
     );
   } else {
     body = (

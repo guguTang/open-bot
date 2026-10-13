@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -17,9 +18,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/buttonVariants";
 import { cn } from "@/lib/utils";
 import { useSheetFormUi } from "./useIsTouchUi";
+import { useDialogOpen } from "./useDialogOpen";
 
 export type ConfirmOptions = {
   title: string;
@@ -46,7 +48,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const resolveRef = useRef<((value: boolean) => void) | null>(null);
   const resultRef = useRef<boolean | null>(null);
   const openRef = useRef(false);
-  openRef.current = open;
+  useLayoutEffect(() => {
+    openRef.current = open;
+  });
   const sheetUi = useSheetFormUi();
 
   const confirm = useCallback<ConfirmFn>((opts) => {
@@ -77,20 +81,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!open || !sheetUi) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") settle(false);
-    };
-    document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, sheetUi, settle]);
+  }, [open, sheetUi]);
 
   const cancelLabel = options?.cancelLabel ?? "取消";
   const confirmLabel = options?.confirmLabel ?? (options?.danger ? "删除" : "确认");
+  const dismissConfirm = useCallback(() => settle(false), [settle]);
+  const confirmSheetRef = useDialogOpen(Boolean(open && options && sheetUi), dismissConfirm);
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -99,20 +100,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       {sheetUi ? (
         open && options ? (
-          <div className="action-sheet-root confirm-sheet-root" role="presentation">
+          <dialog
+            ref={confirmSheetRef}
+            className="action-sheet-root confirm-sheet-root"
+            aria-labelledby="confirm-sheet-title"
+            aria-describedby={options.description ? "confirm-sheet-desc" : undefined}
+          >
             <button
               type="button"
               className="action-sheet-mask"
               aria-label="关闭"
               onClick={() => settle(false)}
             />
-            <div
-              className="action-sheet confirm-action-sheet"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="confirm-sheet-title"
-              aria-describedby={options.description ? "confirm-sheet-desc" : undefined}
-            >
+            <div className="action-sheet confirm-action-sheet">
               <div className="action-sheet-handle" aria-hidden />
               <div id="confirm-sheet-title" className="confirm-sheet-title">
                 {options.title}
@@ -139,7 +139,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </div>
-          </div>
+          </dialog>
         ) : null
       ) : (
         <AlertDialog

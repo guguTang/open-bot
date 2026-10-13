@@ -275,14 +275,17 @@ export function MachinesSettingsTab({
                   <div>
                     {renamingMachineId === m.id ? (
                       <div className="llm-form" style={{ gap: 8, marginBottom: 4 }}>
-                        <input
-                          value={renameDraft}
-                          onChange={(e) => onRenameDraftChange(e.target.value)}
-                          maxLength={64}
-                          placeholder="设备名称"
-                          autoFocus
-                          onKeyDown={(e) => onRenameKeyDown(m.id, e)}
-                        />
+                        <label>
+                          设备名称
+                          <input
+                            value={renameDraft}
+                            onChange={(e) => onRenameDraftChange(e.target.value)}
+                            maxLength={64}
+                            placeholder="例如：MacBook Pro"
+                            autoFocus
+                            onKeyDown={(e) => onRenameKeyDown(m.id, e)}
+                          />
+                        </label>
                       </div>
                     ) : (
                       <div className="agent-name">

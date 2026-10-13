@@ -71,7 +71,8 @@ export function AgentAvatar({
       />
       {online ? (
         <span
-          className="pointer-events-none absolute -bottom-px -right-px z-[2] box-border rounded-full border-[1.5px] border-[var(--panel,#fff)] bg-[#22c55e]"
+          className="pointer-events-none absolute -bottom-px -right-px z-2 box-border rounded-full border-[1.5px] border-(--panel,#fff) bg-[#22c55e]"
+
           style={{ width: dotPx, height: dotPx }}
           aria-hidden
         />

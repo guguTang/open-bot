@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,7 @@ function readSheetForm(): boolean {
     window.matchMedia(POINTER_COARSE_MQ).matches || window.matchMedia(TOUCH_UI_WIDTH_MQ).matches;
   return touch || window.matchMedia(LAYOUT_NARROW_MQ).matches;
 }
-import type { Agent, BotSecretRequest, Machine } from "../api";
+import type { Agent, Machine } from "../api";
 import { refreshSettingsForTab, type SettingsRefreshApi } from "../lib/app/settingsRefresh";
 import { detectClientContext } from "../lib/clientEnv";
 import { setHostExecMachinePolicy } from "../lib/hostExec";
@@ -31,7 +32,10 @@ import {
   useSecretsSettings,
   useSkillsSettings,
 } from "./settings";
+import type { ChatSettingsSlice, SettingsShell } from "./settings/types";
 import type { SettingsTab } from "../types/app-ui";
+
+export type { ChatSettingsSlice, SettingsShell } from "./settings/types";
 
 type ClientEnv = ReturnType<typeof detectClientContext>;
 
@@ -75,8 +79,6 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [emailCopied, setEmailCopied] = useState(false);
-  const [secretPrompt, setSecretPrompt] = useState<BotSecretRequest | null>(null);
-
   const llm = useLlmSettings();
   const skills = useSkillsSettings(confirm);
   const compact = useCompactSettings();
@@ -99,7 +101,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     setHostExecMachinePolicy,
     setHostWritesOn,
   });
-  const secrets = useSecretsSettings({ secretPrompt, setSecretPrompt });
+  const secrets = useSecretsSettings();
   const review = useReviewSettings(userId);
 
   const defaultLLM = useMemo(
@@ -212,29 +214,70 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     setCurrentMachineDraft: (_name: string) => {},
   });
 
-  machinesSyncRef.current = {
-    machines: machinesHook.machines,
-    setMachines: machinesHook.setMachines,
-    deviceDisplayName: machinesHook.deviceDisplayName,
-    setCurrentMachineDraft: machinesHook.setCurrentMachineDraft,
-  };
+  useLayoutEffect(() => {
+    machinesSyncRef.current = {
+      machines: machinesHook.machines,
+      setMachines: machinesHook.setMachines,
+      deviceDisplayName: machinesHook.deviceDisplayName,
+      setCurrentMachineDraft: machinesHook.setCurrentMachineDraft,
+    };
+  });
+
+  const shell = useMemo<SettingsShell>(
+    () => ({
+      show: showSettings,
+      setShow: setShowSettings,
+      tab: settingsTab,
+      setTab: setSettingsTab,
+      selectTab: selectSettingsTab,
+      prefetch: prefetchSettingsTab,
+      open: openSettings,
+      close: closeSettings,
+      emailCopied,
+      onCopyEmail,
+      secretPrompt: secrets.secretPrompt,
+      setSecretPrompt: secrets.setSecretPrompt,
+    }),
+    [
+      showSettings,
+      settingsTab,
+      selectSettingsTab,
+      prefetchSettingsTab,
+      openSettings,
+      closeSettings,
+      emailCopied,
+      onCopyEmail,
+      secrets.secretPrompt,
+      secrets.setSecretPrompt,
+    ],
+  );
+
+  const chatSlice = useMemo<ChatSettingsSlice>(
+    () => ({
+      toolAllowEntries: review.toolAllowEntries,
+      setToolAllowEntries: review.setToolAllowEntries,
+      machines: machinesHook.machines,
+      deviceDisplayName: machinesHook.deviceDisplayName,
+      refreshLLMs: llm.refreshLLMs,
+    }),
+    [
+      review.toolAllowEntries,
+      review.setToolAllowEntries,
+      machinesHook.machines,
+      machinesHook.deviceDisplayName,
+      llm.refreshLLMs,
+    ],
+  );
 
   return {
-    showSettings,
-    setShowSettings,
-    settingsTab,
-    setSettingsTab,
-    emailCopied,
-    secretPrompt,
-    setSecretPrompt,
+    /** Dialog open/close/tab/prefetch + secret prompt shell state. */
+    shell,
+    /** Narrow host/review/llm pieces for chat — not the full settings bag. */
+    chatSlice,
     defaultLLM,
-    prefetchSettingsTab,
-    selectSettingsTab,
-    openSettings,
-    closeSettings,
-    onCopyEmail,
     clearLlmsOnLogout: llm.clearLlms,
     machinesSyncRef,
+    /** Tab-owned deep hooks (panel consumes these; chat should use chatSlice). */
     llm,
     skills,
     compact,

@@ -69,7 +69,7 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
   };
 
   const accountRowClass =
-    "flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] border-0 bg-transparent px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[#f3f4f6]";
+    "flex w-full cursor-pointer items-center gap-2.5 rounded-[10px] border-0 bg-transparent px-3 py-2.5 text-left text-sm text-(--text) hover:bg-[#f3f4f6]";
 
   return (
     <>
@@ -77,10 +77,10 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
         ref={triggerRef}
         type="button"
         className={cn(
-          "inline-flex max-w-full cursor-pointer items-center gap-2 rounded-[var(--radius-pill)] border-0 px-3.5 py-2 text-sm font-[560] text-[var(--text)]",
-          llm ? "bg-[var(--bg-soft)]" : "bg-[#fef3c7]",
-          "hover:bg-[var(--bg-hover)]",
-          open && "bg-[var(--bg-hover)]",
+          "inline-flex max-w-full cursor-pointer items-center gap-2 rounded-(--radius-pill) border-0 px-3.5 py-2 text-sm font-[560] text-(--text)",
+          llm ? "bg-(--bg-soft)" : "bg-[#fef3c7]",
+          "hover:bg-(--bg-hover)",
+          open && "bg-(--bg-hover)",
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -91,14 +91,16 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
       >
         <span className="truncate">{username}</span>
         {llm ? null : (
-          <span className="size-[7px] shrink-0 rounded-full bg-[#d97706]" title="未配置模型" />
+          <span className="size-1.75 shrink-0 rounded-full bg-[#d97706]" title="未配置模型" />
+
         )}
       </button>
 
       {open ? (
         <div
           ref={panelRef}
-          className="fixed z-[45] w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.05)]"
+          className="fixed z-45 w-[min(280px,calc(100vw-24px))] rounded-2xl bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.05)]"
+
           style={{ left: pos.left, bottom: pos.bottom }}
           role="menu"
           aria-label="账户菜单"
@@ -131,7 +133,8 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
             </button>
             {flyout ? (
               <div className="absolute left-full top-0 pl-2" role="group" aria-label="当前模型">
-                <div className="w-[196px] rounded-[14px] bg-white px-1.5 pb-1.5 pt-3 shadow-[0_16px_40px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.05)]">
+                <div className="w-49 rounded-[14px] bg-white px-1.5 pb-1.5 pt-3 shadow-[0_16px_40px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.05)]">
+
                   <div className="px-3 text-sm font-[650]">当前模型</div>
                   <div className="px-3 pb-2 pt-0.5 text-[13px] text-[#9ca3af]">{flyoutDetail}</div>
                   <button type="button" className={accountRowClass} role="menuitem" onClick={() => closeMenu(onChangeModel)}>

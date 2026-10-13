@@ -167,8 +167,11 @@ export function GeneralBotSettings({ onSettingsChange, sectionTitle = "审核与
                 这些规则仅对你生效。内置安全检查始终有效。冲突时「先询问」优先于「自动允许」。匹配为关键词/意图（工具名 + 命令预览 + 原因），不是对话模型自行批准。
               </div>
               <div className="bot-rule-add">
-                <span className="bot-rule-label">当 bot 想要:</span>
+                <label className="bot-rule-label" htmlFor="bot-rule-when-input">
+                  当 bot 想要:
+                </label>
                 <input
+                  id="bot-rule-when-input"
                   className="bot-rule-when"
                   value={draftWhen}
                   disabled={busy}
@@ -181,8 +184,11 @@ export function GeneralBotSettings({ onSettingsChange, sectionTitle = "审核与
                     }
                   }}
                 />
-                <span className="bot-rule-label">它应该:</span>
+                <label className="bot-rule-label" htmlFor="bot-rule-action-select">
+                  它应该:
+                </label>
                 <select
+                  id="bot-rule-action-select"
                   className="bot-settings-select bot-rule-action"
                   value={draftAction}
                   disabled={busy}

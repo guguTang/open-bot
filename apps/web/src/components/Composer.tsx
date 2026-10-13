@@ -347,7 +347,7 @@ export function Composer({
               {trigger?.kind === "slash"
                 ? slashOptions.length === 0
                   ? (
-                      <div className="mention-option mention-option-empty" role="option" aria-disabled>
+                      <div className="mention-option mention-option-empty" role="option" aria-disabled aria-selected={false}>
                         <span className="mention-option-name">暂无可用 Skill</span>
                         <span className="mention-option-id">
                           写代码岗默认含 diagnosing-bugs / tdd / implement / code-review 等；可在「设置 → 当前 Bot」打开更多

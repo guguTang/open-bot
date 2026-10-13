@@ -31,13 +31,12 @@ export function MessageReactions({ reactions, interactive = true, onToggle }: Pr
 
   return (
     <div className="msg-reactions open">
-      <div className="msg-reaction-chips" role="list">
+      <ul className="msg-reaction-chips m-0 list-none p-0">
         {visible.map((r) => (
+          <li key={r.emoji}>
           <button
-            key={r.emoji}
             type="button"
             className={`msg-reaction-chip${r.me ? " me" : ""}`}
-            role="listitem"
             disabled={!interactive || busy}
             title={r.me ? "取消反应" : "添加反应"}
             onClick={() => void handleToggle(r.emoji)}
@@ -45,8 +44,9 @@ export function MessageReactions({ reactions, interactive = true, onToggle }: Pr
             <span className="msg-reaction-emoji">{r.emoji}</span>
             <span className="msg-reaction-count">{r.count}</span>
           </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

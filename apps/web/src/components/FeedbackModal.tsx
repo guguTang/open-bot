@@ -1,29 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import type { FeedbackPolarity, FeedbackSource } from "../api";
-
-export const NEGATIVE_REASONS = [
-  { id: "wrong", label: "答错了 / 事实不准" },
-  { id: "verbose", label: "太啰嗦" },
-  { id: "not_followed", label: "没按要求做" },
-  { id: "missed_steps", label: "漏了关键步骤" },
-  { id: "tone", label: "语气/格式不对" },
-  { id: "other", label: "其它" },
-] as const;
-
-export const POSITIVE_REASONS = [
-  { id: "good", label: "答得好" },
-  { id: "concise", label: "简洁有用" },
-  { id: "format_ok", label: "格式对" },
-] as const;
-
-export type FeedbackTarget = {
-  messageId: string;
-  agentId: string;
-  agentName: string;
-  conversationId: string;
-  polarity: FeedbackPolarity;
-  source: FeedbackSource;
-};
+import { NEGATIVE_REASONS, POSITIVE_REASONS, type FeedbackTarget } from "./feedbackModalTypes";
 
 type Props = {
   target: FeedbackTarget | null;
@@ -36,23 +13,20 @@ type Props = {
   }) => Promise<void>;
 };
 
-export function FeedbackModal({ target, onClose, onSubmit }: Props) {
-  const [polarity, setPolarity] = useState<FeedbackPolarity>("negative");
+type FormProps = {
+  target: FeedbackTarget;
+  onClose: () => void;
+  onSubmit: Props["onSubmit"];
+};
+
+function FeedbackModalForm({ target, onClose, onSubmit }: FormProps) {
+  const [polarity, setPolarity] = useState<FeedbackPolarity>(() => target.polarity);
   const [reasons, setReasons] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  useEffect(() => {
-    if (!target) return;
-    setPolarity(target.polarity);
-    setReasons([]);
-    setNote("");
-    setErr("");
-    setBusy(false);
-  }, [target]);
-
-  if (!target) return null;
+  const reasonIds = useMemo(() => new Set(reasons), [reasons]);
 
   const presets = polarity === "negative" ? NEGATIVE_REASONS : POSITIVE_REASONS;
 
@@ -122,7 +96,7 @@ export function FeedbackModal({ target, onClose, onSubmit }: Props) {
               <button
                 key={r.id}
                 type="button"
-                className={`feedback-chip${reasons.includes(r.id) ? " active" : ""}`}
+                className={`feedback-chip${reasonIds.has(r.id) ? " active" : ""}`}
                 onClick={() => toggleReason(r.id)}
               >
                 {r.label}
@@ -142,7 +116,7 @@ export function FeedbackModal({ target, onClose, onSubmit }: Props) {
             />
           </label>
 
-          {err ? <div className="text-[13px] text-[var(--danger)]">{err}</div> : null}
+          {err ? <div className="text-[13px] text-(--danger)">{err}</div> : null}
 
           <div className="feedback-actions">
             <button type="button" className="ghost" onClick={onClose} disabled={busy}>
@@ -155,5 +129,18 @@ export function FeedbackModal({ target, onClose, onSubmit }: Props) {
         </form>
       </div>
     </div>
+  );
+}
+
+export function FeedbackModal({ target, onClose, onSubmit }: Props) {
+  if (!target) return null;
+
+  return (
+    <FeedbackModalForm
+      key={`${target.messageId}:${target.agentId}:${target.polarity}`}
+      target={target}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
   );
 }

@@ -12,16 +12,11 @@ import {
 } from "../lib/clientEnv";
 import {
   hostWritesEnabled,
-  setHostExecMachinePolicy,
   setHostExecUserSettings,
   startHostExecSession,
   type HostExecRequest,
 } from "../lib/hostExec";
-import {
-  normalizeMachineExecPolicy,
-  readCachedUserSettings,
-  type MachineExecPolicy,
-} from "../lib/userSettings";
+import { readCachedUserSettings, type MachineExecPolicy } from "../lib/userSettings";
 import { patchShell } from "../stores/shell";
 
 export type HostMachinesSyncRef = MutableRefObject<{
@@ -57,7 +52,6 @@ export type UseHostRegistrationParams = {
   machinesSyncRef: HostMachinesSyncRef;
   hostMachineId: string | null;
   setHostMachineId: (id: string | null) => void;
-  setHostExecPolicy: (policy: MachineExecPolicy) => void;
   askHostConfirmRef: MutableRefObject<(req: HostExecRequest) => Promise<boolean>>;
   hostConfirmResolvers: MutableRefObject<Map<string, (ok: boolean) => void>>;
 };
@@ -72,7 +66,6 @@ export function useHostRegistration(params: UseHostRegistrationParams) {
     machinesSyncRef,
     hostMachineId,
     setHostMachineId,
-    setHostExecPolicy,
     askHostConfirmRef,
     hostConfirmResolvers,
   } = params;
@@ -88,18 +81,11 @@ export function useHostRegistration(params: UseHostRegistrationParams) {
 
   useEffect(() => {
     const mid = hostMachineId;
-    const { setCurrentMachineDraft } = machinesSyncRef.current;
-    if (!mid) {
-      setHostExecMachinePolicy("allow");
-      setHostExecPolicy("allow");
-      return;
-    }
+    if (!mid) return;
     const m = machines.find((x) => x.id === mid);
-    const policy = normalizeMachineExecPolicy(m?.exec_policy);
-    setHostExecPolicy(policy);
-    setHostExecMachinePolicy(policy);
-    if (m?.label) setCurrentMachineDraft(m.label);
-  }, [hostMachineId, machines, machinesSyncRef, setHostExecPolicy]);
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent -- sync settings draft when host machine record loads
+    if (m?.label) machinesSyncRef.current.setCurrentMachineDraft(m.label);
+  }, [hostMachineId, machines, machinesSyncRef]);
 
   useEffect(() => {
     if (!authed) return;
@@ -155,10 +141,11 @@ export function useHostRegistration(params: UseHostRegistrationParams) {
       machineId: hostMachineId,
       confirm: (req) => askHostConfirmRef.current(req),
     });
+    const resolvers = hostConfirmResolvers.current;
     return () => {
       stop();
-      for (const resolve of hostConfirmResolvers.current.values()) resolve(false);
-      hostConfirmResolvers.current.clear();
+      for (const resolve of resolvers.values()) resolve(false);
+      resolvers.clear();
     };
   }, [authed, token, clientEnv.app, hostMachineId, askHostConfirmRef, hostConfirmResolvers]);
 }

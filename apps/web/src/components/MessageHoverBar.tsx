@@ -46,6 +46,7 @@ export function MessageHoverBar({
   useLayoutEffect(() => {
     const el = rootRef.current;
     if (!el) return;
+    let raf = 0;
     const measure = () => {
       const stack = el.closest(".bubble-stack") as HTMLElement | null;
       const bubble = stack?.querySelector(".bubble") as HTMLElement | null;
@@ -69,12 +70,20 @@ export function MessageHoverBar({
       const opposite = isUserSide ? fitsRight : fitsLeft;
       setFlip(preferred ? "right" : opposite ? "left" : "top");
     };
+    const scheduleMeasure = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        measure();
+      });
+    };
     measure();
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", scheduleMeasure);
+    window.addEventListener("scroll", scheduleMeasure, true);
     return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
+      if (raf) window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", scheduleMeasure);
+      window.removeEventListener("scroll", scheduleMeasure, true);
     };
   }, [pickerOpen, moreOpen, forceOpen]);
 

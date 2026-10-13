@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { Agent, CloneAgentResult } from "../api";
 import { cloneAgent } from "../api";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   agent: Agent | null;
@@ -9,22 +10,19 @@ type Props = {
   onCloned: (result: CloneAgentResult) => void;
 };
 
-/** 「复制助手」：人设与 Skills 总是复制；Bot 记忆默认勾选，例行任务可选。 */
-export function CloneAgentModal({ agent, onClose, onCloned }: Props) {
-  const [name, setName] = useState("");
+type FormProps = {
+  agent: Agent;
+  onClose: () => void;
+  onCloned: (result: CloneAgentResult) => void;
+};
+
+function CloneAgentModalForm({ agent, onClose, onCloned }: FormProps) {
+  const [name, setName] = useState(() => `${agent.name} 副本`);
   const [copyMemory, setCopyMemory] = useState(true);
   const [copyRoutines, setCopyRoutines] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-
-  useEffect(() => {
-    setName(agent ? `${agent.name} 副本` : "");
-    setCopyMemory(true);
-    setCopyRoutines(false);
-    setErr("");
-  }, [agent?.id, agent?.name]);
-
-  if (!agent) return null;
+  const dialogRef = useDialogOpen(true, onClose, { blockDismiss: busy });
 
   const submit = async () => {
     setBusy(true);
@@ -44,11 +42,18 @@ export function CloneAgentModal({ agent, onClose, onCloned }: Props) {
     }
   };
 
-  return createPortal(
-    <div className="modal-backdrop" onClick={busy ? undefined : onClose} role="presentation">
-      <div className="modal clone-agent-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+  return (
+    <dialog
+      ref={dialogRef}
+      className="modal-backdrop"
+      aria-labelledby="clone-agent-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div className="modal clone-agent-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>复制助手「{agent.name}」</h3>
+          <h3 id="clone-agent-modal-title">复制助手「{agent.name}」</h3>
           <button type="button" className="ghost" onClick={onClose} disabled={busy}>
             关闭
           </button>
@@ -98,7 +103,16 @@ export function CloneAgentModal({ agent, onClose, onCloned }: Props) {
           </button>
         </div>
       </div>
-    </div>,
+    </dialog>
+  );
+}
+
+/** 「复制助手」：人设与 Skills 总是复制；Bot 记忆默认勾选，例行任务可选。 */
+export function CloneAgentModal({ agent, onClose, onCloned }: Props) {
+  if (!agent) return null;
+
+  return createPortal(
+    <CloneAgentModalForm key={agent.id} agent={agent} onClose={onClose} onCloned={onCloned} />,
     document.body,
   );
 }

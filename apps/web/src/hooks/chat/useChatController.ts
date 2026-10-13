@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cancelConversationRun, openPrimaryConversation, type Agent, type Channel, type Conversation, type ReactionUpdatedEvent } from "../../api";
-import { onboardingStorageKey } from "../../components/BotOnboardingCard";
+import { onboardingStorageKey } from "../../components/botOnboarding";
 import type { LastActiveSelection } from "../../types/app-ui";
 import { readLastActiveSelection } from "../../lib/app/storage";
 import { resetChatSession, setTaskBusy, setRunLabel } from "../../stores/chat";
 import { useConvMessageBuffer } from "./useConvMessageBuffer";
 import { useHostConfirmChat } from "./useHostConfirmChat";
-import { useConversationRuns } from "./useConversationRuns";
 import { useChatEventsSocket } from "./useChatEventsSocket";
 import { useConversationSelection } from "./useConversationSelection";
-import { useSendMessage } from "./useSendMessage";
-import type { SendMessageDeps } from "./sendMessageDeps";
+import { useChatTurnRuns, useChatTurnSend } from "./useChatTurn";
 import type { ClientContext } from "../../lib/clientEnv";
 import type { ToolAllowEntry } from "../../lib/toolAllowlist";
 import type { Dispatch, SetStateAction } from "react";
@@ -57,7 +55,9 @@ export function useChatController(p: ChatControllerParams) {
 
   const [taskConvIds, setTaskConvIds] = useState<Set<string>>(() => new Set());
   const taskConvIdsRef = useRef(taskConvIds);
-  taskConvIdsRef.current = taskConvIds;
+  useLayoutEffect(() => {
+    taskConvIdsRef.current = taskConvIds;
+  });
 
   const lastRequestIdRef = useRef<string>("");
   const localUserIdRef = useRef<string | null>(null);
@@ -93,7 +93,7 @@ export function useChatController(p: ChatControllerParams) {
     setToolAllowEntries: p.setToolAllowEntries,
   });
 
-  const runs = useConversationRuns({
+  const runs = useChatTurnRuns({
     conversationRef,
     messagesByConvRef,
     patchConvMessages,
@@ -150,58 +150,36 @@ export function useChatController(p: ChatControllerParams) {
     [p.conversation?.id, p.agentId],
   );
 
-  const sendDeps = useMemo(
-    (): SendMessageDeps => ({
-      authed: p.authed,
-      openThreadRootIdRef: p.openThreadRootIdRef,
-      conversationRef,
-      setConversation: p.setConversation,
-      runsRef: runs.runsRef,
-      stopCurrentRun: runs.stopCurrentRun,
-      taskConvIdsRef,
-      agents: p.agents,
-      agentId: p.agentId,
-      setAgentId: p.setAgentId,
-      agentNameById: p.agentNameById,
-      messagesByConvRef,
-      patchConvMessages,
-      snapshotViewedMessages,
-      selectGenRef: selection.selectGenRef,
-      mapApiMessages: runs.mapApiMessages,
-      noteTask,
-      saveLastActiveSelection: p.saveLastActiveSelection,
-      onboardingKey,
-      setOnboardingDismissedState: p.setOnboardingDismissedState,
-      localUserIdRef,
-      groupMentionMembers: p.groupMentionMembers,
-      ensureConversation,
-      refreshConversations: p.refreshConversations,
-      refreshAgents: p.refreshAgents,
-      bumpRunBusy: runs.bumpRunBusy,
-      lastRequestIdRef,
-      sealStreamingMessagesForConv: runs.sealStreamingMessagesForConv,
-      stampUserSavedMessage: runs.stampUserSavedMessage,
-      stampSavedMessage: runs.stampSavedMessage,
-      attachSourcesToStreaming: runs.attachSourcesToStreaming,
-      setStatus: p.setStatus,
-      clientEnv: p.clientEnv,
-      machines: p.machines,
-      deviceDisplayName: p.deviceDisplayName,
-    }),
-    [
-      p,
-      runs,
-      selection.selectGenRef,
-      noteTask,
-      ensureConversation,
-      onboardingKey,
-      patchConvMessages,
-      snapshotViewedMessages,
-      messagesByConvRef,
-    ],
-  );
-
-  const sendUserText = useSendMessage(sendDeps);
+  const sendUserText = useChatTurnSend({
+    runs,
+    authed: p.authed,
+    conversationRef,
+    setConversation: p.setConversation,
+    openThreadRootIdRef: p.openThreadRootIdRef,
+    messagesByConvRef,
+    patchConvMessages,
+    snapshotViewedMessages,
+    selectGenRef: selection.selectGenRef,
+    taskConvIdsRef,
+    localUserIdRef,
+    lastRequestIdRef,
+    agents: p.agents,
+    agentId: p.agentId,
+    setAgentId: p.setAgentId,
+    agentNameById: p.agentNameById,
+    groupMentionMembers: p.groupMentionMembers,
+    onboardingKey,
+    setOnboardingDismissedState: p.setOnboardingDismissedState,
+    noteTask,
+    saveLastActiveSelection: p.saveLastActiveSelection,
+    ensureConversation,
+    refreshConversations: p.refreshConversations,
+    refreshAgents: p.refreshAgents,
+    setStatus: p.setStatus,
+    clientEnv: p.clientEnv,
+    machines: p.machines,
+    deviceDisplayName: p.deviceDisplayName,
+  });
 
   useChatEventsSocket({
     token: p.token,
@@ -258,12 +236,18 @@ export function useChatController(p: ChatControllerParams) {
     setTaskConvIds(new Set());
     taskConvIdsRef.current = new Set();
     runs.bumpRunBusy();
-  }, [clearMessageBuffer, p.openThreadRootIdRef, runs]);
+  }, [clearMessageBuffer, p.didRestoreLastActive, p.openThreadRootIdRef, p.setConversation, runs]);
 
   const onSelectAgentRef = useRef(selection.onSelectAgent);
-  onSelectAgentRef.current = selection.onSelectAgent;
   const openChannelChatRef = useRef(selection.openChannelChat);
-  openChannelChatRef.current = selection.openChannelChat;
+  const setMobileViewRef = useRef(p.setMobileView);
+  const setStatusRef = useRef(p.setStatus);
+  useLayoutEffect(() => {
+    onSelectAgentRef.current = selection.onSelectAgent;
+    openChannelChatRef.current = selection.openChannelChat;
+    setMobileViewRef.current = p.setMobileView;
+    setStatusRef.current = p.setStatus;
+  });
 
   useEffect(() => {
     if (!p.authed || !p.user?.id) {
@@ -282,7 +266,7 @@ export function useChatController(p: ChatControllerParams) {
         if (conversationRef.current) {
           p.didRestoreLastActive.current = p.user!.id;
           setSelectionHydrated(true);
-          p.setMobileView("chat");
+          setMobileViewRef.current("chat");
           return;
         }
 
@@ -309,22 +293,22 @@ export function useChatController(p: ChatControllerParams) {
         if (cancelled) return;
         p.didRestoreLastActive.current = p.user!.id;
         setSelectionHydrated(true);
-        if (conversationRef.current) p.setMobileView("chat");
+        if (conversationRef.current) setMobileViewRef.current("chat");
       } catch {
         if (!cancelled) {
           p.didRestoreLastActive.current = p.user!.id;
           setSelectionHydrated(true);
-          p.setStatus("无法拉取助手或群聊列表（请确认已登录且 API 可用）");
+          setStatusRef.current("无法拉取助手或群聊列表（请确认已登录且 API 可用）");
         }
       }
     };
 
     void restoreLastActive();
-    void p.refreshLLMs().catch(() => p.setStatus("无法拉取 LLM 连接列表"));
+    void p.refreshLLMs().catch(() => setStatusRef.current("无法拉取 LLM 连接列表"));
     return () => {
       cancelled = true;
     };
-  }, [p.authed, p.user?.id, p.refreshAgents, p.refreshChannels, p.refreshLLMs]);
+  }, [p.authed, p.user?.id, p.didRestoreLastActive, p.refreshAgents, p.refreshChannels, p.refreshLLMs]);
 
   return {
     conversationRef,

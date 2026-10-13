@@ -32,7 +32,8 @@ export function AppOverlays({ settings }: { settings: AppSettingsBundle }) {
   const trainAgent = useShellStore((s) => s.trainAgent);
   const trainReload = useShellStore((s) => s.trainReload);
 
-  const { secretPrompt, setSecretPrompt, secrets, setShowSettings } = settings;
+  const { shell, secrets } = settings;
+  const { secretPrompt, setSecretPrompt, setShow: setShowSettings } = shell;
   const actions = sessionActions();
 
   return (

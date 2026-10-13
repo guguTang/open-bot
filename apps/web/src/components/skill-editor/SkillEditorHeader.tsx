@@ -1,9 +1,7 @@
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, Save } from "lucide-react";
 import type { SkillPackage } from "../../api";
 import type { PkgState } from "../../lib/skillPackage";
 import { isStructureDirty } from "../../lib/skillPackage";
-import { SkillEditorPreviewToggle } from "./SkillEditorPreviewToggle";
-import { SkillEditorReadonlyBanner } from "./SkillEditorReadonlyBanner";
 
 type Props = {
   pkg: SkillPackage;
@@ -46,7 +44,16 @@ export function SkillEditorHeader({
           ) : null}
         </div>
         <div className="skill-editor-actions">
-          {isMd ? <SkillEditorPreviewToggle preview={preview} onPreviewChange={onPreviewChange} /> : null}
+          {isMd ? (
+            <div className="skill-seg" role="group" aria-label="编辑或预览">
+              <button type="button" className={!preview ? "on" : ""} onClick={() => onPreviewChange(false)}>
+                <Pencil size={13} /> 编辑
+              </button>
+              <button type="button" className={preview ? "on" : ""} onClick={() => onPreviewChange(true)}>
+                <Eye size={13} /> 预览
+              </button>
+            </div>
+          ) : null}
           {!readOnly ? (
             <button type="button" className="primary" disabled={saving || !dirty} title="保存全部（Ctrl/⌘+S）" onClick={onSave}>
               <Save size={14} /> {saving ? "保存中…" : "保存全部"}
@@ -54,7 +61,16 @@ export function SkillEditorHeader({
           ) : null}
         </div>
       </div>
-      {readOnly ? <SkillEditorReadonlyBanner pkg={pkg} onCopyAsCustom={onCopyAsCustom} /> : null}
+      {readOnly ? (
+        <div className="skill-readonly-banner">
+          内置技能，可复制为自建后编辑。
+          {onCopyAsCustom ? (
+            <button type="button" className="ghost" onClick={() => onCopyAsCustom(pkg)}>
+              复制为自建
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

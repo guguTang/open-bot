@@ -3,9 +3,11 @@
  * main bundle does not carry CodeMirror. One EditorView; per-path EditorState is cached
  * so switching tabs keeps undo history and cursor.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { uniq } from "es-toolkit";
+// react-doctor-disable-next-line react-doctor/prefer-dynamic-import -- entire CodeEditor is React.lazy-loaded; static imports keep one editor chunk
 import { EditorState, StateEffect, StateField, type Extension, RangeSetBuilder, Compartment } from "@codemirror/state";
+// react-doctor-disable-next-line react-doctor/prefer-dynamic-import -- entire CodeEditor is React.lazy-loaded; static imports keep one editor chunk
 import {
   Decoration,
   EditorView,
@@ -90,8 +92,11 @@ export default function CodeEditor({ path, value, readOnly, errorLines, onChange
   const statesRef = useRef(new Map<string, EditorState>());
   const pathRef = useRef(path);
   const onChangeRef = useRef(onChange);
-  const roComp = useRef(new Compartment());
-  onChangeRef.current = onChange;
+  const roComp = useRef<Compartment | null>(null);
+  if (roComp.current === null) roComp.current = new Compartment();
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   const makeState = (p: string, doc: string, ro: boolean) =>
     EditorState.create({
@@ -112,7 +117,7 @@ export default function CodeEditor({ path, value, readOnly, errorLines, onChange
         languageFor(p),
         errorLineField,
         theme,
-        roComp.current.of([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]),
+        roComp.current!.of([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) onChangeRef.current(u.state.doc.toString());
         }),
@@ -151,7 +156,7 @@ export default function CodeEditor({ path, value, readOnly, errorLines, onChange
 
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: roComp.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]),
+      effects: roComp.current!.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]),
     });
   }, [readOnly, path]);
 

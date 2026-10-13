@@ -1,9 +1,8 @@
 import { ArrowLeft } from "lucide-react";
 import { SkillEditorCloseDialog } from "./SkillEditorCloseDialog";
-import { SkillEditorContextMenu } from "./SkillEditorContextMenu";
 import { SkillEditorFilePane } from "./SkillEditorFilePane";
 import { SkillEditorHeader } from "./SkillEditorHeader";
-import { SkillEditorTreeSidebar } from "./SkillEditorTreeSidebar";
+import { SkillEditorContextMenu, SkillEditorTreeSidebar } from "./SkillEditorTreeSidebar";
 import type { SkillEditorProps } from "./types";
 import { useSkillEditorModel } from "./useSkillEditorModel";
 import "./skill-editor.css";

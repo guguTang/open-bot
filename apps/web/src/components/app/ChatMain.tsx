@@ -5,11 +5,8 @@ import type { BotPresenceStatus } from "../../api";
 import { normalizePresenceStatus, resolveAvatarColor, toolNameLooksLikeSearch } from "../avatarColor";
 import { AgentAvatar } from "../AgentAvatar";
 import { channelMemberStackClass } from "./sidebarUi";
-import {
-  BotOnboardingCard,
-  ONBOARDING_WELCOME,
-  type OnboardingOption,
-} from "../BotOnboardingCard";
+import { BotOnboardingCard } from "../BotOnboardingCard";
+import { ONBOARDING_WELCOME, type OnboardingOption } from "../botOnboarding";
 import { ChatMessage } from "../ChatMessage";
 import { Composer, type ComposerMentionItem, type ComposerSkillOption } from "../Composer";
 import { RunStatus } from "../RunStatus";
@@ -245,10 +242,10 @@ function ChatTranscript({
           </div>
         ) : showOnboarding ? (
           <>
-            {ONBOARDING_WELCOME.map((text, i) => (
+            {ONBOARDING_WELCOME.map((text) => (
               <ChatMessage
-                key={`onboard-welcome-${i}`}
-                message={{ id: `onboard-welcome-${i}`, role: "assistant", content: text }}
+                key={text}
+                message={{ id: `onboard-welcome-${text}`, role: "assistant", content: text }}
               />
             ))}
             <BotOnboardingCard
@@ -307,7 +304,7 @@ function ChatTranscript({
       </div>
 
       {openThreadRootId ? (
-        <div className="thread-panel" role="dialog" aria-label="对话线程">
+        <dialog open className="thread-panel" aria-label="对话线程">
           <div className="thread-panel-head">
             <div className="thread-panel-title">线程</div>
             <button type="button" className="thread-panel-close" onClick={() => setOpenThreadRootId(null)}>
@@ -338,7 +335,7 @@ function ChatTranscript({
               </p>
             ) : null}
           </div>
-        </div>
+        </dialog>
       ) : null}
     </>
   );

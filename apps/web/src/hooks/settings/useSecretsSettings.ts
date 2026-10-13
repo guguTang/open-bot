@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createBotSecret,
   deleteBotSecret,
@@ -9,14 +9,11 @@ import {
   type BotSecretRequest,
 } from "../../api";
 
-type UseSecretsSettingsOptions = {
-  secretPrompt: BotSecretRequest | null;
-  setSecretPrompt: (req: BotSecretRequest | null) => void;
-};
-
-export function useSecretsSettings({ secretPrompt, setSecretPrompt }: UseSecretsSettingsOptions) {
+export function useSecretsSettings() {
   const [botSecrets, setBotSecrets] = useState<BotSecretMeta[]>([]);
   const [secretRequests, setSecretRequests] = useState<BotSecretRequest[]>([]);
+  const [secretPromptDismissed, setSecretPromptDismissed] = useState(false);
+  const lastPromptIdRef = useRef<string | undefined>(undefined);
   const [secretFormName, setSecretFormName] = useState("api_token");
   const [secretFormValue, setSecretFormValue] = useState("");
   const [secretFormOrigin, setSecretFormOrigin] = useState("https://api.github.com");
@@ -27,11 +24,16 @@ export function useSecretsSettings({ secretPrompt, setSecretPrompt }: UseSecrets
       const [secs, reqs] = await Promise.all([listBotSecrets(), listBotSecretRequests()]);
       setBotSecrets(secs);
       setSecretRequests(reqs);
-      if (reqs.length && !secretPrompt) setSecretPrompt(reqs[0]);
+      const nextId = reqs[0]?.id;
+      if (nextId && nextId !== lastPromptIdRef.current) {
+        lastPromptIdRef.current = nextId;
+        setSecretPromptDismissed(false);
+      }
+      if (!nextId) lastPromptIdRef.current = undefined;
     } catch {
       /* soft-fail */
     }
-  }, [secretPrompt, setSecretPrompt]);
+  }, []);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -39,6 +41,15 @@ export function useSecretsSettings({ secretPrompt, setSecretPrompt }: UseSecrets
     const id = window.setInterval(() => void refreshSecrets(), 8000);
     return () => window.clearInterval(id);
   }, [refreshSecrets]);
+
+  const secretPrompt = useMemo(() => {
+    if (secretPromptDismissed || !secretRequests.length) return null;
+    return secretRequests[0];
+  }, [secretPromptDismissed, secretRequests]);
+
+  const setSecretPrompt = useCallback((req: BotSecretRequest | null) => {
+    if (req === null) setSecretPromptDismissed(true);
+  }, []);
 
   const onSubmitSecret = useCallback(
     async (e: FormEvent) => {
@@ -72,6 +83,8 @@ export function useSecretsSettings({ secretPrompt, setSecretPrompt }: UseSecrets
   return {
     botSecrets,
     secretRequests,
+    secretPrompt,
+    setSecretPrompt,
     secretFormName,
     setSecretFormName,
     secretFormValue,

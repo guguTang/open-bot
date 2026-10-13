@@ -1,4 +1,4 @@
-import { type MouseEvent, useCallback, useEffect, useMemo, useRef } from "react";
+import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import {
   applyAgentOnboarding,
@@ -10,17 +10,17 @@ import {
   type Conversation,
   type ReactionUpdatedEvent,
 } from "../api";
-import { type FeedbackTarget } from "../components/FeedbackModal";
+import { type FeedbackTarget } from "../components/feedbackModalTypes";
 import {
   isOnboardingDismissed,
   onboardingStorageKey,
   setOnboardingDismissed,
   type OnboardingOption,
-} from "../components/BotOnboardingCard";
+} from "../components/botOnboarding";
 import type { SettingsTab } from "../types/app-ui";
 import { chatState, setApprovalGate, setMessages, setRunLabel, viewedMessages } from "../stores/chat";
 import { patchShell, setShell, shellState } from "../stores/shell";
-import type { SendUserTextFn } from "./chat/useSendMessage";
+import type { SendUserTextFn } from "./chat/useChatTurn";
 
 export type { SendUserTextFn };
 
@@ -57,11 +57,13 @@ export function useAppChatSession(p: UseAppChatSessionParams) {
   const newChatBtnRef = useRef<HTMLButtonElement>(null);
 
   const getSendUserTextRef = useRef(getSendUserText);
-  getSendUserTextRef.current = getSendUserText;
   const getOnSelectAgentRef = useRef(getOnSelectAgent);
-  getOnSelectAgentRef.current = getOnSelectAgent;
   const getOpenChannelChatRef = useRef(getOpenChannelChat);
-  getOpenChannelChatRef.current = getOpenChannelChat;
+  useLayoutEffect(() => {
+    getSendUserTextRef.current = getSendUserText;
+    getOnSelectAgentRef.current = getOnSelectAgent;
+    getOpenChannelChatRef.current = getOpenChannelChat;
+  });
 
   const applyReactionEvent = useCallback((evt: ReactionUpdatedEvent) => {
     setMessages((prev) =>

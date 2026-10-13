@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { BotSecretRequest } from "../api";
 import { resolveBotSecretRequest } from "../api";
+import { useDialogOpen } from "./useDialogOpen";
 
 type Props = {
   request: BotSecretRequest | null;
@@ -13,6 +14,7 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const dialogRef = useDialogOpen(request != null, onClose, { blockDismiss: busy });
 
   if (!request) return null;
 
@@ -51,10 +53,17 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
   };
 
   return createPortal(
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <dialog
+      ref={dialogRef}
+      className="modal-backdrop"
+      aria-labelledby="secret-prompt-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose();
+      }}
+    >
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>需要密钥：{request.name || "secret"}</h3>
+          <h3 id="secret-prompt-modal-title">需要密钥：{request.name || "secret"}</h3>
           <button type="button" className="ghost" onClick={onClose}>
             关闭
           </button>
@@ -83,7 +92,7 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
           </button>
         </div>
       </div>
-    </div>,
+    </dialog>,
     document.body,
   );
 }
