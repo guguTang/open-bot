@@ -20,8 +20,14 @@ import {
   formatLLMToolsProbe,
   type OrgLLMSettings,
 } from "../api";
+import { LLMPresetPicker } from "../components/LLMPresetPicker";
+import {
+  findPresetByBaseURL,
+  findPresetById,
+  type LLMPreset,
+} from "../llmPresets";
 
-const { Paragraph, Text } = Typography;
+const { Paragraph, Text, Link } = Typography;
 
 const MODELS_DEBOUNCE_MS = 450;
 
@@ -37,12 +43,16 @@ export default function LLMPage() {
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [form] = Form.useForm();
   const modelsReqSeq = useRef(0);
   const watchedBaseURL = Form.useWatch("base_url", form);
   const watchedAPIKey = Form.useWatch("api_key", form);
   const watchedModel = Form.useWatch("model", form);
   const cacheReqSeq = useRef(0);
+  const selectedPresetIdRef = useRef<string | null>(null);
+  const skipBaseURLMatchRef = useRef(false);
+  selectedPresetIdRef.current = selectedPresetId;
 
   useEffect(() => {
     setLoading(true);
@@ -58,12 +68,46 @@ export default function LLMPage() {
           context_window: data.llm_context_window ?? undefined,
           max_tool_rounds: data.llm_max_tool_rounds ?? 24,
         });
+        setSelectedPresetId(findPresetByBaseURL(data.llm_base_url || "")?.id ?? null);
       })
       .catch((err) => {
         message.error(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setLoading(false));
   }, [form]);
+
+  // Keep preset highlight in sync when Base URL is edited manually.
+  useEffect(() => {
+    if (skipBaseURLMatchRef.current) {
+      skipBaseURLMatchRef.current = false;
+      return;
+    }
+    const matched = findPresetByBaseURL(String(watchedBaseURL || ""));
+    setSelectedPresetId(matched?.id ?? null);
+  }, [watchedBaseURL]);
+
+  const applyPreset = (preset: LLMPreset | null) => {
+    if (!preset) {
+      skipBaseURLMatchRef.current = true;
+      setSelectedPresetId(null);
+      return;
+    }
+    const prev = findPresetById(selectedPresetIdRef.current);
+    const values = form.getFieldsValue(["name", "model"]);
+    const name = String(values.name || "").trim();
+    const model = String(values.model || "").trim();
+    const next: Record<string, string> = { base_url: preset.baseURL };
+    if (!name || (prev && name === prev.suggestedName)) {
+      next.name = preset.suggestedName;
+    }
+    if (!model || (prev && model === prev.suggestedModel)) {
+      next.model = preset.suggestedModel;
+    }
+    form.setFieldsValue(next);
+    setSelectedPresetId(preset.id);
+  };
+
+  const matchedPreset = findPresetById(selectedPresetId);
 
   // Auto-fetch OpenAI-compatible model list when endpoint (+ key or saved org key) is ready.
   useEffect(() => {
@@ -210,6 +254,7 @@ export default function LLMPage() {
           填写 Base URL 与 API Key 后会自动拉取可用模型列表（仍可手动输入）。选定模型后会检测该端点是否支持 prompt cache。
           可用「检测模型」对选定模型发一次最小聊天请求，确认其可响应。
         </Paragraph>
+        <LLMPresetPicker selectedId={selectedPresetId} onSelect={applyPreset} />
         <ProForm
           form={form}
           layout="vertical"
@@ -271,6 +316,7 @@ export default function LLMPage() {
                 context_window: data.llm_context_window ?? undefined,
                 max_tool_rounds: data.llm_max_tool_rounds ?? 24,
               });
+              setSelectedPresetId(findPresetByBaseURL(data.llm_base_url || "")?.id ?? null);
               return true;
             } catch (err) {
               message.error(err instanceof Error ? err.message : String(err));
@@ -279,7 +325,19 @@ export default function LLMPage() {
           }}
         >
           <ProFormText name="name" label="名称" />
-          <ProFormText name="base_url" label="Base URL" />
+          <ProFormText
+            name="base_url"
+            label={
+              <Space size={8}>
+                <span>Base URL</span>
+                {matchedPreset ? (
+                  <Link href={matchedPreset.docsURL} target="_blank" rel="noreferrer">
+                    文档
+                  </Link>
+                ) : null}
+              </Space>
+            }
+          />
           <ProFormText.Password
             name="api_key"
             label="API Key（留空则保持原值）"

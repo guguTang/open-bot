@@ -34,7 +34,7 @@ import type { LastActiveSelection, ListFoldState } from "../types/app-ui";
 import { usePresenceStore } from "../stores/presence";
 import { patchShell, setShell } from "../stores/shell";
 import {
-  chatScrollRef,
+  pinChatScroll,
   setMessages,
   setPendingFiles,
   setRunLabel,
@@ -250,7 +250,7 @@ export function useAgentsAndChannels(params: UseAgentsAndChannelsParams) {
       toast.success(`已创建 Bot「${created.name}」`);
       try {
         const conv = await openPrimaryConversation(created.id);
-        chatScrollRef.stickToBottom = true;
+        pinChatScroll();
         if (bridge) {
           bridge.conversationRef.current = conv;
           bridge.messagesByConvRef.current.set(conv.id, []);

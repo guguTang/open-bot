@@ -71,7 +71,7 @@ export function FormField({
           editable={editable}
           autoCapitalize={autoCapitalize}
           keyboardType={keyboardType}
-          className="min-h-[88px]"
+          className="min-h-22"
         />
       ) : (
         <Input

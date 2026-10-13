@@ -140,6 +140,7 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 	var eventName string
 	var pendingSummary string
 	var runID string
+	var usage runtimeUsage
 	reader := bufio.NewReader(resp.Body)
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -177,6 +178,11 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 							s.publishBotPresence(userID, conv.ID, agentID, "error")
 							return nil, errors.New(msg)
 						}
+					case "done":
+						usage = usageFromDonePayload(payload)
+						if rid := runIDFromRuntimeMeta(payload); rid != "" {
+							runID = rid
+						}
 					}
 				}
 			} else if trimmed == "" {
@@ -201,7 +207,8 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 		_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", reply, db.AddMessageOpts{RequestID: runID})
 	}
 	source := sourceHint(title)
-	_ = s.db.RecordUsageRun("", userID, agentID, conv.ID, source, 0, 0, 0)
+	_ = s.db.RecordUsageRun("", userID, agentID, conv.ID, source,
+		usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
 	s.publishBotPresence(userID, conv.ID, agentID, "idle")
 	return &runOnceResult{
 		ConversationID: conv.ID,

@@ -1,10 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { codeInspectorPlugin } from "code-inspector-plugin";
 import { fileURLToPath, URL } from "node:url";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   appType: "spa",
-  plugins: [react()],
+  plugins: [
+    // Dev-only: Option+Shift (macOS) / Alt+Shift hover to jump to source.
+    command === "serve" &&
+      codeInspectorPlugin({
+        bundler: "vite",
+      }),
+    react(),
+  ],
   clearScreen: false,
   resolve: {
     dedupe: ["react", "react-dom", "antd", "@ant-design/icons"],
@@ -21,4 +29,4 @@ export default defineConfig({
     host: "127.0.0.1",
     strictPort: true,
   },
-});
+}));

@@ -103,7 +103,11 @@ async def run_durable_events(
         meta.setdefault("run_id", rid)
         meta.update({"thread_id": tid, "resumed": True, "durable": True})
         for frame in idempotent_done_frames(
-            meta=meta, final=str(values.get("final_text") or ""), rid=rid, tid=tid
+            meta=meta,
+            final=str(values.get("final_text") or ""),
+            rid=rid,
+            tid=tid,
+            usage=values.get("usage") if isinstance(values.get("usage"), dict) else None,
         ):
             yield frame
         return
@@ -271,7 +275,11 @@ async def run_durable_events(
         if root_obs is not None:
             lf.update_obs(root_obs, output=lf.truncate(final_text))
         await journal.set_status("done")
-        for frame in success_done_frames(rid=rid, tid=tid):
+        for frame in success_done_frames(
+            rid=rid,
+            tid=tid,
+            usage=values.get("usage") if isinstance(values.get("usage"), dict) else None,
+        ):
             yield frame
     except GraphInterrupt as gi:
         tracing.mark_interrupt(root_obs, "graph_interrupt")

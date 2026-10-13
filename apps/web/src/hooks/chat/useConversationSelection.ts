@@ -12,7 +12,7 @@ import {
 import type { LastActiveSelection } from "../../types/app-ui";
 import type { MessagesByConv, PatchConvMessages } from "../../lib/app/conversationMessages";
 import {
-  chatScrollRef,
+  pinChatScroll,
   setChatSwitchPending,
   setMessages,
   setPendingFiles,
@@ -56,7 +56,7 @@ export function useConversationSelection(deps: {
 
   const applyConversationView = useCallback(
     (conv: Conversation, apiMsgs?: Message[], nameLookup?: Map<string, string> | Agent[]) => {
-      chatScrollRef.stickToBottom = true;
+      pinChatScroll();
       // Sync ref immediately so in-flight tokens for the previous conv cannot paint into this view.
       deps.conversationRef.current = conv;
       deps.setConversation(conv);
@@ -109,7 +109,7 @@ export function useConversationSelection(deps: {
       setPendingFiles([]);
       deps.setStatus("");
       // Drop previous conv immediately so stream patches cannot re-paint old bubbles under the new header.
-      chatScrollRef.stickToBottom = true;
+      pinChatScroll();
       setChatSwitchPending(true);
       deps.conversationRef.current = null;
       deps.setConversation(null);
@@ -167,7 +167,7 @@ export function useConversationSelection(deps: {
         setSending(false);
         setRunLabel("正在思考…");
         deps.setMobileView("chat");
-        chatScrollRef.stickToBottom = true;
+        pinChatScroll();
         setChatSwitchPending(true);
         // Drop previous conv immediately so old bubbles cannot linger under the new channel header.
         deps.conversationRef.current = null;

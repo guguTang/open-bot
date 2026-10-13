@@ -256,8 +256,8 @@ body,
 }
 /* ---- Main ---- */
 .main {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  /* Overlays (topbar / composer) float; the transcript is the only scroller. */
+  display: block;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -273,7 +273,19 @@ body,
   gap: 16px;
   padding: 14px 24px 8px;
   border-bottom: none;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  box-sizing: border-box;
+  background: transparent;
+  /* Empty header lets the transcript scroll; controls stay clickable. */
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
 }
 
 .agent-pill {
@@ -314,10 +326,21 @@ body,
 }
 
 .messages {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain; /* wheel does not chain to page/sidebar */
-  padding: 12px 24px 120px;
+  box-sizing: border-box;
+  background: transparent;
+  /* Clear the floating chrome at rest; content still scrolls through it. */
+  padding-top: calc(var(--chat-top-overlay, 64px) + 12px);
+  padding-right: 24px;
+  padding-bottom: calc(var(--chat-composer-overlay, 96px) + 16px);
+  padding-left: 24px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -664,21 +687,40 @@ body,
   padding: 0;
 }
 
-.status {
+.main > .status {
+  position: absolute;
+  top: var(--chat-top-overlay, 64px);
+  left: 0;
+  right: 0;
+  z-index: 9;
   padding: 6px 24px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+  background: transparent;
+  pointer-events: none;
 }
 
 /* ---- Composer ---- */
 .composer-wrap {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  box-sizing: border-box;
   padding: 0 24px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  background: transparent;
+  /* Empty dock lets the transcript scroll; the card and buttons stay interactive. */
+  pointer-events: none;
+}
+
+.composer-wrap > * {
+  pointer-events: auto;
 }
 
 .approval-gate-card {
@@ -986,7 +1028,6 @@ dialog.modal-backdrop:not([open]) {
 
 .modal-backdrop > .modal,
 .modal-backdrop > .preview-modal,
-.modal-backdrop > .clone-agent-modal,
 .modal-backdrop > .group-channel-modal,
 .modal-backdrop > .bot-avatar-modal {
   position: relative;
@@ -1053,7 +1094,7 @@ dialog.modal-backdrop:not([open]) {
     display: none;
   }
   .app.mobile-chat .main {
-    display: grid;
+    display: block;
   }
   .app.mobile-chat .topbar-back {
     display: inline-flex;
@@ -1175,29 +1216,6 @@ button.ghost {
   align-items: center;
   gap: 8px;
   color: var(--text);
-}
-
-.clone-agent-modal { width: min(460px, 100%); }
-.clone-agent-modal .clone-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-}
-.clone-agent-modal .clone-section { margin-top: 12px; }
-.clone-agent-modal .clone-section-title {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 8px;
-}
-.clone-agent-modal .clone-section ul { margin: 4px 0 6px; font-size: 13px; }
-.clone-agent-modal label.check {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin-top: 6px;
 }
 
 .settings-dialog {
@@ -2431,16 +2449,6 @@ button.ghost {
 [data-theme="dark"] .composer-quote-text {
   color: #9ca3af;
 }
-/* Quote bar makes the composer taller: keep the thread panel clear of it. */
-.main:has(.composer-card.has-quote) .thread-panel {
-  bottom: 152px;
-}
-/* panel-compact */
-@media (max-width: 720px) {
-  .main:has(.composer-card.has-quote) .thread-panel {
-    bottom: 148px;
-  }
-}
 /* Quote × hit ≥44 under touch-ui and layout-narrow (desktop fine/wide keeps 28). */
 .touch-ui .composer-quote-clear,
 html.touch-ui .composer-quote-clear {
@@ -2466,8 +2474,8 @@ html.touch-ui .composer-quote-bar {
 .thread-panel {
   position: absolute;
   right: 12px;
-  top: 64px;
-  bottom: 110px;
+  top: calc(var(--chat-top-overlay, 64px) + 8px);
+  bottom: calc(var(--chat-composer-overlay, 96px) + 8px);
   width: min(420px, 92vw);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -2518,8 +2526,8 @@ dialog.thread-panel:not([open]) {
     left: 8px;
     right: 8px;
     width: auto;
-    top: 56px;
-    bottom: 100px;
+    top: calc(var(--chat-top-overlay, 56px) + 8px);
+    bottom: calc(var(--chat-composer-overlay, 96px) + 8px);
   }
   .msg-actions {
     opacity: 1;
@@ -2749,60 +2757,11 @@ dialog.thread-panel:not([open]) {
   margin-top: 4px;
 }
 
-.train-panel-modal { max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; }
-.train-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--border, #e2e5ea);
-}
-.train-tab {
-  border: none;
-  background: transparent;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #6b7280;
-  border-bottom: 2px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.train-tab.active {
-  color: #1f2937;
-  border-bottom-color: #457b9d;
-  font-weight: 600;
-}
-.train-tab-count {
-  font-size: 11px;
-  background: #e5e7eb;
-  border-radius: 999px;
-  padding: 1px 6px;
-}
-.train-list {
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 120px;
-}
-.train-empty { padding: 24px 8px; text-align: center; font-size: 13px; }
-.train-card {
-  border: 1px solid var(--border, #e2e5ea);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #fafbfc;
-}
-.train-card-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-.train-card-body { margin-bottom: 6px; white-space: pre-wrap; }
-.train-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.train-edit { display: flex; flex-direction: column; gap: 10px; }
 .train-entry-btn {
   margin-left: 6px;
   font-size: 12px !important;
   padding: 2px 8px !important;
 }
-.danger-text { color: #b91c1c !important; }
 .msg-action-feedback { color: #b45309; }
 
 /* === Message hover action bar (desktop) — base === */
@@ -3041,36 +3000,8 @@ dialog.action-sheet-root:not([open]) {
     min-height: 44px;
   }
 
-  /* Train fullscreen */
-  .train-backdrop {
-    padding: 0;
-    align-items: stretch;
-  }
-  .train-panel-modal {
-    max-width: none !important;
-    width: 100%;
-    height: 100%;
-    max-height: none;
-    margin: 0;
-    border-radius: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .train-list {
-    flex: 1;
-    min-height: 0;
-  }
-  .train-tab,
-  .train-card-actions .primary,
-  .train-card-actions .ghost,
   .train-entry-btn {
     min-height: 44px;
-  }
-  .train-edit .feedback-actions {
-    position: sticky;
-    bottom: 0;
-    background: #fff;
-    padding-bottom: calc(8px + var(--safe-bottom, 0px));
   }
 }
 
@@ -3916,16 +3847,14 @@ html.touch-ui .composer-quote-clear {
   overscroll-behavior: contain;
   box-sizing: border-box;
   background: transparent;
-  /* top: safe + topbar row; bottom: composer + home indicator */
-  padding-top: calc(max(16px, calc(var(--safe-top, 0px) + 12px)) + var(--chat-top-chrome, 48px));
-  padding-bottom: calc(max(12px, var(--safe-bottom, 0px)) + var(--chat-composer-chrome, 72px));
+  /* Measured chrome already includes safe-area; fallbacks cover first paint. */
+  padding-top: calc(var(--chat-top-overlay, calc(max(16px, calc(var(--safe-top, 0px) + 12px)) + var(--chat-top-chrome, 48px))) + 8px);
+  padding-bottom: calc(var(--chat-composer-overlay, calc(max(12px, var(--safe-bottom, 0px)) + var(--chat-composer-chrome, 72px))) + 12px);
   padding-left: 16px;
   padding-right: 16px;
 }
 
-/* Minimal floating top chrome (bot-chat-top-chrome-float-v1):
- * NO full-width frosted band — transparent header + short soft fade;
- * frost/bg only on individual controls (← circle, Bot pill). */
+/* Minimal floating top chrome: transparent header, frost only on controls. */
 .app.shell-narrow.mobile-chat .main > .topbar {
   position: absolute;
   top: 0;
@@ -3951,35 +3880,9 @@ html.touch-ui .composer-quote-clear {
 .app.shell-narrow.mobile-chat .main > .topbar > * {
   pointer-events: auto;
 }
-/* Short soft top fade (~24–40px per float-v1) — conversation shows through; not a slab */
+/* No full-width fade — the transcript scrolls through the transparent header. */
 .app.shell-narrow.mobile-chat .main > .topbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 36px; /* locked ~24–40px; independent of full chrome height */
-  pointer-events: none;
-  z-index: -1;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--chat-immersive-bg, #fff) 70%, transparent) 0%,
-    color-mix(in srgb, var(--chat-immersive-bg, #fff) 22%, transparent) 60%,
-    transparent 100%
-  );
-}
-[data-theme="dark"] .app.shell-narrow.mobile-chat .main > .topbar::after {
-  background: linear-gradient(
-    180deg,
-    rgba(17, 17, 19, 0.65) 0%,
-    rgba(17, 17, 19, 0.18) 60%,
-    transparent 100%
-  );
-}
-@supports not (background: color-mix(in srgb, white 50%, transparent)) {
-  .app.shell-narrow.mobile-chat .main > .topbar::after {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.15) 60%, transparent 100%);
-  }
+  content: none;
 }
 
 /* Frost/bg on floating ← circle only;
@@ -4041,7 +3944,7 @@ html.touch-ui .composer-quote-clear {
   background: transparent;
 }
 
-/* Frosted overlay composer — messages scroll behind; controls clear nav/gesture */
+/* Transparent composer dock — messages scroll behind; controls clear nav/gesture */
 .app.shell-narrow.mobile-chat .main > .composer-wrap {
   position: absolute;
   left: 0;
@@ -4052,31 +3955,16 @@ html.touch-ui .composer-quote-clear {
   box-sizing: border-box;
   width: 100%;
   padding: 0 12px max(12px, var(--safe-bottom, 0px));
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    color-mix(in srgb, var(--chat-immersive-bg, #fff) 55%, transparent) 28%,
-    color-mix(in srgb, var(--chat-immersive-bg, #fff) 92%, transparent) 100%
-  );
-  backdrop-filter: blur(12px) saturate(1.1);
-  -webkit-backdrop-filter: blur(12px) saturate(1.1);
-  pointer-events: none; /* let scroll reach messages in gradient fade */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none; /* let scroll reach messages through the transparent dock */
 }
 .app.shell-narrow.mobile-chat .main > .composer-wrap > * {
   pointer-events: auto;
 }
 [data-theme="dark"] .app.shell-narrow.mobile-chat .main > .composer-wrap {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(17, 17, 19, 0.55) 28%,
-    rgba(17, 17, 19, 0.94) 100%
-  );
-}
-@supports not (background: color-mix(in srgb, white 50%, transparent)) {
-  .app.shell-narrow.mobile-chat .main > .composer-wrap {
-    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.88) 40%, rgba(255,255,255,0.96) 100%);
-  }
+  background: transparent;
 }
 
 /* Thread panel stays a modal overlay above immersive layers */

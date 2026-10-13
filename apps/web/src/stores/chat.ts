@@ -10,6 +10,7 @@
 import { create } from "zustand";
 import type { ComposerReplyTarget, PendingFile } from "../components/Composer";
 import type { UiMessage } from "../types/app-ui";
+import { pinStick, type ScrollStick } from "../lib/scrollStick";
 import { usePresenceStore } from "./presence";
 import { useShellStore } from "./shell";
 import { useWorkspaceStore } from "./workspace";
@@ -59,16 +60,17 @@ export const useChatStore = create<ChatStore>()((set) => ({
   ...initialChat,
   resetChat: () => {
     replyTargetRef.current = null;
-    chatScrollRef.stickToBottom = true;
-    set({ ...initialChat });
+    const pin = pinStick();
+    chatScrollRef.stickToBottom = pin.stickToBottom;
+    set({ ...initialChat, showScrollBottom: pin.showScrollBottom });
   },
 }));
 
 /** 发送路径要同步读到回复目标，不能等下一次渲染。setter 会立刻写这里。 */
 export const replyTargetRef: { current: ComposerReplyTarget | null } = { current: null };
 
-/** 用户是否贴在底部。滚动位置是瞬态的，不进 React state。 */
-export const chatScrollRef = { stickToBottom: true };
+/** 用户是否贴在底部。滚动位置是瞬态的，不进 React state。初值与 pinStick 一致。 */
+export const chatScrollRef = { stickToBottom: pinStick().stickToBottom };
 
 type Updater<T> = T | ((prev: T) => T);
 
@@ -107,9 +109,13 @@ export function setReplyTarget(value: Updater<ComposerReplyTarget | null>) {
   replyTargetRef.current = useChatStore.getState().replyTarget;
 }
 
+export function applyScrollStick(next: ScrollStick) {
+  chatScrollRef.stickToBottom = next.stickToBottom;
+  setShowScrollBottom(next.showScrollBottom);
+}
+
 export function pinChatScroll() {
-  chatScrollRef.stickToBottom = true;
-  setShowScrollBottom(false);
+  applyScrollStick(pinStick());
 }
 
 export function resetChatSession() {

@@ -1,7 +1,13 @@
-import type { Agent, Channel } from "../../api";
+import type { Agent } from "../../api";
 import type { UiMessage } from "../../types/app-ui";
 
-export function indexMessages(messages: UiMessage[]) {
+export type IndexedMessages = {
+  messageById: Map<string, UiMessage>;
+  replyCountByRoot: Map<string, number>;
+  mainTimeline: UiMessage[];
+};
+
+export function indexMessages(messages: UiMessage[]): IndexedMessages {
   const messageById = new Map<string, UiMessage>();
   const replyCountByRoot = new Map<string, number>();
   const mainTimeline: UiMessage[] = [];
@@ -76,58 +82,6 @@ export function speakerFaceForMessage(
   };
 }
 
-export function memberAgents(activeChannel: Channel | null | undefined, agents: Agent[]): Agent[] | undefined {
-  if (!activeChannel?.members?.length) return undefined;
-  return activeChannel.members
-    .map((id): Agent | undefined => {
-      const a = agents.find((x) => x.id === id);
-      if (!a) return undefined;
-      const p = activeChannel.member_profiles?.find((x) => x.agent_id === id);
-      return {
-        ...a,
-        avatar_shape: a.avatar_shape || p?.avatar_shape,
-        avatar_color: a.avatar_color || p?.avatar_color,
-      };
-    })
-    .filter((a): a is Agent => Boolean(a));
-}
-
-/**
- * Resolve shape/color/name for RunStatus AgentAvatar by answering agent_id.
- * Group decision / AutoPick (empty faceAgentId): undefined → neutral generic face
- * (never list-focus activeAgent — that was the random-member animation bug).
- * DM still falls back to activeAgent.
- */
-export function resolveRunFaceAgent(
-  runFaceAgentId: string,
-  activeAgent: Agent | null | undefined,
-  agents: Agent[],
-  activeChannel: Channel | null | undefined,
-  agentNameById: Map<string, string>,
-): Agent | null | undefined {
-  const isGroup = Boolean(activeChannel);
-  const id = (runFaceAgentId || "").trim();
-  if (!id) {
-    // Group AutoPick window: keep neutral until agent_start sets faceAgentId.
-    if (isGroup) return undefined;
-    return activeAgent;
-  }
-  const fromGroup = (memberAgents(activeChannel, agents) || []).find((a) => a.id === id);
-  if (fromGroup) return fromGroup;
-  const a = agents.find((x) => x.id === id);
-  if (a) return a;
-  const p = activeChannel?.member_profiles?.find((x) => x.agent_id === id);
-  if (p) {
-    return {
-      id,
-      name: p.name || agentNameById.get(id) || id,
-      avatar_shape: p.avatar_shape,
-      avatar_color: p.avatar_color,
-    } as Agent;
-  }
-  return { id, name: agentNameById.get(id) || id } as Agent;
-}
-
 export function replyTargetFromMessage(message: UiMessage, agentNameById: Map<string, string>) {
   const who =
     message.role === "assistant"
@@ -141,12 +95,4 @@ export function replyTargetFromMessage(message: UiMessage, agentNameById: Map<st
     .trim()
     .slice(0, 120);
   return { id: message.id, who, text: text || "（无正文）" };
-}
-
-export function jumpToMessage(id: string) {
-  const el = document.querySelector(`[data-msg-id="${CSS.escape(id)}"]`);
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  el.classList.add("msg-highlight");
-  window.setTimeout(() => el.classList.remove("msg-highlight"), 1200);
 }

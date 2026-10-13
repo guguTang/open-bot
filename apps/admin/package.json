@@ -21,6 +21,7 @@
     "@codemirror/legacy-modes": "^6.5.4",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
+    "@lobehub/icons": "^5.23.1",
     "antd": "^5.29.3",
     "es-toolkit": "^1.52.0",
     "lucide-react": "^0.544.0",
@@ -32,6 +33,7 @@
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
+    "code-inspector-plugin": "^2.0.9",
     "typescript": "^5.9.2",
     "vite": "^7.1.5"
   }

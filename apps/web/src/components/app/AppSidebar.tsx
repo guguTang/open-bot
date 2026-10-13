@@ -1,7 +1,7 @@
 import { ChevronDown, Copy, Plus, Search, Settings } from "lucide-react";
 import { memo, useDeferredValue, useMemo } from "react";
 import type { Agent, Channel } from "../../api";
-import { toolNameLooksLikeSearch } from "../avatarColor";
+import { runSearchHints } from "../../lib/runFace";
 import { AccountMenu } from "../AccountMenu";
 import { AgentAvatar } from "../AgentAvatar";
 import { useIsNarrowLayout, useIsTouchUi, useSheetFormUi } from "../useIsTouchUi";
@@ -81,7 +81,13 @@ function AppSidebarInner() {
   const actions = sessionActions();
   const activeAgent = resolveActiveAgent(agentId, agents);
   const agentNameById = useMemo(() => agentNameMap(agents), [agents]);
-  const searchingHintNow = toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(hostActivity);
+  const searchHints = runSearchHints({
+    faceAgentId: runFaceAgentId,
+    isGroup: Boolean(conversation?.channel_id),
+    activeAgentId: activeAgent?.id,
+    runActiveTool,
+    hostActivity,
+  });
   const isBotOnline = (id?: string | null, snapshot?: boolean) => botIsOnline(onlineByAgent, agents, id, snapshot);
   const deferredConvSearch = useDeferredValue(convSearch);
   const convItems = useMemo(() => {
@@ -186,12 +192,7 @@ function AppSidebarInner() {
                   shape={identityFocus.avatar_shape}
                   color={identityFocus.avatar_color}
                   status={presenceByAgent[identityFocus.id] || "idle"}
-                  searchingHint={Boolean(
-                    (runFaceAgentId
-                      ? identityFocus.id === runFaceAgentId
-                      : !conversation?.channel_id && activeAgent && identityFocus.id === activeAgent.id) &&
-                      searchingHintNow,
-                  )}
+                  searchingHint={searchHints.listAgentSearching(identityFocus.id)}
                   online={isBotOnline(identityFocus.id)}
                   onClick={() => sessionActions().openAvatarSettings(identityFocus)}
                 />
@@ -294,12 +295,7 @@ function AppSidebarInner() {
                     shape={a.avatar_shape}
                     color={a.avatar_color}
                     status={presenceByAgent[a.id] || "idle"}
-                    searchingHint={Boolean(
-                      (runFaceAgentId
-                        ? a.id === runFaceAgentId
-                        : !conversation?.channel_id && activeAgent && a.id === activeAgent.id) &&
-                        searchingHintNow,
-                    )}
+                    searchingHint={searchHints.listAgentSearching(a.id)}
                     online={isBotOnline(a.id)}
                     onClick={() => sessionActions().openAvatarSettings(a)}
                   />
