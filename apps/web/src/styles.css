@@ -1198,52 +1198,43 @@ button.ghost {
   max-height: calc(100vh - 32px);
   padding: 0;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   border: none;
-  border-radius: 20px;
-  background: #fff;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.settings-tabs {
+  /* Override Tabs root `flex` utility so the sidebar/content grid wins. */
+  display: grid !important;
+  grid-template-columns: 200px auto minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.settings-tabs-separator {
+  align-self: stretch;
+  height: auto;
 }
 
 .settings-nav {
-  background: #f4f4f6;
+  background: var(--bg-soft);
   padding: 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
 }
 
-.settings-dialog .settings-nav button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin: 0;
-  border: none;
-  background: transparent;
-  color: #1a1a1b;
-  border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-}
-
-.settings-dialog .settings-nav button svg {
-  color: #4b5563;
+.settings-nav [data-slot="tabs-trigger"] svg {
+  color: var(--muted);
   flex-shrink: 0;
 }
 
-.settings-dialog .settings-nav button:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.settings-dialog .settings-nav button.active {
-  background: #e4e4e7;
-  color: #111;
+.settings-nav [data-slot="tabs-trigger"][data-state="active"] svg {
+  color: var(--text);
 }
 
 .settings-main {
@@ -1251,7 +1242,7 @@ button.ghost {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: #fff;
+  background: var(--bg-elevated);
 }
 
 .settings-main-head {
@@ -1263,30 +1254,19 @@ button.ghost {
   flex-shrink: 0;
 }
 
-.settings-main-head h2 {
+.settings-main-head [data-slot="dialog-title"] {
   margin: 0;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
 }
 
 .settings-dialog .settings-close {
   width: 32px;
   height: 32px;
   margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: #6b7280;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
+  color: var(--muted);
 }
 
 .settings-dialog .settings-close:hover {
-  background: #f3f4f6;
-  color: #111;
+  color: var(--text);
 }
 
 .settings-main-body {
@@ -1294,9 +1274,12 @@ button.ghost {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 8px 28px 28px;
   scrollbar-width: thin;
-  scrollbar-color: #c4c9d1 transparent;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.settings-main-body-inner {
+  padding: 8px 28px 28px;
 }
 
 .settings-section {
@@ -1494,6 +1477,19 @@ button.ghost {
   align-items: flex-start;
 }
 
+/* Desktop settings: allow long meta lines to wrap (sidebar .agent-desc stays nowrap) */
+.settings-card > .llm-list > .llm-item > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.settings-card .agent-desc {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 .settings-card > .llm-list > .llm-item:last-child {
   border-bottom: none;
 }
@@ -1580,10 +1576,13 @@ button.ghost {
 /* panel-compact (max-width: 720px): settings top nav row */
 @media (max-width: 720px) {
   .settings-dialog {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
     width: min(100%, calc(100vw - 16px));
     height: min(92vh, 760px);
+  }
+
+  .settings-tabs {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .settings-nav {
@@ -1592,12 +1591,7 @@ button.ghost {
     padding: 10px;
   }
 
-  .settings-dialog .settings-nav button {
-    width: auto;
-    white-space: nowrap;
-  }
-
-  .settings-main-body,
+  .settings-main-body-inner,
   .settings-main-head {
     padding-left: 16px;
     padding-right: 16px;
@@ -3441,8 +3435,15 @@ html.capacitor-native {
   background: #f2f2f7;
   border: none;
   box-shadow: none;
-  grid-template-columns: 1fr !important;
-  grid-template-rows: auto minmax(0, 1fr) !important;
+}
+
+.settings-dialog-shell .settings-tabs {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.settings-dialog-shell .settings-tabs-separator {
+  display: none;
 }
 
 [data-theme="dark"] .settings-dialog-shell {
@@ -3459,11 +3460,6 @@ html.capacitor-native {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.settings-dialog-shell .settings-main-body {
-  background: transparent;
-  padding: 8px 16px max(16px, var(--safe-bottom, 0px));
 }
 
 .settings-dialog-shell .settings-card {
@@ -4211,7 +4207,12 @@ html.touch-ui .composer-quote-clear {
   grid-template-rows: none !important;
 }
 
-.settings-dialog-shell > .settings-main {
+.settings-dialog-shell > .settings-tabs {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.settings-dialog-shell .settings-main {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -4225,10 +4226,14 @@ html.touch-ui .composer-quote-clear {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 16px 0;
+  background: transparent;
+}
+
+.settings-dialog-shell .settings-main-body-inner {
   display: flex;
   flex-direction: column;
-  background: transparent;
+  padding: 8px 16px 0;
+  min-height: 100%;
 }
 
 .settings-dialog-shell .settings-page {

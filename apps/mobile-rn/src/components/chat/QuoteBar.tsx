@@ -16,8 +16,13 @@ type QuoteTarget = {
 };
 
 type Props = {
-  replyTo: QuoteTarget | null;
+  replyTo: QuoteTarget;
   onClose: () => void;
+  /**
+   * 嵌在作曲卡内时用单行紧凑版（对齐 Web composer-quote-bar）；
+   * 独立放置时保留双行摘要。
+   */
+  compact?: boolean;
 };
 
 /** 摘要：压掉换行再截断，否则一整段代码块会把引用条撑成一大块。 */
@@ -30,17 +35,27 @@ function summarize(content: string): string {
 /**
  * 引用条：正在回复谁。
  *
- * 对齐 Web 端 `Composer.tsx` 的 `composer-quote-bar`，但 Web 用单行
- * `title` 提示原文，RN 没有悬浮提示，所以这里多截一段摘要直接铺在条上 ——
- * 长按消息时能确认自己到底要回哪条，比一个问号图标有用得多。
+ * 对齐 Web 端 `composer-quote-bar`。compact 时单行「回复 X · 摘要」，
+ * 否则双行铺开，方便独立确认目标。
  */
-export function QuoteBar({ replyTo, onClose }: Props): JSX.Element | null {
-  if (!replyTo) return null;
-
+export function QuoteBar({ replyTo, onClose, compact }: Props): JSX.Element {
   const speaker = replyTo.role === "user" ? "你" : replyTo.agentName || "助手";
+  const summary = summarize(replyTo.content);
+
+  if (compact) {
+    return (
+      <View className="flex-row items-center gap-2 px-3 py-2.5">
+        <Icon name="return-down-forward-outline" size={16} tone="muted" />
+        <Typography.Paragraph color="muted" className="flex-1 text-[13px]" numberOfLines={1}>
+          回复 {speaker} · {summary}
+        </Typography.Paragraph>
+        <CloseButton onPress={onClose} accessibilityLabel="取消回复" />
+      </View>
+    );
+  }
 
   return (
-    <View className="mb-1.5 flex-row items-center gap-2 rounded-xl bg-surface-secondary px-3 py-2">
+    <View className="flex-row items-center gap-2 rounded-xl bg-surface-secondary px-3 py-2">
       <Icon name="return-down-forward-outline" size={16} tone="muted" />
 
       <View className="flex-1 gap-0.5">
@@ -48,7 +63,7 @@ export function QuoteBar({ replyTo, onClose }: Props): JSX.Element | null {
           回复 {speaker}
         </Typography.Paragraph>
         <Typography.Paragraph className="text-xs" numberOfLines={2}>
-          {summarize(replyTo.content)}
+          {summary}
         </Typography.Paragraph>
       </View>
 

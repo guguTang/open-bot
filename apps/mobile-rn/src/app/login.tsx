@@ -12,6 +12,7 @@ import type { JSX } from "react";
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 
+import { formatApiNetworkError } from "@/api/config";
 import { Icon } from "@/components/Icon";
 import { OIDCLoginCancelled, isOIDCEnabled, loginWithOIDC } from "@/lib/oidc";
 import { useSession } from "@/providers/session";
@@ -24,7 +25,7 @@ import { useSession } from "@/providers/session";
  *   并不能帮用户理解这是什么。
  * - 字段不挂可见 label，靠 placeholder + `accessibilityLabel` 表达。
  *   两个字段（用户名 / 密码）本身就说明了要填什么。
- * - 页脚不显示 API 地址。那是部署配置，不是登录信息。
+ * - 页脚默认不显示 API 地址；仅在网络连接失败时附带当前地址，方便对照设置。
  *
  * Casdoor 入口沿用 Web 端的语义：服务端没启用就整个不渲染，而不是置灰。
  * 置灰按钮等于告诉每个用户「有个东西你用不了」，没启用的部署不该看到这个。
@@ -57,12 +58,17 @@ export default function LoginScreen(): JSX.Element {
     };
   }, []);
 
+  // 已登录却停在登录页（例如冷启动恢复会话后仍落到 /login）时再跳走。
+  // 必须放 effect：渲染期调 router.replace 会更新 NavigationContainer，触发
+  // “Cannot update a component while rendering a different component”。
+  useEffect(() => {
+    if (!restoring && user) {
+      router.replace("/chats");
+    }
+  }, [restoring, user, router]);
+
   // 两条路径共用一把锁：系统浏览器会话期间表单按钮也该是禁用的
   const locked = busy || oidcBusy;
-
-  if (!restoring && user) {
-    router.replace("/chats");
-  }
 
   async function submit(): Promise<void> {
     if (locked) return;
@@ -76,7 +82,7 @@ export default function LoginScreen(): JSX.Element {
     try {
       await (mode === "in" ? signIn(username.trim(), password) : signUp(username.trim(), password));
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "请求失败，请检查网络后重试");
+      setFormError(formatApiNetworkError(err));
     } finally {
       setBusy(false);
     }

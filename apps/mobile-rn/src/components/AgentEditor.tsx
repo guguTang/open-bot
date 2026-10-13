@@ -7,7 +7,13 @@ import * as api from "@/api";
 import type { Agent, AgentInput, Machine } from "@/api/types";
 import { FormField, SectionTitle } from "@/components/FormField";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { AVATAR_COLOR_PALETTE, AVATAR_SHAPES, type AvatarShape } from "@/lib/avatar";
+import {
+  AVATAR_COLOR_PALETTE,
+  AVATAR_SHAPE_LABELS,
+  AVATAR_SHAPES,
+  normalizeShape,
+  type AvatarShape,
+} from "@/lib/avatar";
 
 const DEFAULT_PROMPT = "你是一个乐于助人的 AI 助手，默认使用中文回答。";
 
@@ -62,7 +68,7 @@ function AgentForm({
   const [description, setDescription] = useState(agent?.description ?? "");
   const [systemPrompt, setSystemPrompt] = useState(agent?.system_prompt ?? "");
   const [shape, setShape] = useState<AvatarShape | null>(
-    agent?.avatar_shape && agent.avatar_shape.trim() ? (agent.avatar_shape as AvatarShape) : null
+    normalizeShape(agent?.avatar_shape) ?? null
   );
   const [color, setColor] = useState<string | null>(agent?.avatar_color ?? null);
   const [machineId, setMachineId] = useState(agent?.machine_id ?? "");
@@ -156,7 +162,7 @@ function AgentForm({
                 color={color}
               />
               <Typography.Paragraph color="muted" className="flex-1 text-xs">
-                选一个剪影和主色，桌面和手机上会显示成同一个样子。
+                选一个外形和主色，桌面和手机上会显示成同一个动态机器人头像。
               </Typography.Paragraph>
             </View>
 
@@ -166,7 +172,7 @@ function AgentForm({
                   key={s}
                   onPress={() => setShape((prev) => (prev === s ? null : s))}
                   accessibilityRole="button"
-                  accessibilityLabel={`形状 ${s}`}
+                  accessibilityLabel={`形状 ${AVATAR_SHAPE_LABELS[s]}`}
                   accessibilityState={{ selected: shape === s }}
                   className={
                     shape === s

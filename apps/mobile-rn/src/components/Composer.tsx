@@ -4,12 +4,14 @@ import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { Icon } from "@/components/Icon";
-import { avatarColor, avatarForeground, avatarInitials, formatSize } from "@/lib/format";
+import { QuoteBar } from "@/components/chat/QuoteBar";
+import { avatarColor, avatarForeground, avatarInitials } from "@/lib/avatar";
+import { formatSize } from "@/lib/format";
 import { validateAttachment, type PickedFile } from "@/lib/attachments";
 
 export type MentionMember = { id: string; name: string; description?: string };
 
-/** 被引用的消息；聊天页把它渲染成作曲框上方的引用条。 */
+/** 被引用的消息；渲染成作曲卡内的引用条。 */
 export type QuoteTarget = { id: string; role: string; agentName?: string; content: string };
 
 export type SkillOption = { name: string; description?: string };
@@ -43,6 +45,9 @@ type Props = {
   mcpServers?: { name: string }[];
   /** 附件上传中，禁用一切交互 */
   busy?: boolean;
+  /** 正在回复的目标；非空时作曲卡顶部显示引用条（对齐 Web composer-card） */
+  replyTo?: QuoteTarget | null;
+  onClearReply?: () => void;
 };
 
 type MentionState = { start: number; query: string };
@@ -112,9 +117,8 @@ function MentionAvatar({ member }: { member: MentionMember }): JSX.Element {
 /**
  * 作曲栏：附件 + 多行输入 + @点名 + 发送/停止。
  *
- * 与 Web 端 `Composer.tsx` 的行为差异：
- * - 附件入口多一步「文件 / 相册」选择（RN 没有 `<input type=file>`）
- * - @候试用**点选**而非方向键（移动端没有物理方向键）
+ * 视觉对齐 Web `composer-bar`：圆角卡、引用条内嵌、输入无独立边框。
+ * 行为差异：附件多一步来源选择；@ 候选用点选而非方向键。
  */
 export function Composer({
   value,
@@ -134,6 +138,8 @@ export function Composer({
   routines = [],
   mcpServers = [],
   busy,
+  replyTo = null,
+  onClearReply,
 }: Props): JSX.Element {
   const [mention, setMention] = useState<MentionState | null>(null);
   const [slash, setSlash] = useState<MentionState | null>(null);
@@ -246,7 +252,7 @@ export function Composer({
     : `给 ${agentName || "助手"} 发消息`;
 
   return (
-    <View className="gap-2 px-4 pt-3">
+    <View className="gap-2 px-3 pt-2">
       {files.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2 pr-2">
@@ -315,7 +321,6 @@ export function Composer({
         </ScrollView>
       ) : null}
 
-      {/* `/` 技能补全。插入的是「请 load_skill X」，最终由助手自己决定怎么用。 */}
       {slash && slashOptions.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2 pr-2">
@@ -342,90 +347,99 @@ export function Composer({
         </ScrollView>
       ) : null}
 
-      <View className="flex-row items-end gap-1">
-        {/* 附件入口同时是底部动作表的 trigger —— 一个控件两段语义，
-            比「点加号 → 弹 Dialog → 再选来源」少一次往返。 */}
-        {/* presentation 必须和 Menu.Content 一致：heroui-native 在 __DEV__ 下
-            会校验两者相等，不等直接 throw。Root 的默认值是 popover，
-            而这里要的是底部动作表，两处都得显式写。 */}
-        <Menu presentation="bottom-sheet">
-          <Menu.Trigger isDisabled={locked || sending}>
+      {/* 圆角作曲卡：引用条与输入共用一块 surface，对齐 Web composer-card */}
+      <View className="overflow-hidden rounded-3xl border border-border bg-surface">
+        {replyTo && onClearReply ? (
+          <>
+            <QuoteBar replyTo={replyTo} onClose={onClearReply} compact />
+            <View className="mx-4 h-px bg-border" />
+          </>
+        ) : null}
+
+        <View className="flex-row items-end gap-0.5 px-1.5 py-1.5">
+          <Menu presentation="bottom-sheet">
+            <Menu.Trigger isDisabled={locked || sending}>
+              <Button
+                isIconOnly
+                variant="ghost"
+                accessibilityLabel="添加附件"
+                isDisabled={locked || sending}
+                className="rounded-full bg-default"
+              >
+                <Icon name="attach-outline" size={20} tone="muted" />
+              </Button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content presentation="bottom-sheet">
+                <Menu.Label>添加附件</Menu.Label>
+                <Menu.Item onPress={() => onRequestAttach("files")}>
+                  <Menu.ItemTitle>从文件中选择</Menu.ItemTitle>
+                </Menu.Item>
+                <Menu.Item onPress={() => onRequestAttach("images")}>
+                  <Menu.ItemTitle>从相册选择</Menu.ItemTitle>
+                </Menu.Item>
+                <Menu.Item onPress={() => onRequestAttach("camera")}>
+                  <Menu.ItemTitle>拍照</Menu.ItemTitle>
+                </Menu.Item>
+                <Typography.Paragraph color="muted" className="px-4 pt-3 pb-1 text-xs">
+                  支持图片、文本、pdf、json、md、csv 与代码文件，单个不超过 20MB
+                </Typography.Paragraph>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+
+          <Input
+            variant="secondary"
+            className="min-h-11 flex-1 border-0 bg-transparent px-2"
+            containerClassName="flex-1"
+            value={value}
+            onChangeText={handleChange}
+            onSelectionChange={(e) => {
+              const next = e.nativeEvent.selection.end;
+              setCaret(next);
+              if (hasMentionSources) {
+                setMention(detectMention(value, next));
+              }
+              setSlash(skills.length > 0 ? detectSlash(value, next) : null);
+            }}
+            placeholder={placeholder}
+            multiline
+            editable={!disabled && !busy}
+            onSubmitEditing={() => {
+              if (sending) {
+                if (!canSend) onStop?.();
+              } else if (canSend) {
+                onSend();
+              }
+            }}
+          />
+
+          {sending ? (
             <Button
               isIconOnly
-              variant="ghost"
-              accessibilityLabel="添加附件"
-              isDisabled={locked || sending}
+              variant="danger-soft"
+              onPress={() => onStop?.()}
+              accessibilityLabel="停止生成"
+              className="rounded-full"
             >
-              <Icon name="attach-outline" size={22} />
+              <Icon name="stop" size={18} tone="danger-soft-foreground" />
             </Button>
-          </Menu.Trigger>
-          <Menu.Portal>
-            <Menu.Content presentation="bottom-sheet">
-              <Menu.Label>添加附件</Menu.Label>
-              <Menu.Item onPress={() => onRequestAttach("files")}>
-                <Menu.ItemTitle>从文件中选择</Menu.ItemTitle>
-              </Menu.Item>
-              <Menu.Item onPress={() => onRequestAttach("images")}>
-                <Menu.ItemTitle>从相册选择</Menu.ItemTitle>
-              </Menu.Item>
-              <Menu.Item onPress={() => onRequestAttach("camera")}>
-                <Menu.ItemTitle>拍照</Menu.ItemTitle>
-              </Menu.Item>
-              <Typography.Paragraph color="muted" className="px-4 pt-3 pb-1 text-xs">
-                支持图片、文本、pdf、json、md、csv 与代码文件，单个不超过 20MB
-              </Typography.Paragraph>
-            </Menu.Content>
-          </Menu.Portal>
-        </Menu>
-
-        <Input
-          className="flex-1"
-          containerClassName="flex-1"
-          value={value}
-          onChangeText={handleChange}
-          onSelectionChange={(e) => {
-            const next = e.nativeEvent.selection.end;
-            setCaret(next);
-            if (hasMentionSources) {
-              setMention(detectMention(value, next));
-            }
-            setSlash(skills.length > 0 ? detectSlash(value, next) : null);
-          }}
-          placeholder={placeholder}
-          multiline
-          editable={!disabled && !busy}
-          onSubmitEditing={() => {
-            if (sending) {
-              if (!canSend) onStop?.();
-            } else if (canSend) {
-              onSend();
-            }
-          }}
-        />
-
-        {sending ? (
-          <Button
-            isIconOnly
-            variant="danger-soft"
-            onPress={() => onStop?.()}
-            accessibilityLabel="停止生成"
-          >
-            <Icon name="stop" size={20} tone="danger-soft-foreground" />
-          </Button>
-        ) : (
-          <Button
-            isIconOnly
-            isDisabled={!canSend || busy}
-            onPress={onSend}
-            accessibilityLabel="发送"
-          >
-            <Icon name="arrow-up" size={20} tone="accent-foreground" />
-          </Button>
-        )}
+          ) : (
+            <Button
+              isIconOnly
+              isDisabled={!canSend || busy}
+              onPress={onSend}
+              accessibilityLabel="发送"
+              className="rounded-full"
+            >
+              <Icon name="arrow-up" size={18} tone="accent-foreground" />
+            </Button>
+          )}
+        </View>
       </View>
 
       {busy ? (
-        <Typography.Paragraph color="muted" className="text-center text-xs">
+        <Typography.Paragraph color="muted" className="pb-1 text-center text-xs">
           正在上传附件…
         </Typography.Paragraph>
       ) : null}

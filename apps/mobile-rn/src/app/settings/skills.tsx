@@ -6,8 +6,16 @@ import { View } from "react-native";
 
 import type { Skill } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
+import {
+  FormActions,
+  FormField,
+  FormStatus,
+  PageIntro,
+  SectionTitle,
+  SwitchRow,
+} from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { EmptyState } from "@/components/states";
 import { useBusy, useSkillMutations, useSkills } from "@/queries";
 
 /**
@@ -132,36 +140,35 @@ export default function SkillsSettingsScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="Skills"
+      title="扩展能力包"
       subtitle="技能启用与上传"
       loading={skillsQuery.isLoading}
       error={skillsQuery.error?.message || "加载失败"}
       onRetry={() => void skillsQuery.refetch()}
     >
-      <Typography.Paragraph color="muted">
-        关闭后该技能不会注入 runtime 系统提示，也无法被 load_skill 加载。默认全部启用。
-        自定义技能是目录包（必有 SKILL.md，可含 references/、scripts/ 等）， 上传时**正文 Markdown
-        或 zip 包**二选一；落盘到 skills/users/&#123;user_id&#125;/。
-      </Typography.Paragraph>
+      <PageIntro>
+        关闭后该能力包不会注入系统提示，也无法被加载。默认全部启用。自定义包需含
+        SKILL.md；上传时正文 Markdown 或 zip 包二选一。
+      </PageIntro>
 
       <Card>
         <Card.Body className="gap-4">
-          <SectionTitle>上传自定义 Skill</SectionTitle>
+          <SectionTitle>上传自定义能力包</SectionTitle>
 
           <FormField
-            label="name"
+            label="名称"
             value={skillName}
             onChangeText={setSkillName}
-            placeholder="name（如 my-helper）"
+            placeholder="如 my-helper"
             error={errors.name}
             // 选了 zip 就交给包内 SKILL.md 的 frontmatter
             required={!zip}
           />
           <FormField
-            label="description"
+            label="说明"
             value={skillDesc}
             onChangeText={setSkillDesc}
-            placeholder="description（何时使用）"
+            placeholder="何时使用"
             error={errors.description}
             required={!zip}
           />
@@ -177,7 +184,7 @@ export default function SkillsSettingsScreen(): JSX.Element {
           />
 
           <View className="gap-2">
-            <SectionTitle>上传 zip 技能包</SectionTitle>
+            <SectionTitle>上传 zip 包</SectionTitle>
             <View className="flex-row items-center gap-3">
               <Button
                 size="sm"
@@ -200,16 +207,22 @@ export default function SkillsSettingsScreen(): JSX.Element {
             </View>
           </View>
 
-          <Button isDisabled={busy} onPress={() => void upload()}>
-            <Button.Label>{busy ? "上传中…" : "上传并启用"}</Button.Label>
-          </Button>
+          <FormActions>
+            <Button size="sm" isDisabled={busy} onPress={() => void upload()}>
+              <Button.Label>{busy ? "上传中…" : "上传并启用"}</Button.Label>
+            </Button>
+          </FormActions>
         </Card.Body>
       </Card>
 
-      {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
+      {msg ? <FormStatus message={msg} /> : null}
 
       {skills.length === 0 ? (
-        <Typography.Paragraph color="muted">暂无技能（检查仓库 skills/ 目录）</Typography.Paragraph>
+        <EmptyState
+          icon="flash-outline"
+          title="暂无能力包"
+          hint="检查仓库 skills/ 目录，或在上方上传自定义包"
+        />
       ) : (
         skills.map((s) => (
           <Card key={s.name}>
@@ -241,7 +254,7 @@ export default function SkillsSettingsScreen(): JSX.Element {
                   s.custom ? (
                     <Button
                       size="sm"
-                      variant="danger"
+                      variant="danger-soft"
                       isDisabled={busy}
                       onPress={() => void removeSkill(s)}
                     >

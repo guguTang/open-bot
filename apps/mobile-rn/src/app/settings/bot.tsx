@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 
 import type { Agent, AgentSkill } from "@/api/types";
-import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
+import { CloneAgentSheet } from "@/components/CloneAgentSheet";
+import { FormActions, FormField, FormStatus, SectionTitle, SwitchRow } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { errText } from "@/lib/errors";
 import { EmptyState } from "@/components/states";
@@ -22,20 +23,20 @@ import {
  * 岗位资料 + 电脑模式 + 本 Bot 启用的技能。
  *
  * 「当前 Bot」是跨页共享的（和 Web 一样：聊天页和设置页说的是同一个 Bot），
- * 所以选中态放在 `stores/client.ts` 的 Zustand store 里并持久化到 MMKV ——
+ * 所以选中态放在 `stores/client.ts` 的 Zustand store 里并持久化到 AsyncStorage ——
  * 顶部一排 Chip 选 Bot，离开页面再回来仍是上次那个。
  */
 
 const COMPUTER_MODES = [
   {
     value: "team" as const,
-    label: "team",
-    desc: "账户共用文件 · 同账户下多个 Bot 共享一份工作区",
+    label: "账户共用",
+    desc: "同账户下多个 Bot 共享一份工作区",
   },
   {
     value: "private" as const,
-    label: "private",
-    desc: "本 Bot 私有文件 · 每个 Bot 各自一份目录",
+    label: "本 Bot 私有",
+    desc: "每个 Bot 各自一份目录",
   },
 ];
 
@@ -51,6 +52,7 @@ export default function BotSettingsScreen(): JSX.Element {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [computerMode, setComputerMode] = useState<"team" | "private">("team");
   const [msg, setMsg] = useState("");
+  const [cloneOpen, setCloneOpen] = useState(false);
 
   /** 把服务端返回的 Agent 灌进表单。纯 setState，不含副作用。 */
   const fillForm = useCallback((agent: Agent) => {
@@ -146,7 +148,7 @@ export default function BotSettingsScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="Bot 设置"
+      title="当前 Bot"
       subtitle="岗位描述、电脑模式与启用技能"
       loading={agentsQuery.isLoading}
       error={agentsQuery.error ? errText(agentsQuery.error, "加载助手失败") : null}
@@ -218,7 +220,7 @@ export default function BotSettingsScreen(): JSX.Element {
                 placeholder="更细的行为约束"
                 editable={!busy}
                 multiline
-                hint="留空则使用默认人设；技能正文请到「Skills」页编辑"
+                hint="留空则使用默认人设；能力包正文请到「扩展能力包」页编辑"
               />
 
               <View className="gap-2">
@@ -246,11 +248,33 @@ export default function BotSettingsScreen(): JSX.Element {
                 </Typography.Paragraph>
               </View>
 
-              <Button isDisabled={busy} onPress={() => void save()}>
-                <Button.Label>{busy ? "保存中…" : "保存"}</Button.Label>
-              </Button>
+              <FormActions>
+                <Button size="sm" className="flex-1" isDisabled={busy} onPress={() => void save()}>
+                  <Button.Label>{busy ? "保存中…" : "保存"}</Button.Label>
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  variant="secondary"
+                  isDisabled={busy}
+                  onPress={() => setCloneOpen(true)}
+                >
+                  <Button.Label>复制助手</Button.Label>
+                </Button>
+              </FormActions>
             </Card.Body>
           </Card>
+
+          <CloneAgentSheet
+            agent={agent}
+            visible={cloneOpen}
+            onClose={() => setCloneOpen(false)}
+            onCloned={(res) => {
+              void agentsQuery.refetch();
+              setCurrentBot({ id: res.agent.id, name: res.agent.name });
+              setMsg(`已复制为「${res.agent.name}」`);
+            }}
+          />
 
           <View className="gap-3">
             <SectionTitle>本 Bot 启用的技能</SectionTitle>
@@ -290,12 +314,12 @@ export default function BotSettingsScreen(): JSX.Element {
 
             {hiddenCount > 0 ? (
               <Typography.Paragraph color="muted" className="text-xs">
-                另有 {hiddenCount} 个技能已在「Skills」页账号级关闭，不可勾选。
+                另有 {hiddenCount} 个能力包已在「扩展能力包」页账号级关闭，不可勾选。
               </Typography.Paragraph>
             ) : null}
           </View>
 
-          {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
+          {msg ? <FormStatus message={msg} tone="success" /> : null}
         </>
       )}
     </ScreenScaffold>

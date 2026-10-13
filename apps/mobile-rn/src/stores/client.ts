@@ -8,8 +8,8 @@
  * 放进来的是「不来自服务器、又需要在多个页面之间共享」的东西。
  * 只有一个页面用得着的状态留在 useState 里 —— 别为了统一而统一。
  *
- * 三个 store 的共同点：都是**同步可读**的，页面首帧就能拿到正确值，
- * 不用等一次异步读盘（MMKV 同步，见 lib/storage.ts）。
+ * 偏好经 `lib/storage.ts`（AsyncStorage + 内存镜像）持久化。根布局
+ * `hydratePrefs()` 完成后再 `persist.rehydrate()`，首屏读到的就是落盘值。
  */
 
 import { create } from "zustand";
@@ -17,7 +17,31 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { readJson, writeJson } from "@/lib/storage";
 
-/** 当前正在对话 / 配置的那个助手。跨页共享，持久化到 MMKV。 */
+/**
+ * Zustand persist 的存储适配器。
+ *
+ * 必须定义在 `createJSONStorage(() => prefsStorage)` 之前：
+ * `createJSONStorage` 会**立刻**调用工厂函数；若此时 `const prefsStorage`
+ * 还在 TDZ，工厂抛错被吞掉，storage 变成 undefined，之后 setLastOpened /
+ * setBot 就会报 `Cannot read property 'setItem' of undefined`。
+ *
+ * 三个方法是同步的（读内存镜像）—— 根布局 hydrate 后再 rehydrate，
+ * 页面不会先闪一帧默认值。
+ */
+const prefsStorage = {
+  getItem: (name: string): string | null => {
+    const v = readJson<string | null>(name, null);
+    return typeof v === "string" ? v : null;
+  },
+  setItem: (name: string, value: string): void => {
+    writeJson(name, value);
+  },
+  removeItem: (name: string): void => {
+    writeJson(name, null);
+  },
+};
+
+/** 当前正在对话 / 配置的那个助手。跨页共享，持久化到 AsyncStorage。 */
 export type CurrentBot = { id: string; name: string } | null;
 
 type CurrentBotState = {
@@ -33,7 +57,7 @@ export const useCurrentBot = create<CurrentBotState>()(
       setBot: (bot) => set({ bot }),
       clearBot: () => set({ bot: null }),
     }),
-    { name: "current_bot", storage: createJSONStorage(() => mmkvStorage) }
+    { name: "current_bot", storage: createJSONStorage(() => prefsStorage) }
   )
 );
 
@@ -61,25 +85,6 @@ export const useListPrefs = create<ListPrefsState>()(
       setLastOpened: (lastOpened) => set({ lastOpened }),
       clearLastOpened: () => set({ lastOpened: null }),
     }),
-    { name: "list_prefs", storage: createJSONStorage(() => mmkvStorage) }
+    { name: "list_prefs", storage: createJSONStorage(() => prefsStorage) }
   )
 );
-
-/**
- * Zustand persist 的存储适配器。
- *
- * MMKV 是同步的，所以这三个方法也是同步的 —— zustand 允许同步 storage，
- * 好处是 hydrate 在首次渲染前就完成了，页面不会先闪一帧默认值。
- */
-const mmkvStorage = {
-  getItem: (name: string): string | null => {
-    const v = readJson<string | null>(name, null);
-    return typeof v === "string" ? v : null;
-  },
-  setItem: (name: string, value: string): void => {
-    writeJson(name, value);
-  },
-  removeItem: (name: string): void => {
-    writeJson(name, null);
-  },
-};

@@ -1,47 +1,37 @@
 /**
- * 本机操作确认卡。
+ * 本机操作确认卡 — 审批三态。
  *
- * 对齐 Web 端 `apps/web/src/components/HostConfirmCard.tsx`：一次本机文件/命令操作
- * 排队等用户批准，卡上把 op / path / dest / preview / reason / review_tier 摊开给用户看，
- * 然后只剩「允许 / 拒绝」两个动作。
+ * 对齐 Web 端 `apps/web/src/components/HostConfirmCard.tsx`：
+ * 允许一次 / 始终允许 / 拒绝。email_send 不提供「始终允许」。
  *
- * 与 Web 端的两处差异，都是 RN 侧的实际约束而不是随意改动：
- * - **组件内自己调 API**。Web 端把 `onDecide` 抛给聊天页，由聊天页统一处理 pending /
- *   报错 / 消息回写；这里为了能把「提交中禁用 → 失败回滚 → 已处理」这条链路闭合，
- *   把 `decideHostConfirm` 收在组件内，最终结果再通过 `onDecided` 交回聊天页。
- * - **拒绝按钮用 danger 样式**，允许是 primary。危险与否由文案自己说清楚（见 `actionCopy`），
- *   不再像 Web 端那样把 danger 穿到「允许」上 —— 那在手机上极易误点。
+ * 与 Web 的差异：组件内自己调 API（RN 侧闭合提交中/失败回滚），
+ * 始终允许时写入本地 allowlist（AsyncStorage），审核页可撤销。
  */
 
 import { Button, Chip, Typography, useThemeColor } from "heroui-native";
 import { useCallback, useMemo, useState, type JSX } from "react";
 import { ScrollView, View } from "react-native";
 
-import { decideHostConfirm } from "@/api";
 import type { HostConfirmPayload, Message } from "@/api/types";
 import { Icon } from "@/components/Icon";
+import {
+  isGitWriteRisk,
+  parseHostConfirm,
+  submitHostDecision,
+  type ApprovalDecision,
+} from "@/lib/hostApproval";
+import { useSession } from "@/providers/session";
+
+export { parseHostConfirm } from "@/lib/hostApproval";
 
 type Props = {
   conversationId: string;
-  /** 卡片数据优先取 `message.host_confirm`，没有再退回解析 `message.content` */
   message: Message;
-  /** 提交成功带上服务端返回的最新消息；提交失败传 null（卡片自己也会显示失败原因） */
   onDecided?: (updated: Message | null) => void;
-  /** 历史消息、只读会话等不可操作场景 */
   disabled?: boolean;
+  /** When false (e.g. machine exec_policy=ask), hide Always — degrades to once-only. */
+  alwaysAllowEnabled?: boolean;
 };
-
-/** 与 Web 端 `parseHostConfirm` 同思路：优先用结构化字段，否则试一次 JSON。 */
-export function parseHostConfirm(message: Message): HostConfirmPayload | null {
-  if (message.host_confirm?.op) return message.host_confirm;
-  try {
-    const data = JSON.parse(message.content) as HostConfirmPayload;
-    if (data?.req_id && data.op) return data;
-  } catch {
-    /* 不是确认载荷，按普通消息处理 */
-  }
-  return null;
-}
 
 function pathList(path: string): string[] {
   return path
@@ -52,7 +42,6 @@ function pathList(path: string): string[] {
 
 type ActionCopy = { title: string; detail: string; danger: boolean };
 
-/** 按 op 生成一句人话。path 可能是多行（批量删除），标题要把数量说出来。 */
 function actionCopy(item: HostConfirmPayload): ActionCopy {
   if (item.op === "shell") {
     return {
@@ -99,46 +88,70 @@ function actionCopy(item: HostConfirmPayload): ActionCopy {
       danger: true,
     };
   }
+  if (item.op === "email_send") {
+    const attachLine = (item.preview || "")
+      .split("\n")
+      .map((s) => s.trim())
+      .find((s) => s.startsWith("附件："));
+    return {
+      title: "发送这封邮件？",
+      detail: [item.path && `收件人：${item.path}`, item.dest && `主题：${item.dest}`, attachLine]
+        .filter(Boolean)
+        .join("\n"),
+      danger: false,
+    };
+  }
   return { title: "确认这次操作？", detail: item.path, danger: false };
 }
 
-/** 会展示 preview 的 op：写文件 / 跑命令这类，改动内容本身就是要审的东西。 */
-const PREVIEW_OPS = new Set(["write", "shell", "ssh_write", "ssh_exec"]);
+const PREVIEW_OPS = new Set(["write", "shell", "ssh_write", "ssh_exec", "email_send"]);
 
 export function HostConfirmCard({
   conversationId,
   message,
   onDecided,
   disabled,
+  alwaysAllowEnabled = true,
 }: Props): JSX.Element | null {
   const muted = useThemeColor("muted");
+  const { user } = useSession();
   const payload = useMemo(() => parseHostConfirm(message), [message]);
 
-  // 乐观值：点完立刻变「已处理」，不等网络。失败时清掉并回到可重试状态。
   const [optimistic, setOptimistic] = useState<"allowed" | "denied" | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const decide = useCallback(
-    async (status: "allowed" | "denied") => {
+    async (decision: ApprovalDecision) => {
       if (!payload || busy || disabled) return;
+      const status = decision !== "deny" ? "allowed" : "denied";
+
       setBusy(true);
       setError(null);
       setOptimistic(status);
-      try {
-        const updated = await decideHostConfirm(conversationId, message.id, status);
-        onDecided?.(updated);
-      } catch (err) {
-        // 卡片状态以服务端为准：回滚乐观值，让用户能再点一次
+      setHint(null);
+
+      const result = await submitHostDecision({
+        conversationId,
+        messageId: message.id,
+        payload,
+        decision,
+        userId: user?.id || "",
+      });
+
+      if (result.error) {
         setOptimistic(null);
-        const msg = err instanceof Error ? err.message : "提交失败，请重试";
-        setError(msg);
+        setHint(null);
+        setError(result.error);
         onDecided?.(null);
-      } finally {
-        setBusy(false);
+      } else {
+        setHint(result.hint);
+        onDecided?.(result.updated);
       }
+      setBusy(false);
     },
-    [busy, conversationId, disabled, message.id, onDecided, payload]
+    [busy, conversationId, disabled, message.id, onDecided, payload, user?.id]
   );
 
   if (!payload) return null;
@@ -149,6 +162,11 @@ export function HostConfirmCard({
     (payload.status === "allowed" || payload.status === "denied" ? payload.status : null);
   const pending = settled === null;
   const locked = Boolean(disabled) || busy || !pending;
+  const allowAlways = alwaysAllowEnabled && payload.op !== "email_send";
+  const gitWriteHint =
+    allowAlways && isGitWriteRisk(payload.op, payload.path)
+      ? "始终允许将覆盖同类 Git 写操作（含 push），请确认风险"
+      : "";
 
   return (
     <View
@@ -176,6 +194,10 @@ export function HostConfirmCard({
         <Typography.Paragraph className="text-xs text-warning-soft-foreground">
           {payload.reason}
         </Typography.Paragraph>
+      ) : null}
+
+      {gitWriteHint ? (
+        <Typography.Paragraph className="text-xs text-danger">{gitWriteHint}</Typography.Paragraph>
       ) : null}
 
       {detail ? (
@@ -207,27 +229,40 @@ export function HostConfirmCard({
       ) : null}
 
       {pending ? (
-        <View className="mt-1 flex-row gap-2">
-          <Button
-            size="sm"
-            variant="danger"
-            className="flex-1"
-            isDisabled={locked}
-            onPress={() => void decide("denied")}
-            accessibilityLabel="拒绝这次操作"
-          >
-            <Button.Label>拒绝</Button.Label>
-          </Button>
+        <View className="mt-1 gap-2">
           <Button
             size="sm"
             variant="primary"
-            className="flex-1"
             isDisabled={locked}
-            onPress={() => void decide("allowed")}
-            accessibilityLabel="允许这次操作"
+            onPress={() => void decide("allow_once")}
+            accessibilityLabel="允许一次"
           >
-            <Button.Label>{busy ? "提交中…" : "允许"}</Button.Label>
+            <Button.Label>{busy ? "提交中…" : "允许一次"}</Button.Label>
           </Button>
+          <View className="flex-row gap-2">
+            {allowAlways ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="flex-1"
+                isDisabled={locked}
+                onPress={() => void decide("always_allow")}
+                accessibilityLabel="始终允许"
+              >
+                <Button.Label>始终允许</Button.Label>
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="danger"
+              className="flex-1"
+              isDisabled={locked}
+              onPress={() => void decide("deny")}
+              accessibilityLabel="拒绝这次操作"
+            >
+              <Button.Label>拒绝</Button.Label>
+            </Button>
+          </View>
         </View>
       ) : (
         <View className="mt-1 flex-row items-center gap-1.5">
@@ -243,6 +278,12 @@ export function HostConfirmCard({
           </Typography.Paragraph>
         </View>
       )}
+
+      {hint ? (
+        <Typography.Paragraph className="text-[11px]" style={{ color: muted }}>
+          {hint}
+        </Typography.Paragraph>
+      ) : null}
 
       {error ? (
         <Typography.Paragraph className="text-[11px] text-danger">{error}</Typography.Paragraph>

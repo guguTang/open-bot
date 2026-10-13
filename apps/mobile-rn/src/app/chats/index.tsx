@@ -1,172 +1,218 @@
 import { Avatar, Button, Dialog, Menu, Separator, Spinner, Typography } from "heroui-native";
 import { useRouter } from "expo-router";
-import type { JSX, ReactNode } from "react";
-import { useCallback, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, TextInput, View } from "react-native";
+import type { JSX } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { InteractionManager, Pressable, RefreshControl, ScrollView, TextInput, View } from "react-native";
+import { useShallow } from "zustand/react/shallow";
 
 import * as api from "@/api";
 import type { Agent, Channel } from "@/api/types";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { AgentEditor } from "@/components/AgentEditor";
+import { CloneAgentSheet } from "@/components/CloneAgentSheet";
 import { Icon } from "@/components/Icon";
 import { FormField } from "@/components/FormField";
 import { EmptyState, ErrorAlert, ListSkeleton } from "@/components/states";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { errText } from "@/lib/errors";
+import { avatarInitials } from "@/lib/avatar";
 import { formatRelativeTime } from "@/lib/format";
 import { useSession } from "@/providers/session";
 import { useAgentMutations, useAgents, useChannels, useChannelMutations } from "@/queries";
-import { useListPrefs, type ListPrefsState } from "@/stores/client";
+import { useCurrentBot, useListPrefs, type ListPrefsState } from "@/stores/client";
+import { useRealtimeStore } from "@/stores/realtime";
 
 /** 稳定的空数组引用，避免 `?? []` 破坏下游 memo。 */
 const EMPTY_AGENTS: Agent[] = [];
 const EMPTY_CHANNELS: Channel[] = [];
 
-type Row =
-  | {
-      kind: "agent";
-      id: string;
-      title: string;
-      subtitle: string;
-      time?: string;
-      shape?: string;
-      color?: string;
-      online?: boolean;
-      busy?: boolean;
-    }
-  | { kind: "channel"; id: string; title: string; subtitle: string; time?: string };
+type ConvListItem =
+  | { kind: "agent"; agent: Agent; sortAt: number }
+  | { kind: "channel"; channel: Channel; sortAt: number };
 
-/** 搜索命中范围与 Web 端侧边栏一致：助手看名称/描述/摘要，频道看名称。 */
-function matchQuery(query: string, fields: (string | undefined)[]): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return fields.some((f) => (f ?? "").toLowerCase().includes(q));
+type MemberFace = {
+  agent_id: string;
+  name: string;
+  avatar_shape?: string;
+  avatar_color?: string;
+  online?: boolean;
+};
+
+function itemSortAt(iso?: string | null): number {
+  return Date.parse(iso || "") || 0;
+}
+
+function channelMemberFaces(channel: Channel, agents: Agent[], nameById: Map<string, string>): MemberFace[] {
+  return (channel.members || []).map((id) => {
+    const agent = agents.find((a) => a.id === id);
+    const profile = channel.member_profiles?.find((p) => p.agent_id === id);
+    return {
+      agent_id: id,
+      name: agent?.name || profile?.name || nameById.get(id) || id,
+      ...(agent?.avatar_shape || profile?.avatar_shape
+        ? { avatar_shape: agent?.avatar_shape || profile?.avatar_shape }
+        : {}),
+      ...(agent?.avatar_color || profile?.avatar_color
+        ? { avatar_color: agent?.avatar_color || profile?.avatar_color }
+        : {}),
+      online: agent?.online ?? profile?.online,
+    };
+  });
 }
 
 /**
- * 首页：助手列表 + 群聊频道。
- *
- * 与 Web 端侧边栏的主结构一致 —— 主导航是「助手 / 群聊」而不是「会话」，
- * 每个助手固定一条主线程（`GET /v1/agents/{id}/conversation` 取不到就建）。
- *
- * 版式上的两个决定：
- * - 列表用 `ListGroup` 而不是「一行一张 Card」。原来 20 个助手就是 20 张浮起来的
- *   卡片，容器之间只隔 4px，卡片贴着卡片 —— 表面层级越多，页面越碎。
- *   现在每个分区只有一个 surface，行与行之间是分隔线。
- * - 用 ScrollView 而不是 SectionList：这个列表长度等于「我建了几个助手」，
- *   不会长到需要虚拟化，换来的是能把 ListGroup 的开合放在同一个 JSX 里。
+ * 首页：助手 + 群聊合并为一条按最近活跃排序的会话列表（对齐 Web AppSidebar）。
  */
 export default function ChatsScreen(): JSX.Element {
   const router = useRouter();
   const { user, signOut } = useSession();
   const { confirm } = useConfirm();
 
-  // 服务端状态交给 TanStack Query：加载态、错误、重取、缓存都在那边，
-  // 这里只声明「要哪份数据」和「写完之后让哪份失效」。
   const agentsQuery = useAgents();
   const channelsQuery = useChannels();
   const agentMutations = useAgentMutations();
   const channelMutations = useChannelMutations();
 
-  // 兜底数组用模块级常量：`?? []` 每次渲染都是新引用，
-  // 会让下游所有 useMemo / useCallback 的依赖每次都变（等于缓存失效）
   const agents = agentsQuery.data ?? EMPTY_AGENTS;
   const channels = channelsQuery.data ?? EMPTY_CHANNELS;
   const loading = agentsQuery.isLoading;
   const [refreshing, setRefreshing] = useState(false);
+  /** 仅冷打开（无缓存 conversation_id、需等网络）时显示行内 Spinner；热路径用 ref 防连点，避免先刷列表。 */
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const openingLockRef = useRef(false);
 
-  /** 两个查询里任一失败都要能显示出来；群聊拉不到不该拖垮助手列表。 */
   const queryError = agentsQuery.error
     ? errText(agentsQuery.error, "加载助手失败")
     : channelsQuery.error
       ? errText(channelsQuery.error, "加载群聊失败")
       : null;
 
-  /**
-   * 「打开会话失败」「删除失败」这类**单次操作**的错误单独放。
-   * 和 queryError 分开是因为它们不是一回事：查询错误会随重取自愈，
-   * 操作错误必须等用户下一次操作，不该被后台刷新悄悄抹掉。
-   */
   const [actionError, setActionError] = useState<string | null>(null);
   const error = actionError ?? queryError;
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [cloneAgent, setCloneAgent] = useState<Agent | null>(null);
   const [channelOpen, setChannelOpen] = useState(false);
   const [query, setQuery] = useState("");
-  // 折叠状态与「上次打开」放在全局 store：列表页要读，设置页和聊天页
-  // 也会用到「上次打开」这个概念。持久化由 zustand/middleware 写进 MMKV。
-  const collapsedMap = useListPrefs((s) => s.collapsed);
+  const setCurrentBot = useCurrentBot((s) => s.setBot);
   const lastOpened = useListPrefs((s) => s.lastOpened);
   const setLastOpened = useListPrefs((s) => s.setLastOpened);
-  const toggleSection = useListPrefs((s) => s.toggleSection);
+
+  const userId = user?.id ?? null;
+  const { presenceByAgent, onlineByAgent, realtimeScope } = useRealtimeStore(
+    useShallow((s) => ({
+      presenceByAgent: s.presence,
+      onlineByAgent: s.online,
+      realtimeScope: s.scope,
+    }))
+  );
+  const liveOk = realtimeScope === userId;
+
+  const agentNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of agents) map.set(a.id, a.name);
+    return map;
+  }, [agents]);
 
   const load = useCallback(async (): Promise<void> => {
     await Promise.all([agentsQuery.refetch(), channelsQuery.refetch()]);
     setRefreshing(false);
   }, [agentsQuery, channelsQuery]);
 
+  /**
+   * 转场开始后再写偏好 / 清 busy。
+   * 否则 push 前 setState 会先刷列表一帧，看起来像「列表闪一下才进页」。
+   */
+  const afterNavigate = useCallback((record?: NonNullable<ListPrefsState["lastOpened"]>) => {
+    InteractionManager.runAfterInteractions(() => {
+      if (record) setLastOpened(record);
+      openingLockRef.current = false;
+      setOpeningId(null);
+    });
+  }, [setLastOpened]);
+
   const openAgent = useCallback(
     async (agentId: string): Promise<void> => {
-      if (openingId) return;
-      setOpeningId(agentId);
+      if (openingLockRef.current) return;
+      openingLockRef.current = true;
+      const agent = agents.find((a) => a.id === agentId);
+      const fromList = (agent?.conversation_id || "").trim();
+      const fromPrefs =
+        lastOpened?.kind === "agent" && lastOpened.id === agentId
+          ? (lastOpened.conversation_id || "").trim()
+          : "";
+      let conversationId = fromList || fromPrefs;
+
       try {
-        const conversation = await api.openPrimaryConversation(agentId);
-        const agent = agents.find((a) => a.id === agentId);
+        if (!conversationId) {
+          setOpeningId(agentId);
+          const conversation = await api.openPrimaryConversation(agentId);
+          conversationId = conversation.id;
+        }
         const record: NonNullable<ListPrefsState["lastOpened"]> = {
           kind: "agent",
           id: agentId,
           name: agent?.name ?? "助手",
-          conversation_id: conversation.id,
+          conversation_id: conversationId,
         };
-        setLastOpened(record);
-        router.push(`/chats/${conversation.id}`);
+        router.push(`/chats/${conversationId}`);
+        afterNavigate(record);
       } catch (err) {
-        setActionError(errText(err, "打开会话失败"));
-      } finally {
+        openingLockRef.current = false;
         setOpeningId(null);
+        setActionError(errText(err, "打开会话失败"));
       }
     },
-    [agents, openingId, router, setLastOpened]
+    [afterNavigate, agents, lastOpened, router]
   );
 
   const openChannel = useCallback(
     async (channelId: string): Promise<void> => {
-      if (openingId) return;
-      setOpeningId(channelId);
+      if (openingLockRef.current) return;
+      openingLockRef.current = true;
+      const channel = channels.find((c) => c.id === channelId);
+      const fromList = (channel?.conversation_id || "").trim();
+      const fromPrefs =
+        lastOpened?.kind === "channel" && lastOpened.id === channelId
+          ? (lastOpened.conversation_id || "").trim()
+          : "";
+      let conversationId = fromList || fromPrefs;
+
       try {
-        const { conversation } = await api.openChannelConversation(channelId);
-        const channel = channels.find((c) => c.id === channelId);
+        if (!conversationId) {
+          setOpeningId(channelId);
+          const { conversation } = await api.openChannelConversation(channelId);
+          conversationId = conversation.id;
+        }
         const record: NonNullable<ListPrefsState["lastOpened"]> = {
           kind: "channel",
           id: channelId,
           name: channel?.name ?? "群聊",
-          conversation_id: conversation.id,
+          conversation_id: conversationId,
         };
-        setLastOpened(record);
-        router.push(`/chats/${conversation.id}`);
+        router.push(`/chats/${conversationId}`);
+        afterNavigate(record);
       } catch (err) {
-        setActionError(errText(err, "打开群聊失败"));
-      } finally {
+        openingLockRef.current = false;
         setOpeningId(null);
+        setActionError(errText(err, "打开群聊失败"));
       }
     },
-    [channels, openingId, router, setLastOpened]
+    [afterNavigate, channels, lastOpened, router]
   );
 
-  /** 「继续上次」：直接回到上次那个会话，不重新走 openPrimaryConversation。 */
   const resumeLast = useCallback(async (): Promise<void> => {
-    if (!lastOpened || openingId) return;
+    if (!lastOpened || openingLockRef.current) return;
     if (lastOpened.conversation_id) {
-      setOpeningId(lastOpened.id);
+      openingLockRef.current = true;
       router.push(`/chats/${lastOpened.conversation_id}`);
-      setOpeningId(null);
+      afterNavigate();
       return;
     }
     if (lastOpened.kind === "agent") await openAgent(lastOpened.id);
     else await openChannel(lastOpened.id);
-  }, [lastOpened, openingId, openAgent, openChannel, router]);
+  }, [afterNavigate, lastOpened, openAgent, openChannel, router]);
 
   const removeAgent = useCallback(
     async (agent: Agent): Promise<void> => {
@@ -178,8 +224,6 @@ export default function ChatsScreen(): JSX.Element {
       });
       if (!ok) return;
       try {
-        // 走 mutation：删除成功后由 onSuccess 精确失效 agents 缓存，
-        // 不用再手动 load() 把整页重打一遍
         await agentMutations.remove.mutateAsync(agent.id);
         setActionError(null);
       } catch (err) {
@@ -208,49 +252,36 @@ export default function ChatsScreen(): JSX.Element {
     [channelMutations.remove, confirm]
   );
 
-  const agentRows = useMemo<Row[]>(
-    () =>
-      agents.map((a) => ({
+  /** 助手 + 群聊合并、按最近更新排序（对齐 Web convItems）。 */
+  const convItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const items: ConvListItem[] = [];
+    for (const a of agents) {
+      if (q) {
+        const hay = `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      items.push({
         kind: "agent",
-        id: a.id,
-        title: a.name,
-        subtitle: a.last_message || a.description || "还没有对话",
-        ...(a.conversation_updated_at ? { time: a.conversation_updated_at } : {}),
-        ...(a.avatar_shape ? { shape: a.avatar_shape } : {}),
-        ...(a.avatar_color ? { color: a.avatar_color } : {}),
-        ...(a.online !== undefined ? { online: a.online } : {}),
-        ...(a.task_active ? { busy: true } : {}),
-      })),
-    [agents]
-  );
-
-  const channelRows = useMemo<Row[]>(
-    () =>
-      channels.map((c) => ({
+        agent: a,
+        sortAt: itemSortAt(a.conversation_updated_at || a.updated_at || a.created_at),
+      });
+    }
+    for (const ch of channels) {
+      if (q) {
+        const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join(" ");
+        const hay = `${ch.name} ${memberNames}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      items.push({
         kind: "channel",
-        id: c.id,
-        title: c.name,
-        subtitle: `${c.members?.length ?? 0} 位成员 · @ 点名让特定助手回复`,
-        ...(c.created_at ? { time: c.created_at } : {}),
-      })),
-    [channels]
-  );
-
-  const visibleAgents = useMemo(
-    () =>
-      agentRows.filter((r) =>
-        matchQuery(query, [r.title, r.subtitle, agents.find((a) => a.id === r.id)?.description])
-      ),
-    [agentRows, agents, query]
-  );
-
-  const visibleChannels = useMemo(
-    () =>
-      channelRows.filter((r) =>
-        matchQuery(query, [r.title, channels.find((c) => c.id === r.id)?.name])
-      ),
-    [channelRows, channels, query]
-  );
+        channel: ch,
+        sortAt: itemSortAt(ch.created_at),
+      });
+    }
+    items.sort((a, b) => b.sortAt - a.sortAt || a.kind.localeCompare(b.kind));
+    return items;
+  }, [agents, channels, query, agentNameById]);
 
   const searching = query.trim().length > 0;
   const openNewAgent = (): void => {
@@ -258,43 +289,91 @@ export default function ChatsScreen(): JSX.Element {
     setEditorOpen(true);
   };
 
+  const isBotOnline = (id: string, snapshot?: boolean): boolean => {
+    if (liveOk && onlineByAgent[id] !== undefined) return Boolean(onlineByAgent[id]);
+    return Boolean(snapshot);
+  };
+
   return (
     <View className="flex-1 bg-background">
-      {/* 顶栏：品牌标题 + 唯一主操作（新建助手）+ 账号菜单。
-          原来的「协作 / ＋助手 / 账号」三个同权重按钮没有任何主次，
-          现在次要动作收进头像菜单，主操作独占一个实心按钮。 */}
       <View className="flex-row items-center justify-between border-b border-border bg-background px-5 pt-safe-offset-12 pb-3">
         <Typography.Heading type="h2">Open Bot</Typography.Heading>
 
         <View className="flex-row items-center gap-1">
-          <Button isIconOnly onPress={openNewAgent} accessibilityLabel="新建助手">
-            <Icon name="add" size={22} tone="accent-foreground" />
-          </Button>
+          <Menu>
+            <Menu.Trigger asChild>
+              <Button isIconOnly accessibilityLabel="新建">
+                <Icon name="add" size={22} tone="accent-foreground" />
+              </Button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Overlay closeOnPress />
+              <Menu.Content presentation="popover" width={200}>
+                <Menu.Item onPress={openNewAgent}>
+                  <Menu.ItemTitle>新建助手</Menu.ItemTitle>
+                </Menu.Item>
+                <Menu.Item onPress={() => setChannelOpen(true)}>
+                  <Menu.ItemTitle>新建群聊</Menu.ItemTitle>
+                </Menu.Item>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
 
           <Menu>
             <Menu.Trigger>
-              <Avatar className="ml-1">
+              <Avatar className="ml-1" accessibilityLabel="账户菜单">
                 <Avatar.Fallback>
-                  <Typography.Paragraph weight="medium">
-                    {user?.username?.[0] ?? "?"}
+                  <Typography.Paragraph weight="medium" className="text-xs">
+                    {avatarInitials(user?.username ?? "")}
                   </Typography.Paragraph>
                 </Avatar.Fallback>
               </Avatar>
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Overlay closeOnPress />
-              <Menu.Content presentation="popover" width={232}>
+              <Menu.Content presentation="popover" width={260}>
                 <Menu.Label>{user?.username ?? "未登录"}</Menu.Label>
-                <Menu.Item onPress={() => router.push("/collab")}>
-                  <Menu.ItemTitle>协作收件箱</Menu.ItemTitle>
-                  <Menu.ItemDescription>处理待你确认的请求</Menu.ItemDescription>
+                <Menu.Item className="items-center gap-3" onPress={() => router.push("/collab")}>
+                  <View className="size-6 items-center justify-center">
+                    <Icon name="mail-unread-outline" size={22} tone="muted" />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Menu.ItemTitle className="font-semibold">协作收件箱</Menu.ItemTitle>
+                    <Menu.ItemDescription>处理待你确认的请求</Menu.ItemDescription>
+                  </View>
                 </Menu.Item>
-                <Menu.Item onPress={() => router.push("/settings")}>
-                  <Menu.ItemTitle>设置</Menu.ItemTitle>
-                  <Menu.ItemDescription>模型、密钥、运行环境</Menu.ItemDescription>
+                <Menu.Item
+                  className="items-center gap-3"
+                  onPress={() => {
+                    const id = agents[0]?.id;
+                    router.push(
+                      (id ? `/train?agentId=${encodeURIComponent(id)}` : "/train") as never
+                    );
+                  }}
+                >
+                  <View className="size-6 items-center justify-center">
+                    <Icon name="school-outline" size={22} tone="muted" />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Menu.ItemTitle className="font-semibold">训练</Menu.ItemTitle>
+                    <Menu.ItemDescription>待确认与已生效的经验</Menu.ItemDescription>
+                  </View>
                 </Menu.Item>
-                <Menu.Item variant="danger" onPress={() => void signOut()}>
-                  <Menu.ItemTitle>退出登录</Menu.ItemTitle>
+                <Menu.Item className="items-center gap-3" onPress={() => router.push("/settings")}>
+                  <View className="size-6 items-center justify-center">
+                    <Icon name="settings-outline" size={22} tone="muted" />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Menu.ItemTitle className="font-semibold">设置</Menu.ItemTitle>
+                    <Menu.ItemDescription>模型、密钥、运行环境</Menu.ItemDescription>
+                  </View>
+                </Menu.Item>
+                <Separator className="my-1" />
+                <Menu.Item className="items-center gap-3" variant="danger" onPress={() => void signOut()}>
+                  <View className="size-6 items-center justify-center">
+                    <Icon name="log-out-outline" size={22} tone="danger" />
+                  </View>
+                  <Menu.ItemTitle className="font-semibold">退出登录</Menu.ItemTitle>
                 </Menu.Item>
               </Menu.Content>
             </Menu.Portal>
@@ -319,7 +398,6 @@ export default function ChatsScreen(): JSX.Element {
           <ErrorAlert title="出了点问题" description={error} onRetry={() => void load()} />
         ) : null}
 
-        {/* 搜索。助手看名称 / 描述 / 最后一条摘要，群聊看名称 —— 与 Web 端侧边栏一致。 */}
         <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
           <Icon name="search" size={18} tone="muted" />
           <TextInput
@@ -345,8 +423,6 @@ export default function ChatsScreen(): JSX.Element {
           ) : null}
         </View>
 
-        {/* 继续上次。Web 端会直接恢复上次选中的会话；手机上首页是列表，
-            所以改成一条显式入口 —— 既保留了「接着聊」的路径，又不会替用户做选择。 */}
         {!searching && lastOpened ? (
           <Pressable
             onPress={() => void resumeLast()}
@@ -358,22 +434,37 @@ export default function ChatsScreen(): JSX.Element {
               <AgentAvatar
                 id={lastOpened.id}
                 name={lastOpened.name}
+                size={48}
                 shape={agents.find((a) => a.id === lastOpened.id)?.avatar_shape}
                 color={agents.find((a) => a.id === lastOpened.id)?.avatar_color}
-                online={agents.find((a) => a.id === lastOpened.id)?.online}
+                status={liveOk ? presenceByAgent[lastOpened.id] || "idle" : "idle"}
+                online={isBotOnline(
+                  lastOpened.id,
+                  agents.find((a) => a.id === lastOpened.id)?.online
+                )}
               />
             ) : (
-              <Avatar>
-                <Avatar.Fallback>
-                  <Icon name="people" size={18} tone="muted" />
-                </Avatar.Fallback>
-              </Avatar>
+              <ChannelAvatarStack
+                faces={channelMemberFaces(
+                  channels.find((c) => c.id === lastOpened.id) || {
+                    id: lastOpened.id,
+                    user_id: "",
+                    name: lastOpened.name,
+                    created_at: "",
+                    members: [],
+                  },
+                  agents,
+                  agentNameById
+                )}
+                isBotOnline={isBotOnline}
+                size={40}
+              />
             )}
             <View className="flex-1 gap-0.5">
               <Typography.Paragraph type="body-sm" color="muted">
                 继续上次
               </Typography.Paragraph>
-              <Typography.Paragraph weight="medium" numberOfLines={1}>
+              <Typography.Paragraph weight="medium" numberOfLines={1} className="text-lg">
                 {lastOpened.name}
               </Typography.Paragraph>
             </View>
@@ -383,109 +474,80 @@ export default function ChatsScreen(): JSX.Element {
 
         {loading ? (
           <ListSkeleton rows={5} />
-        ) : searching && visibleAgents.length === 0 && visibleChannels.length === 0 ? (
+        ) : searching && convItems.length === 0 ? (
           <EmptyState
             icon="search-outline"
             title="没有匹配的结果"
-            hint="换个关键词，或者清空搜索看看全部助手。"
+            hint="换个关键词，或者清空搜索看看全部会话。"
+          />
+        ) : agents.length === 0 && channels.length === 0 ? (
+          <EmptyState
+            icon="hardware-chip-outline"
+            title="还没有会话"
+            hint="创建一个助手，或建一个群聊让多个助手一起回答。"
+            action={
+              <View className="flex-row gap-2">
+                <Button onPress={openNewAgent}>
+                  <Icon name="add" size={18} tone="accent-foreground" />
+                  <Button.Label>新建助手</Button.Label>
+                </Button>
+                <Button variant="secondary" onPress={() => setChannelOpen(true)}>
+                  <Button.Label>新建群聊</Button.Label>
+                </Button>
+              </View>
+            }
           />
         ) : (
-          <>
-            <View className="gap-3">
-              <SectionLabel
-                label="助手"
-                count={visibleAgents.length}
-                collapsible={collapsedMap.agents === true}
-                onToggle={() => toggleSection("agents")}
-              />
-
-              {visibleAgents.length === 0 ? (
-                searching ? (
-                  <Typography.Paragraph color="muted" className="px-1 text-sm">
-                    没有匹配的助手。
-                  </Typography.Paragraph>
-                ) : (
-                  <EmptyState
-                    icon="hardware-chip-outline"
-                    title="还没有助手"
-                    hint="创建一个助手，它会有自己的记忆、工具和密钥。"
-                    action={
-                      <Button onPress={openNewAgent}>
-                        <Icon name="add" size={18} tone="accent-foreground" />
-                        <Button.Label>新建助手</Button.Label>
-                      </Button>
-                    }
-                  />
-                )
-              ) : collapsedMap.agents === true ? null : (
-                <RowGroup
-                  rows={visibleAgents}
-                  busyId={openingId}
-                  onOpen={(item) =>
-                    void (item.kind === "channel" ? openChannel(item.id) : openAgent(item.id))
-                  }
-                  onEdit={(item) => {
-                    const target = agents.find((a) => a.id === item.id);
-                    if (!target) return;
-                    setEditingAgent(target);
-                    setEditorOpen(true);
-                  }}
-                  onDelete={(item) => {
-                    if (item.kind === "channel") {
-                      const target = channels.find((c) => c.id === item.id);
-                      if (target) void removeChannel(target);
-                    } else {
-                      const target = agents.find((a) => a.id === item.id);
-                      if (target) void removeAgent(target);
-                    }
-                  }}
-                />
-              )}
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between px-1">
+              <Typography.Paragraph color="muted" className="text-sm">
+                会话{convItems.length ? ` · ${convItems.length}` : ""}
+              </Typography.Paragraph>
             </View>
-
-            {visibleChannels.length > 0 || !loading ? (
-              <View className="gap-3">
-                <SectionLabel
-                  label="群聊"
-                  count={visibleChannels.length}
-                  collapsible={collapsedMap.channels === true}
-                  onToggle={() => toggleSection("channels")}
-                  action={
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      isIconOnly
-                      onPress={() => setChannelOpen(true)}
-                      accessibilityLabel="新建群聊"
-                    >
-                      <Icon name="add" size={20} tone="muted" />
-                    </Button>
-                  }
-                />
-
-                {visibleChannels.length === 0 ? (
-                  searching ? null : (
-                    <Typography.Paragraph color="muted" className="px-1 text-sm">
-                      还没有群聊。建一个让多个助手一起回答，用 @ 点名。
-                    </Typography.Paragraph>
-                  )
-                ) : collapsedMap.channels === true ? null : (
-                  <RowGroup
-                    rows={visibleChannels}
-                    busyId={openingId}
-                    onOpen={(item) => void openChannel(item.id)}
-                    onDelete={(item) => {
-                      const target = channels.find((c) => c.id === item.id);
-                      if (target) void removeChannel(target);
-                    }}
-                  />
-                )}
-              </View>
-            ) : null}
-          </>
+            <View className="overflow-hidden rounded-3xl bg-surface">
+              {convItems.map((item, index) => {
+                const rowKey =
+                  item.kind === "agent" ? `agent:${item.agent.id}` : `channel:${item.channel.id}`;
+                const busyId =
+                  item.kind === "agent"
+                    ? openingId === item.agent.id
+                    : openingId === item.channel.id;
+                return (
+                  <View key={rowKey}>
+                    {index > 0 ? <Separator className="mx-4" /> : null}
+                    {item.kind === "agent" ? (
+                      <AgentRow
+                        agent={item.agent}
+                        busy={busyId}
+                        locked={openingId !== null}
+                        status={liveOk ? presenceByAgent[item.agent.id] || "idle" : "idle"}
+                        online={isBotOnline(item.agent.id, item.agent.online)}
+                        onOpen={() => void openAgent(item.agent.id)}
+                        onEdit={() => {
+                          setEditingAgent(item.agent);
+                          setEditorOpen(true);
+                        }}
+                        onClone={() => setCloneAgent(item.agent)}
+                        onDelete={() => void removeAgent(item.agent)}
+                      />
+                    ) : (
+                      <ChannelRow
+                        channel={item.channel}
+                        faces={channelMemberFaces(item.channel, agents, agentNameById)}
+                        busy={busyId}
+                        locked={openingId !== null}
+                        isBotOnline={isBotOnline}
+                        onOpen={() => void openChannel(item.channel.id)}
+                        onDelete={() => void removeChannel(item.channel)}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
         )}
 
-        {/* 列表底部留白：uniwind 没有 h-safe-*，用外边距等价表达「安全区 + 24」 */}
         <View className="mb-safe-offset-6" />
       </ScrollView>
 
@@ -499,186 +561,258 @@ export default function ChatsScreen(): JSX.Element {
         onSaved={load}
       />
 
+      <CloneAgentSheet
+        agent={cloneAgent}
+        visible={Boolean(cloneAgent)}
+        onClose={() => setCloneAgent(null)}
+        onCloned={(res) => {
+          setCurrentBot({ id: res.agent.id, name: res.agent.name });
+          void load();
+        }}
+      />
+
       <ChannelEditor open={channelOpen} onClose={() => setChannelOpen(false)} onSaved={load} />
     </View>
   );
 }
 
-/**
- * 分区小标题。标题本身承载信息，右侧只放该分区的动作，不混别的东西。
- *
- * 折叠状态由调用方持有（持久化在 SecureStore），这里只渲染箭头与点击区。
- */
-function SectionLabel({
-  label,
-  count,
-  action,
-  collapsible,
-  onToggle,
+function ChannelAvatarStack({
+  faces,
+  isBotOnline,
+  size = 28,
 }: {
-  label: string;
-  count?: number;
-  action?: ReactNode;
-  collapsible?: boolean;
-  onToggle?: () => void;
+  faces: MemberFace[];
+  isBotOnline: (id: string, snapshot?: boolean) => boolean;
+  size?: number;
 }): JSX.Element {
-  const body = (
-    <>
-      <Typography.Paragraph color="muted" className="text-sm">
-        {label}
-        {count ? ` · ${count}` : ""}
-      </Typography.Paragraph>
-      {collapsible !== undefined ? (
-        <Icon name={collapsible ? "chevron-down" : "chevron-up"} size={16} tone="muted" />
-      ) : null}
-    </>
-  );
-
+  const shown = faces.slice(0, 3);
+  if (shown.length === 0) {
+    return (
+      <Avatar>
+        <Avatar.Fallback>
+          <Icon name="people" size={18} tone="muted" />
+        </Avatar.Fallback>
+      </Avatar>
+    );
+  }
   return (
-    <View className="flex-row items-center justify-between px-1">
-      {collapsible !== undefined && onToggle ? (
-        <Pressable
-          onPress={onToggle}
-          accessibilityRole="button"
-          accessibilityLabel={`${collapsible ? "展开" : "折叠"}${label}`}
-          accessibilityState={{ expanded: !collapsible }}
-          className="flex-1 flex-row items-center justify-between"
+    <View className="flex-row items-center" style={{ width: size + (shown.length - 1) * (size * 0.55) }}>
+      {shown.map((p, i) => (
+        <View
+          key={p.agent_id}
+          style={{ marginLeft: i === 0 ? 0 : -size * 0.45, zIndex: shown.length - i }}
         >
-          {body}
-        </Pressable>
-      ) : (
-        <View className="flex-1 flex-row items-center justify-between">{body}</View>
-      )}
-      {action}
+          <AgentAvatar
+            id={p.agent_id}
+            name={p.name}
+            size={size}
+            shape={p.avatar_shape}
+            color={p.avatar_color}
+            online={isBotOnline(p.agent_id, p.online)}
+          />
+        </View>
+      ))}
     </View>
   );
 }
 
-/**
- * 一个分区 = 一个 surface。
- *
- * 管理动作收进行尾的溢出菜单：原来的实现是「长按整行直接弹删除确认」，
- * 既没有任何可发现的入口，也意味着一次误触长按就站在了破坏性操作的门口。
- */
-function RowGroup({
-  rows,
-  busyId,
-  onOpen,
-  onEdit,
-  onDelete,
-}: {
-  rows: Row[];
-  busyId: string | null;
-  onOpen: (item: Row) => void;
-  onEdit?: (item: Row) => void;
-  onDelete: (item: Row) => void;
-}): JSX.Element {
-  return (
-    <View className="overflow-hidden rounded-3xl bg-surface">
-      {rows.map((item, index) => {
-        const busy = busyId === item.id;
-        return (
-          <View key={`${item.kind}:${item.id}`}>
-            {index > 0 ? <Separator className="mx-4" /> : null}
-            <RowItem
-              item={item}
-              busy={busy}
-              locked={busyId !== null}
-              onOpen={() => onOpen(item)}
-              {...(onEdit ? { onEdit: () => onEdit(item) } : {})}
-              onDelete={() => onDelete(item)}
-            />
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function RowItem({
-  item,
+function AgentRow({
+  agent,
   busy,
   locked,
+  status,
+  online,
   onOpen,
   onEdit,
+  onClone,
   onDelete,
 }: {
-  item: Row;
+  agent: Agent;
   busy: boolean;
   locked: boolean;
+  status: string;
+  online: boolean;
   onOpen: () => void;
-  onEdit?: () => void;
+  onEdit: () => void;
+  onClone: () => void;
   onDelete: () => void;
 }): JSX.Element {
-  const isChannel = item.kind === "channel";
-
+  const snippet = (agent.last_message || agent.description || "").trim() || "尚未开始对话";
   return (
-    <View className="flex-row items-center pl-4 pr-1">
+    <View className="flex-row items-center gap-3 py-3 pl-4 pr-1">
       <Pressable
-        className="flex-1 flex-row items-center gap-3 py-3"
         accessibilityRole="button"
-        accessibilityLabel={`打开 ${item.title}`}
+        accessibilityLabel={`打开 ${agent.name}`}
         accessibilityState={{ busy }}
         disabled={locked}
         onPress={onOpen}
       >
-        {isChannel ? (
-          <Avatar>
-            <Avatar.Fallback>
-              <Icon name="people" size={18} tone="muted" />
-            </Avatar.Fallback>
-          </Avatar>
-        ) : (
-          <AgentAvatar
-            id={item.id}
-            name={item.title}
-            shape={item.shape}
-            color={item.color}
-            online={item.online}
-            busy={item.busy}
-          />
-        )}
-
-        <View className="flex-1 gap-0.5">
-          <Typography.Paragraph weight="medium" numberOfLines={1}>
-            {item.title}
-          </Typography.Paragraph>
-          <Typography.Paragraph type="body-sm" color="muted" numberOfLines={1}>
-            {item.subtitle}
-          </Typography.Paragraph>
-        </View>
-
-        {item.time ? (
-          <Typography.Paragraph type="body-sm" color="muted">
-            {formatRelativeTime(item.time)}
-          </Typography.Paragraph>
-        ) : null}
-        {busy ? <Spinner size="sm" /> : null}
+        <AgentAvatar
+          id={agent.id}
+          name={agent.name}
+          size={48}
+          shape={agent.avatar_shape}
+          color={agent.avatar_color}
+          status={status}
+          online={online}
+        />
       </Pressable>
 
-      <Menu>
-        {/* asChild：让 Button 自己变成 trigger。如果不这么做，trigger 和 Button
-            就是两个叠在一起的 Pressable，一次点击可能既开菜单又触发按钮。 */}
-        <Menu.Trigger asChild isDisabled={locked}>
-          <Button size="sm" variant="ghost" isIconOnly accessibilityLabel={`管理 ${item.title}`}>
-            <Icon name="ellipsis-horizontal" size={18} tone="muted" />
-          </Button>
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Overlay closeOnPress />
-          <Menu.Content presentation="popover" width={180}>
-            {onEdit ? (
-              <Menu.Item onPress={onEdit}>
-                <Menu.ItemTitle>编辑</Menu.ItemTitle>
-              </Menu.Item>
+      <View className="min-w-0 flex-1">
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            className="min-w-0 flex-1 flex-row items-center gap-1.5"
+            accessibilityRole="button"
+            accessibilityLabel={`打开 ${agent.name}`}
+            accessibilityState={{ busy }}
+            disabled={locked}
+            onPress={onOpen}
+          >
+            <Typography.Paragraph
+              weight="medium"
+              numberOfLines={1}
+              className="min-w-0 shrink text-lg"
+            >
+              {agent.name}
+            </Typography.Paragraph>
+            {agent.task_active ? (
+              <View className="h-1.5 w-1.5 rounded-full bg-success" accessibilityLabel="回复中" />
             ) : null}
-            <Menu.Item variant="danger" onPress={onDelete}>
-              <Menu.ItemTitle>删除</Menu.ItemTitle>
-            </Menu.Item>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
+            <View className="flex-1" />
+            {agent.conversation_updated_at ? (
+              <Typography.Paragraph type="body-sm" color="muted" className="shrink-0">
+                {formatRelativeTime(agent.conversation_updated_at)}
+              </Typography.Paragraph>
+            ) : null}
+            {busy ? <Spinner size="sm" /> : null}
+          </Pressable>
+          <RowMenu
+            title={agent.name}
+            locked={locked}
+            onEdit={onEdit}
+            onClone={onClone}
+            onDelete={onDelete}
+          />
+        </View>
+        <Pressable disabled={locked} onPress={onOpen}>
+          <Typography.Paragraph type="body-sm" color="muted" numberOfLines={1} className="mt-0.5">
+            {snippet}
+          </Typography.Paragraph>
+        </Pressable>
+      </View>
     </View>
+  );
+}
+
+function ChannelRow({
+  channel,
+  faces,
+  busy,
+  locked,
+  isBotOnline,
+  onOpen,
+  onDelete,
+}: {
+  channel: Channel;
+  faces: MemberFace[];
+  busy: boolean;
+  locked: boolean;
+  isBotOnline: (id: string, snapshot?: boolean) => boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const memberNames = faces.map((f) => f.name).join("、") || "无成员";
+  return (
+    <View className="flex-row items-center gap-3 py-3 pl-4 pr-1">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`打开群聊 ${channel.name}`}
+        accessibilityState={{ busy }}
+        disabled={locked}
+        onPress={onOpen}
+      >
+        <ChannelAvatarStack faces={faces} isBotOnline={isBotOnline} size={40} />
+      </Pressable>
+
+      <View className="min-w-0 flex-1">
+        <View className="flex-row items-center gap-1">
+          <Pressable
+            className="min-w-0 flex-1 flex-row items-center gap-1.5"
+            accessibilityRole="button"
+            accessibilityLabel={`打开群聊 ${channel.name}`}
+            accessibilityState={{ busy }}
+            disabled={locked}
+            onPress={onOpen}
+          >
+            <Typography.Paragraph
+              weight="medium"
+              numberOfLines={1}
+              className="min-w-0 shrink text-lg"
+            >
+              {channel.name}
+            </Typography.Paragraph>
+            {channel.task_active ? (
+              <View className="h-1.5 w-1.5 rounded-full bg-success" accessibilityLabel="回复中" />
+            ) : null}
+            <View className="flex-1" />
+            {channel.created_at ? (
+              <Typography.Paragraph type="body-sm" color="muted" className="shrink-0">
+                {formatRelativeTime(channel.created_at)}
+              </Typography.Paragraph>
+            ) : null}
+            {busy ? <Spinner size="sm" /> : null}
+          </Pressable>
+          <RowMenu title={channel.name} locked={locked} onDelete={onDelete} />
+        </View>
+        <Pressable disabled={locked} onPress={onOpen}>
+          <Typography.Paragraph type="body-sm" color="muted" numberOfLines={1} className="mt-0.5">
+            {memberNames}
+          </Typography.Paragraph>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function RowMenu({
+  title,
+  locked,
+  onEdit,
+  onClone,
+  onDelete,
+}: {
+  title: string;
+  locked: boolean;
+  onEdit?: () => void;
+  onClone?: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  return (
+    <Menu>
+      <Menu.Trigger asChild isDisabled={locked}>
+        <Button size="sm" variant="ghost" isIconOnly accessibilityLabel={`管理 ${title}`}>
+          <Icon name="ellipsis-horizontal" size={18} tone="muted" />
+        </Button>
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Overlay closeOnPress />
+        <Menu.Content presentation="popover" width={180}>
+          {onEdit ? (
+            <Menu.Item onPress={onEdit}>
+              <Menu.ItemTitle>编辑</Menu.ItemTitle>
+            </Menu.Item>
+          ) : null}
+          {onClone ? (
+            <Menu.Item onPress={onClone}>
+              <Menu.ItemTitle>复制助手</Menu.ItemTitle>
+            </Menu.Item>
+          ) : null}
+          <Menu.Item variant="danger" onPress={onDelete}>
+            <Menu.ItemTitle>删除</Menu.ItemTitle>
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   );
 }
 

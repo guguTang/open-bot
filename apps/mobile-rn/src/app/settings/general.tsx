@@ -5,7 +5,8 @@ import { useState } from "react";
 import { ScrollView, View } from "react-native";
 
 import type { AutoReviewRule } from "@/api/types";
-import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { FormActions, FormField, FormStatus, SectionTitle, SwitchRow } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { useSession } from "@/providers/session";
 import { useUserSettings, useUserSettingsMutations } from "@/queries";
@@ -70,6 +71,7 @@ function errText(err: unknown, fallback: string): string {
 
 export default function GeneralSettingsScreen(): JSX.Element {
   const { user } = useSession();
+  const { confirm } = useConfirm();
 
   const [draftWhen, setDraftWhen] = useState("");
   const [draftAction, setDraftAction] = useState<AutoReviewRule["action"]>("ask_first");
@@ -117,8 +119,17 @@ export default function GeneralSettingsScreen(): JSX.Element {
     );
   }
 
-  function removeRule(id: string): void {
+  async function removeRule(id: string): Promise<void> {
     if (!settings) return;
+    const rule = settings.auto_review_rules.find((r) => r.id === id);
+    const ok = await confirm({
+      title: "删除该规则？",
+      message: rule ? `当 Bot 想要「${rule.when}」时将不再套用此规则。` : "删除后不可恢复。",
+      confirmLabel: "删除",
+      cancelLabel: "取消",
+      destructive: true,
+    });
+    if (!ok) return;
     void persist(
       { auto_review_rules: settings.auto_review_rules.filter((r) => r.id !== id) },
       "已删除规则"
@@ -143,8 +154,8 @@ export default function GeneralSettingsScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="审核与时区"
-      subtitle="操作审批规则与时间基准"
+      title="时区与自动审核"
+      subtitle="自动审核规则与报告时区"
       loading={settingsQuery.isLoading}
       error={settingsQuery.error ? errText(settingsQuery.error, "加载设置失败") : null}
       onRetry={() => void settingsQuery.refetch()}
@@ -278,13 +289,16 @@ export default function GeneralSettingsScreen(): JSX.Element {
                   </View>
                 </View>
 
-                <Button
-                  isDisabled={busy || !draftWhen.trim()}
-                  onPress={addRule}
-                  accessibilityLabel="添加规则"
-                >
-                  <Button.Label>{busy ? "处理中…" : "添加规则"}</Button.Label>
-                </Button>
+                <FormActions>
+                  <Button
+                    size="sm"
+                    isDisabled={busy || !draftWhen.trim()}
+                    onPress={addRule}
+                    accessibilityLabel="添加规则"
+                  >
+                    <Button.Label>{busy ? "处理中…" : "添加规则"}</Button.Label>
+                  </Button>
+                </FormActions>
               </View>
 
               {rules.length === 0 ? (
@@ -310,7 +324,7 @@ export default function GeneralSettingsScreen(): JSX.Element {
                         size="sm"
                         variant="danger-soft"
                         isDisabled={busy}
-                        onPress={() => removeRule(r.id)}
+                        onPress={() => void removeRule(r.id)}
                         accessibilityLabel={`删除规则 ${r.when}`}
                       >
                         <Button.Label>删除</Button.Label>
@@ -328,7 +342,12 @@ export default function GeneralSettingsScreen(): JSX.Element {
         </Card.Body>
       </Card>
 
-      {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
+      {msg ? (
+        <FormStatus
+          message={msg}
+          tone={msg.startsWith("已") ? "success" : msg.includes("失败") ? "danger" : "muted"}
+        />
+      ) : null}
     </ScreenScaffold>
   );
 }

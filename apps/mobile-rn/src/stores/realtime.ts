@@ -95,3 +95,12 @@ export function useAgentOnline(agentId: string | undefined, scope: string | null
     useShallow((s) => (s.scope === scope && agentId ? Boolean(s.online[agentId]) : false))
   );
 }
+
+/** 读某个助手的 presence 五态；无事件时视为 idle。 */
+export function useAgentPresence(agentId: string | undefined, scope: string | null): string {
+  return useRealtimeStore(
+    useShallow((s) =>
+      s.scope === scope && agentId ? s.presence[agentId] || "idle" : "idle"
+    )
+  );
+}

@@ -183,8 +183,8 @@ export default function MachinesScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="电脑"
-      subtitle="已登记的本机设备"
+      title="优先电脑"
+      subtitle="把活派给哪台电脑执行"
       loading={machinesQuery.isLoading}
       error={loadError ? errText(loadError, "加载电脑列表失败") : null}
       empty={

@@ -8,8 +8,16 @@ import { View } from "react-native";
 import * as api from "@/api";
 import type { LLMConnection, LLMInput } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
+import {
+  FormActions,
+  FormField,
+  FormStatus,
+  PageIntro,
+  SectionTitle,
+  SwitchRow,
+} from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { EmptyState } from "@/components/states";
 import { formatRelativeTime } from "@/lib/format";
 import { useBusy, useLlmConnections, useLlmMutations } from "@/queries";
 import { qk } from "@/queries/client";
@@ -316,12 +324,16 @@ export default function LlmSettingsScreen(): JSX.Element {
       error={llm.error?.message || null}
       onRetry={() => void llm.refetch()}
     >
-      <Typography.Paragraph color="muted">
+      <PageIntro>
         每个用户可配置多个 OpenAI 兼容连接；聊天默认使用「默认」连接。密钥不会完整回显。
-      </Typography.Paragraph>
+      </PageIntro>
 
       {connections.length === 0 ? (
-        <Typography.Paragraph color="muted">暂无连接，请在下方新增。</Typography.Paragraph>
+        <EmptyState
+          icon="server-outline"
+          title="暂无连接"
+          hint="在下方新增一条 OpenAI 兼容连接"
+        />
       ) : (
         connections.map((c) => (
           <Card key={c.id} className={c.is_default ? "border-accent" : undefined}>
@@ -359,12 +371,12 @@ export default function LlmSettingsScreen(): JSX.Element {
                     <Button.Label>设默认</Button.Label>
                   </Button>
                 ) : null}
-                <Button size="sm" variant="outline" isDisabled={busy} onPress={() => startEdit(c)}>
+                <Button size="sm" variant="secondary" isDisabled={busy} onPress={() => startEdit(c)}>
                   <Button.Label>编辑</Button.Label>
                 </Button>
                 <Button
                   size="sm"
-                  variant="danger"
+                  variant="danger-soft"
                   isDisabled={busy}
                   onPress={() => void removeConnection(c)}
                 >
@@ -400,11 +412,12 @@ export default function LlmSettingsScreen(): JSX.Element {
             value={form.api_key ?? ""}
             onChangeText={(t) => patch({ api_key: t })}
             placeholder="sk-..."
+            secureTextEntry
             // 编辑态的 hint 是「留空不改」这条业务规则唯一可见的说明，不能省。
             hint={editingId ? savedKeyHint(connections, editingId) : undefined}
           />
           <FormField
-            label="Model"
+            label="模型"
             value={form.model}
             onChangeText={(t) => patch({ model: t })}
             placeholder={modelsLoading ? "加载模型列表…" : "gpt-4o-mini"}
@@ -420,7 +433,7 @@ export default function LlmSettingsScreen(): JSX.Element {
           />
           {modelOptions.length > 0 ? (
             <View className="flex-row flex-wrap gap-2">
-              {modelOptions.slice(0, 40).map((id) => (
+              {modelOptions.slice(0, 12).map((id) => (
                 <Chip
                   key={id}
                   size="sm"
@@ -465,19 +478,22 @@ export default function LlmSettingsScreen(): JSX.Element {
             onValueChange={(v) => patch({ is_default: v })}
           />
 
-          {cacheProbing ? (
-            <Typography.Paragraph color="muted">正在检测 prompt cache…</Typography.Paragraph>
-          ) : cacheProbeMsg ? (
-            <Typography.Paragraph color="muted">{cacheProbeMsg}</Typography.Paragraph>
+          {cacheProbing ? <FormStatus message="正在检测 prompt cache…" /> : null}
+          {cacheProbeMsg && !cacheProbing ? <FormStatus message={cacheProbeMsg} /> : null}
+          {probeMsg ? <FormStatus message={probeMsg} /> : null}
+          {msg ? (
+            <FormStatus
+              message={msg}
+              tone={msg.includes("失败") || msg.includes("错误") ? "danger" : "muted"}
+            />
           ) : null}
-          {probeMsg ? <Typography.Paragraph color="muted">{probeMsg}</Typography.Paragraph> : null}
-          {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
 
-          <View className="flex-row gap-3">
-            <Button isDisabled={busy || probing} onPress={() => void save()}>
+          <FormActions>
+            <Button size="sm" isDisabled={busy || probing} onPress={() => void save()}>
               <Button.Label>{busy ? "保存中…" : "保存"}</Button.Label>
             </Button>
             <Button
+              size="sm"
               variant="secondary"
               isDisabled={busy || probing}
               onPress={() => void probeTools()}
@@ -486,6 +502,7 @@ export default function LlmSettingsScreen(): JSX.Element {
             </Button>
             {editingId ? (
               <Button
+                size="sm"
                 variant="ghost"
                 isDisabled={busy}
                 onPress={() => resetForm(connections.length > 0)}
@@ -493,7 +510,7 @@ export default function LlmSettingsScreen(): JSX.Element {
                 <Button.Label>取消编辑</Button.Label>
               </Button>
             ) : null}
-          </View>
+          </FormActions>
         </Card.Body>
       </Card>
     </ScreenScaffold>

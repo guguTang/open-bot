@@ -44,7 +44,7 @@ export function mentionMembersOf(
  * 判断是否展示首次引导卡。
  *
  * 条件与 Web 端一致：会话还没有任何消息，且用户没关过这个会话的引导。
- * 「关过」按会话（或还没建会话时的助手）维度记在 MMKV（见 lib/storage.ts）。
+ * 「关过」按会话（或还没建会话时的助手）维度记在本地偏好（见 lib/storage.ts）。
  */
 export function shouldShowOnboarding(
   conversationId: string | null,

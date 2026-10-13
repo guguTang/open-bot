@@ -5,8 +5,16 @@ import { View } from "react-native";
 
 import type { MCPServer, MCPServerInput } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { FormField, SectionTitle, SwitchRow } from "@/components/FormField";
+import {
+  FormActions,
+  FormField,
+  FormStatus,
+  PageIntro,
+  SectionTitle,
+  SwitchRow,
+} from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { EmptyState } from "@/components/states";
 import { useBusy, useMcpMutations, useMcpServers } from "@/queries";
 
 /**
@@ -174,34 +182,26 @@ export default function McpSettingsScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="MCP"
-      subtitle="外部工具服务"
+      title="插件"
+      subtitle="扩展能力与连接"
       loading={serversQuery.isLoading}
       error={serversQuery.error?.message || "加载失败"}
       onRetry={() => void serversQuery.refetch()}
     >
-      <Typography.Paragraph color="muted">
-        配置 MCP Client servers（stdio / sse / http）。启用后，在 LLM 开启 tools 时会注入工具；本地
+      <PageIntro>
+        配置外部工具服务（stdio / sse / http）。启用后，在模型开启 tools 时会注入工具；本地
         vLLM 无 function-calling 时可用下方手动「调用工具」。
-      </Typography.Paragraph>
+      </PageIntro>
 
-      {testResult ? (
-        <Card className="border-accent">
-          <Card.Body>
-            <Typography.Paragraph>{testResult}</Typography.Paragraph>
-          </Card.Body>
-        </Card>
-      ) : null}
-      {msg ? (
-        <Card>
-          <Card.Body>
-            <Typography.Paragraph color="muted">{msg}</Typography.Paragraph>
-          </Card.Body>
-        </Card>
-      ) : null}
+      {testResult ? <FormStatus message={testResult} tone="success" /> : null}
+      {msg ? <FormStatus message={msg} /> : null}
 
       {servers.length === 0 ? (
-        <Typography.Paragraph color="muted">暂无 MCP server，请在下方新增。</Typography.Paragraph>
+        <EmptyState
+          icon="extension-puzzle-outline"
+          title="暂无插件"
+          hint="在下方新增一个外部工具服务"
+        />
       ) : (
         servers.map((s) => (
           <Card key={s.id}>
@@ -235,7 +235,7 @@ export default function McpSettingsScreen(): JSX.Element {
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
                   isDisabled={busy}
                   onPress={() => void toggle(s, !s.enabled)}
                 >
@@ -243,7 +243,7 @@ export default function McpSettingsScreen(): JSX.Element {
                 </Button>
                 <Button
                   size="sm"
-                  variant="danger"
+                  variant="danger-soft"
                   isDisabled={busy}
                   onPress={() => void removeServer(s)}
                 >
@@ -257,7 +257,7 @@ export default function McpSettingsScreen(): JSX.Element {
 
       <Card>
         <Card.Body className="gap-4">
-          <SectionTitle>新增 MCP server</SectionTitle>
+          <SectionTitle>新增插件</SectionTitle>
 
           <FormField
             label="名称"
@@ -269,7 +269,7 @@ export default function McpSettingsScreen(): JSX.Element {
           />
 
           <View className="gap-2">
-            <Typography.Paragraph color="muted">传输</Typography.Paragraph>
+            <SectionTitle>传输</SectionTitle>
             <RadioGroup
               value={form.transport}
               onValueChange={(v) => patch({ transport: v })}
@@ -318,9 +318,11 @@ export default function McpSettingsScreen(): JSX.Element {
             onValueChange={(v) => patch({ enabled: v })}
           />
 
-          <Button isDisabled={busy} onPress={() => void createServer()}>
-            <Button.Label>{busy ? "保存中…" : "新增"}</Button.Label>
-          </Button>
+          <FormActions>
+            <Button size="sm" isDisabled={busy} onPress={() => void createServer()}>
+              <Button.Label>{busy ? "保存中…" : "新增"}</Button.Label>
+            </Button>
+          </FormActions>
         </Card.Body>
       </Card>
 
@@ -329,51 +331,55 @@ export default function McpSettingsScreen(): JSX.Element {
           <SectionTitle>手动调用工具</SectionTitle>
 
           <View className="gap-2">
-            <Typography.Paragraph color="muted">Server</Typography.Paragraph>
+            <SectionTitle>服务</SectionTitle>
             <View className="flex-row flex-wrap gap-2">
               <Chip
                 size="sm"
-                variant={callServerId === "" ? "primary" : "secondary"}
+                variant={callServerId === "" ? "soft" : "secondary"}
                 color={callServerId === "" ? "accent" : "default"}
                 onPress={() => setCallServerId("")}
               >
-                选择…
+                <Chip.Label>选择…</Chip.Label>
               </Chip>
               {servers.map((s) => (
                 <Chip
                   key={s.id}
                   size="sm"
-                  variant={callServerId === s.id ? "primary" : "secondary"}
+                  variant={callServerId === s.id ? "soft" : "secondary"}
                   color={callServerId === s.id ? "accent" : "default"}
                   onPress={() => setCallServerId(s.id)}
                 >
-                  {s.name}
+                  <Chip.Label>{s.name}</Chip.Label>
                 </Chip>
               ))}
             </View>
           </View>
 
           <FormField
-            label="Tool 名"
+            label="工具名"
             value={callToolName}
             onChangeText={setCallToolName}
             placeholder="echo"
             required
           />
           <FormField
-            label="Arguments（JSON）"
+            label="参数（JSON）"
             value={callArgs}
             onChangeText={setCallArgs}
             multiline
           />
 
-          <Button isDisabled={callBusy || !callServerId} onPress={() => void callToolManually()}>
-            <Button.Label>{callBusy ? "调用中…" : "调用"}</Button.Label>
-          </Button>
+          <FormActions>
+            <Button
+              size="sm"
+              isDisabled={callBusy || !callServerId}
+              onPress={() => void callToolManually()}
+            >
+              <Button.Label>{callBusy ? "调用中…" : "调用"}</Button.Label>
+            </Button>
+          </FormActions>
 
-          {callResult ? (
-            <Typography.Paragraph className="text-xs">{callResult}</Typography.Paragraph>
-          ) : null}
+          {callResult ? <FormStatus message={callResult} /> : null}
         </Card.Body>
       </Card>
     </ScreenScaffold>

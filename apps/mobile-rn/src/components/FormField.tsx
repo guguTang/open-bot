@@ -11,6 +11,17 @@ import {
 import type { JSX, ReactNode } from "react";
 import { Text, View } from "react-native";
 
+/**
+ * 设置页表单词法（HeroUI Native · Operate）
+ *
+ * - 文本：一律 `FormField`（含 `secureTextEntry`）；禁止裸 `TextField`/`Input`
+ * - 开关：`SwitchRow`；互斥枚举优先 `RadioGroup`，少选项可用 Chip soft/accent
+ * - 分区：`SectionTitle`；页顶说明：`PageIntro`
+ * - 操作反馈：`FormStatus`（success / danger / muted）
+ * - 按钮 size 默认 `sm`；主操作 primary（省略 variant）；次要 `secondary`；取消 `ghost`
+ * - 列表内破坏性操作：`danger-soft` + ConfirmDialog；不做静默删除/断开/撤销
+ */
+
 type FieldProps = {
   label: string;
   value: string;
@@ -79,6 +90,41 @@ export function FormField({
       {!error && hint ? <Description className="text-xs">{hint}</Description> : null}
     </TextField>
   );
+}
+
+/** 页顶说明：与分区标题区分开，统一 text-sm muted。 */
+export function PageIntro({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Typography.Paragraph color="muted" className="text-sm">
+      {children}
+    </Typography.Paragraph>
+  );
+}
+
+/** 表单/操作结果反馈，避免各页自己拼颜色类。 */
+export function FormStatus({
+  message,
+  tone = "muted",
+}: {
+  message: string;
+  tone?: "muted" | "success" | "danger";
+}): JSX.Element {
+  if (tone === "success") {
+    return <Typography.Paragraph className="text-sm text-success">{message}</Typography.Paragraph>;
+  }
+  if (tone === "danger") {
+    return <Typography.Paragraph className="text-sm text-danger">{message}</Typography.Paragraph>;
+  }
+  return (
+    <Typography.Paragraph color="muted" className="text-sm">
+      {message}
+    </Typography.Paragraph>
+  );
+}
+
+/** 表单主操作行：统一间距，主按钮在左。 */
+export function FormActions({ children }: { children: ReactNode }): JSX.Element {
+  return <View className="flex-row flex-wrap gap-2">{children}</View>;
 }
 
 /** 开关行：左标题右开关，整行可点。 */

@@ -121,7 +121,7 @@ export default function CompactScreen(): JSX.Element {
 
   return (
     <ScreenScaffold
-      title="压缩"
+      title="数据与压缩"
       subtitle="上下文压缩策略（只读）"
       loading={loading}
       empty={

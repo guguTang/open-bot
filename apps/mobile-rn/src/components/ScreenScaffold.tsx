@@ -17,11 +17,14 @@ import { ErrorAlert, ListSkeleton } from "@/components/states";
 export function ScreenHeader({
   title,
   subtitle,
+  leading,
   right,
   onBack,
 }: {
   title: string;
   subtitle?: string;
+  /** 标题左侧的头像 / 图标等，聊天页用来放 AgentAvatar */
+  leading?: ReactNode;
   right?: ReactNode;
   onBack?: () => void;
 }): JSX.Element {
@@ -31,7 +34,7 @@ export function ScreenHeader({
     /* pt-safe-offset-* 由 HeroUINativeProvider 里的 SafeAreaListener 自动同步给
        uniwind（provider.js 里调 Uniwind.updateInsets），所以安全区不需要
        useSafeAreaInsets + style 手动算，也顺带省掉一次 inset 变化的重渲染。 */
-    <View className="flex-row items-center gap-2 border-b border-border bg-background px-3 pt-safe-offset-10 pb-3">
+    <View className="flex-row items-center gap-1.5 border-b border-border bg-background px-2 pt-safe-offset-2 pb-2.5">
       <Button
         isIconOnly
         variant="ghost"
@@ -41,12 +44,14 @@ export function ScreenHeader({
         <Icon name="chevron-back" size={24} tone="foreground" />
       </Button>
 
-      <View className="flex-1">
+      {leading ? <View className="mr-0.5">{leading}</View> : null}
+
+      <View className="min-w-0 flex-1">
         <Typography.Heading type="h3" numberOfLines={1}>
           {title}
         </Typography.Heading>
         {subtitle ? (
-          <Typography.Paragraph color="muted" className="text-sm" numberOfLines={1}>
+          <Typography.Paragraph color="muted" className="text-xs" numberOfLines={1}>
             {subtitle}
           </Typography.Paragraph>
         ) : null}

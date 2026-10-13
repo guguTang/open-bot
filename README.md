@@ -89,8 +89,8 @@ make dev-mobile-ios  # 打开 Xcode（需本机 Xcode + CocoaPods）
 与上面的 Capacitor 壳并存的两条路线：这条是原生实现，自己写 UI，只复用后端契约。
 
 ```bash
-cp apps/mobile-rn/.env.example apps/mobile-rn/.env   # 真机必须改局域网 IP
 make dev-mobile-rn      # 等价于 cd apps/mobile-rn && pnpm start
+# 启动脚本自动探测本机局域网 IP 注入 EXPO_PUBLIC_OPENBOT_API_BASE（真机可连）
 ```
 
 - **流式**用 `expo/fetch`（RN 内置 fetch 拿不到 `response.body`），SSE 解析器逐行移植自 Web 端

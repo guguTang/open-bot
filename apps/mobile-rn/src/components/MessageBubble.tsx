@@ -3,7 +3,12 @@ import type { JSX } from "react";
 import { useMemo } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-import type { AttachmentMeta, HandoffPayload, HostConfirmPayload } from "@/api/types";
+import type {
+  AttachmentMeta,
+  HandoffPayload,
+  HostConfirmPayload,
+  MessageSource,
+} from "@/api/types";
 import { isImageAttachmentMime } from "@/api";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { ArtifactCards } from "@/components/ArtifactCards";
@@ -16,10 +21,10 @@ import {
 } from "@/components/chat/DiagramCards";
 import { HandoffCard } from "@/components/chat/HandoffCard";
 import { HostConfirmCard } from "@/components/chat/HostConfirmCard";
+import { MessageSourcesFooter } from "@/components/chat/MessageSourcesFooter";
 import { ReactionBar } from "@/components/chat/ReactionBar";
-import { splitDiagrams } from "@/lib/chat";
 import { formatSize } from "@/lib/format";
-import { splitResultOriented } from "@/lib/workspace";
+import { buildAssistantBody } from "@/lib/messageBody";
 
 export type UiMessage = {
   id: string;
@@ -36,6 +41,7 @@ export type UiMessage = {
   reply_to_id?: string;
   /** 线程根 id；非空说明这是一条线程内回复 */
   thread_root_id?: string;
+  sources?: MessageSource[];
   handoff?: HandoffPayload;
   host_confirm?: HostConfirmPayload;
   /** 停止标记，用于把服务端封口行和本地气泡对上 */
@@ -110,10 +116,10 @@ function AttachmentChips({ items }: { items: AttachmentMeta[] }): JSX.Element {
  *
  * 对齐 `apps/web/src/components/ChatMessage.tsx`：
  * - 用户消息只显示附件标签 + 纯文本（助手的话不需要 Markdown）
- * - 助手消息先过 `splitResultOriented` 抽出产物，再把清理过的正文交给 Markdown
+ * - 助手消息经 `buildAssistantBody` 抽出产物 / 图表 / 引用后再渲染
  * - 群聊里按 `agent_id` 显示发言者归属
  *
- * 圆角：朝向头像/自己的那一角收小一档（`rounded-lg`），另一侧保持 `rounded-2xl`。
+ * 圆角：用户 22px / 助手 18px（对齐 Web bubble），朝向头像/自己的那一角再收一档。
  * 两边同角会显得像一排没有指向的方块，收角之后气泡自然"贴"着它所属的那个头像。
  */
 export function MessageBubble({
@@ -138,10 +144,17 @@ export function MessageBubble({
   const isUser = message.role === "user";
   const isSummary = message.role === "summary";
 
-  // 流式内容每次 token 都变，解析结果必须跟着重算；但只在真的进 assistant 分支时算
-  const split = useMemo(
-    () => (isUser ? null : splitResultOriented(message.content)),
-    [isUser, message.content]
+  const body = useMemo(
+    () =>
+      isUser
+        ? null
+        : buildAssistantBody({
+            content: message.content,
+            sources: message.sources,
+            streaming: Boolean(message.streaming),
+            messageId: message.id,
+          }),
+    [isUser, message.content, message.sources, message.streaming, message.id]
   );
 
   const reactions = useMemo(
@@ -150,28 +163,19 @@ export function MessageBubble({
   );
   const canInteract = !readonly && !message.streaming && !message.id.startsWith("local-");
 
-  /**
-   * 正文按「文字 / 图表」切段后逐段渲染，保持助手写出来的原始顺序。
-   * 全部堆到末尾会让图和解释它的文字脱节，所以不能图省事只渲染一遍 Markdown。
-   */
-  const segments = useMemo(
-    () => (isUser || !split ? [] : splitDiagrams(split.display)),
-    [isUser, split]
-  );
-
   if (isUser) {
     return (
       <View className="flex-row justify-end">
-        <View className="max-w-[85%] gap-1.5">
-          {quoted ? <QuoteBlock quoted={quoted} /> : null}
+        <View className="max-w-[85%] gap-1">
           <Pressable
             onLongPress={canInteract ? onLongPress : undefined}
             delayLongPress={400}
-            className="gap-1.5 rounded-2xl rounded-br-lg bg-accent px-4 py-3"
+            className="gap-1.5 rounded-[22px] rounded-br-lg bg-accent px-4 py-2.5"
           >
+            {quoted ? <QuoteBlock quoted={quoted} onUserBubble /> : null}
             {message.attachments?.length ? <AttachmentChips items={message.attachments} /> : null}
             {message.content ? (
-              <Typography.Paragraph selectable className="text-accent-foreground">
+              <Typography.Paragraph selectable className="text-[14.5px] leading-[1.45] text-accent-foreground">
                 {message.content}
               </Typography.Paragraph>
             ) : null}
@@ -196,7 +200,7 @@ export function MessageBubble({
     : message.agent_name || undefined;
 
   return (
-    <View className="flex-row items-start gap-2">
+    <View className="flex-row items-start gap-2.5">
       <AgentAvatar
         id={agentId}
         name={agentName || "AI"}
@@ -205,7 +209,7 @@ export function MessageBubble({
         color={avatarColor}
       />
 
-      <View className="max-w-[85%] gap-1.5">
+      <View className="max-w-[85%] gap-1">
         {agentName ? (
           <Typography.Paragraph color="muted" className="px-1 text-[11px]">
             {agentName}
@@ -215,7 +219,7 @@ export function MessageBubble({
         <Pressable
           onLongPress={canInteract ? onLongPress : undefined}
           delayLongPress={400}
-          className="gap-2 rounded-2xl rounded-tl-lg bg-surface-secondary px-4 py-3"
+          className="gap-2 rounded-[18px] rounded-tl-md border border-border bg-surface px-4 py-3"
         >
           {quoted ? <QuoteBlock quoted={quoted} /> : null}
 
@@ -245,12 +249,12 @@ export function MessageBubble({
               {/* 图表围栏在流式过程中会反复重排，先只渲染文字，等这轮稳定了再出图 */}
               {message.streaming ? (
                 <Markdown
-                  content={split?.display.trim() ?? ""}
+                  content={body?.streamingMarkdown ?? ""}
                   streaming
                   {...(onSandboxLink ? { onLinkPress: onSandboxLink } : {})}
                 />
               ) : (
-                segments.map((seg, i) => {
+                (body?.segments ?? []).map((seg, i) => {
                   if (seg.kind === "diagram") {
                     return seg.lang === "mermaid" ? (
                       <MermaidDiagramCard key={`d${i}`} source={seg.source} pending={seg.pending} />
@@ -258,11 +262,10 @@ export function MessageBubble({
                       <HtmlDiagramCard key={`d${i}`} source={seg.source} pending={seg.pending} />
                     );
                   }
-                  const body = seg.text.trim();
-                  return body ? (
+                  return seg.markdown ? (
                     <Markdown
                       key={`t${i}`}
-                      content={body}
+                      content={seg.markdown}
                       {...(onSandboxLink ? { onLinkPress: onSandboxLink } : {})}
                     />
                   ) : null;
@@ -271,13 +274,17 @@ export function MessageBubble({
 
               {/* 流式过程中不显示产物卡片：正文还没稳定，反复抽取会闪 */}
               {!message.streaming &&
-              split &&
-              (split.artifacts.length > 0 || split.collapsedJson.length > 0) ? (
+              body &&
+              (body.artifacts.length > 0 || body.collapsedJson.length > 0) ? (
                 <ArtifactCards
-                  artifacts={split.artifacts}
-                  collapsedJson={split.collapsedJson}
+                  artifacts={body.artifacts}
+                  collapsedJson={body.collapsedJson}
                   {...(agentId ? { agentId } : {})}
                 />
+              ) : null}
+
+              {!message.streaming && body?.sources.length ? (
+                <MessageSourcesFooter sources={body.sources} />
               ) : null}
             </>
           ) : null}
@@ -310,14 +317,32 @@ export function MessageBubble({
   );
 }
 
-/** 引用块：谁说的 + 摘要，样式对齐 Web 端 ChatMessage 的 quote。 */
-function QuoteBlock({ quoted }: { quoted: UiMessage }): JSX.Element {
+/**
+ * 引用块：左侧 2px 竖条 + 单行摘要，对齐 Web `.msg-reply-quote`。
+ * 用户气泡上用半透明前景色，避免灰条在 accent 底上发脏。
+ */
+function QuoteBlock({
+  quoted,
+  onUserBubble,
+}: {
+  quoted: UiMessage;
+  onUserBubble?: boolean;
+}): JSX.Element {
   const who = quoted.role === "user" ? "你" : quoted.agent_name || "助手";
+  const text = quoted.content.replace(/\s+/g, " ").trim();
   return (
-    <View className="gap-0.5 rounded-xl bg-background/40 px-2.5 py-1.5">
-      <Typography.Paragraph className="text-[10px] text-muted">{who}</Typography.Paragraph>
-      <Typography.Paragraph className="text-xs" numberOfLines={2}>
-        {quoted.content.replace(/\s+/g, " ").slice(0, 120)}
+    <View
+      className={`mb-1 border-l-2 py-1 pl-2 ${
+        onUserBubble ? "border-accent-foreground/55" : "border-muted"
+      }`}
+    >
+      <Typography.Paragraph
+        className={`text-[12.5px] leading-[1.4] ${
+          onUserBubble ? "text-accent-foreground/70" : "text-muted"
+        }`}
+        numberOfLines={1}
+      >
+        {who}：{text.slice(0, 120)}
       </Typography.Paragraph>
     </View>
   );

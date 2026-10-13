@@ -33,7 +33,7 @@ import type { JSX } from "react";
 import { memo, useMemo } from "react";
 import { Linking, useColorScheme, View } from "react-native";
 
-import { API_BASE } from "@/api/config";
+import { getApiBase } from "@/api/config";
 
 export type MarkdownProps = {
   content: string;
@@ -59,15 +59,14 @@ const SAFE_SCHEMES = new Set(["https:", "http:", "mailto:"]);
  *
  * Markdown 正文里的图片 URL 是助手写出来的，可能指向任意第三方主机；
  * `Image` 直接去取就等于把用户的 IP 和设备指纹暴露出去。
- * 附件图片走的是相对路径（会被 `API_BASE` 补全），所以按前缀放行。
+ * 附件图片走的是相对路径（会被 getApiBase() 补全），所以按前缀放行。
  */
-const ALLOWED_IMAGE_HANDLERS = [
+const DATA_IMAGE_HANDLERS = [
   "data:image/png;base64",
   "data:image/jpeg;base64",
   "data:image/gif;base64",
   "data:image/webp;base64",
-  API_BASE,
-];
+] as const;
 
 export const Markdown = memo(function Markdown({
   content,
@@ -82,6 +81,12 @@ export const Markdown = memo(function Markdown({
   const surface = useThemeColor("surface-tertiary");
   const separator = useThemeColor("separator");
   const border = useThemeColor("border");
+  const allowedImageHandlers = useMemo(
+    () => [...DATA_IMAGE_HANDLERS, getApiBase()],
+    // origin can change from settings; re-read each render when base string changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [getApiBase()]
+  );
 
   /**
    * 样式表随主题色走。`useMemo` 的依赖是这些 token 的字符串值 ——
@@ -180,7 +185,7 @@ export const Markdown = memo(function Markdown({
     colorScheme: scheme === "dark" ? ("dark" as const) : ("light" as const),
     onLinkPress: handleLinkPress,
     onCopyCode: handleCopyCode,
-    allowedImageHandlers: ALLOWED_IMAGE_HANDLERS,
+    allowedImageHandlers,
     mergeStyle: true,
   } as const;
 

@@ -20,7 +20,7 @@ export type Agent = {
   is_builtin?: boolean;
   computer_mode?: "team" | "private" | string;
   user_id?: string;
-  /** 形象 v2 白名单：cloud|bean|drop|soft-hex|petal|puff（legacy id 由客户端映射）。 */
+  /** robot-heads：circle|square|hexagon|rectangle（legacy 有机 id 由客户端映射）。 */
   avatar_shape?: string;
   /** 12 色主色板（#rrggbb）。 */
   avatar_color?: string;
@@ -138,6 +138,12 @@ export type ReactionUpdatedEvent = {
   action: "add" | "remove" | string;
 };
 
+/** Clickable citation from retrieval tools (http_fetch, MCP search, etc.). */
+export type MessageSource = {
+  url: string;
+  title?: string;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant" | "summary" | "handoff" | string;
@@ -153,6 +159,8 @@ export type Message = {
   agent_message_id?: string;
   /** Bot 回复对应的 runtime run id，可复制给用户报障。 */
   request_id?: string;
+  /** Citation links when this reply used retrieval; omitted when none. */
+  sources?: MessageSource[];
   handoff?: HandoffPayload;
   attachments?: AttachmentMeta[];
   /** 本机操作确认卡（host-confirms）载荷。 */
@@ -283,12 +291,12 @@ export type ListMessagesResult = {
 /* ------------------------------------------------------------------ 协作 */
 
 export type ChannelMemberProfile = {
-  id: string;
-  name: string;
-  online?: boolean;
+  agent_id: string;
+  name?: string;
   avatar_shape?: string;
   avatar_color?: string;
-  last_message?: string;
+  /** 服务端按心跳窗口计算。 */
+  online?: boolean;
 };
 
 export type Channel = {
@@ -299,6 +307,8 @@ export type Channel = {
   members?: string[];
   member_profiles?: ChannelMemberProfile[];
   conversation_id?: string;
+  /** 群内有 run 在飞（侧栏「回复中」圆点） */
+  task_active?: boolean;
 };
 
 export type AgentBusMessage = {

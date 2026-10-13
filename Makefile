@@ -185,13 +185,13 @@ open-mobile-android: sync-mobile
 
 # React Native / Expo 原生移动端（apps/mobile-rn）
 # 后端需先起：make dev-runtime + make dev-api
-# 真机需先改 apps/mobile-rn/.env 的 EXPO_PUBLIC_OPENBOT_API_BASE 为局域网 IP
+# start 脚本自动探测本机局域网 IP 并注入 EXPO_PUBLIC_OPENBOT_API_BASE（真机可连）
 dev-mobile-rn:
 	cd apps/mobile-rn && pnpm start
 
-# 改过 .env 后用这个，会清 Metro 缓存并重新注入环境变量
+# 清 Metro 缓存再起（改过 .env / 换网后建议用）
 dev-mobile-rn-clear:
-	cd apps/mobile-rn && pnpm start --clear
+	cd apps/mobile-rn && pnpm clear
 
 check-mobile-rn:
 	cd apps/mobile-rn && pnpm typecheck && pnpm lint

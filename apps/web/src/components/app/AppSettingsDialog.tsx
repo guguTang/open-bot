@@ -10,10 +10,15 @@ import { getApiBase } from "../../api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const SETTINGS_NAV: ReadonlyArray<readonly [SettingsTab, string]> = [
@@ -60,6 +65,10 @@ function settingsSubheadTitle(
   return "时区与自动审核";
 }
 
+function isSettingsTab(value: string): value is SettingsTab {
+  return SETTINGS_NAV.some(([id]) => id === value);
+}
+
 export function AppSettingsDialog({
   open,
   sheetForm,
@@ -87,6 +96,9 @@ export function AppSettingsDialog({
     ? settingsSubheadTitle(settingsTab, settingsGeneralPane)
     : SETTINGS_TITLE[settingsTab];
 
+  const showHub = sheetForm && settingsShellHub;
+  const showSubhead = sheetForm && !settingsShellHub;
+
   return (
     <Dialog
       open={open}
@@ -103,7 +115,8 @@ export function AppSettingsDialog({
         )}
       >
         <DialogDescription className="sr-only">应用设置</DialogDescription>
-        {sheetForm && settingsShellHub ? (
+
+        {showHub ? (
           <>
             <DialogTitle className="sr-only">设置</DialogTitle>
             <MobileSettingsHub
@@ -123,8 +136,9 @@ export function AppSettingsDialog({
             />
           </>
         ) : null}
-        {sheetForm && !settingsShellHub ? (
-          <div className="settings-shell-subhead">
+
+        {showSubhead ? (
+          <header className="settings-shell-subhead">
             <Button
               type="button"
               variant="ghost"
@@ -135,60 +149,88 @@ export function AppSettingsDialog({
             >
               <ChevronLeft aria-hidden />
             </Button>
-            <DialogTitle>{heading}</DialogTitle>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="settings-close"
-              aria-label="关闭"
-              onClick={onClose}
-            >
-              <X aria-hidden />
-            </Button>
-          </div>
+            <DialogTitle className="text-center text-base font-semibold tracking-tight">
+              {heading}
+            </DialogTitle>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="settings-close"
+                aria-label="关闭"
+              >
+                <X aria-hidden />
+              </Button>
+            </DialogClose>
+          </header>
         ) : null}
-        {!(sheetForm && settingsShellHub) ? (
-          <>
-            <nav
+
+        {!showHub ? (
+          <Tabs
+            orientation="vertical"
+            value={settingsTab}
+            onValueChange={(value) => {
+              if (isSettingsTab(value)) onSelectTab(value);
+            }}
+            className="settings-tabs gap-0"
+          >
+            <aside
               className={cn("settings-nav", sheetForm && "settings-nav-hidden")}
               aria-label="设置分类"
             >
-              {SETTINGS_NAV.map(([id, label]) => (
-                <Button
-                  key={id}
-                  type="button"
-                  variant="ghost"
-                  className={cn(
-                    "justify-start",
-                    settingsTab === id && "active",
-                  )}
-                  onClick={() => onSelectTab(id)}
+              <ScrollArea className="h-full">
+                <TabsList
+                  variant="default"
+                  className="h-auto w-full flex-col items-stretch gap-0.5 rounded-none bg-transparent p-0 max-[720px]:w-max max-[720px]:flex-row"
                 >
-                  <SettingsGlyph id={id} />
-                  <span>{label}</span>
-                </Button>
-              ))}
-            </nav>
-            <div className="settings-main">
+                  {SETTINGS_NAV.map(([id, label]) => (
+                    <TabsTrigger
+                      key={id}
+                      value={id}
+                      className="h-auto flex-none justify-start gap-2.5 px-3 py-2 text-[14px] font-medium"
+                    >
+                      <SettingsGlyph id={id} />
+                      <span>{label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </ScrollArea>
+            </aside>
+
+            <Separator
+              orientation="vertical"
+              className="settings-tabs-separator hidden min-[721px]:block"
+            />
+
+            <TabsContent
+              value={settingsTab}
+              forceMount
+              className="settings-main mt-0 flex min-h-0 min-w-0 flex-col outline-none data-[state=inactive]:hidden"
+            >
               {!sheetForm ? (
-                <div className="settings-main-head">
-                  <DialogTitle>{heading}</DialogTitle>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="settings-close"
-                    aria-label="关闭"
-                    onClick={onClose}
-                  >
-                    <X aria-hidden />
-                  </Button>
-                </div>
+                <DialogHeader className="settings-main-head flex-row items-center justify-between text-left">
+                  <DialogTitle className="text-xl font-semibold tracking-tight">
+                    {heading}
+                  </DialogTitle>
+                  <DialogClose asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="settings-close"
+                      aria-label="关闭"
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </DialogClose>
+                </DialogHeader>
               ) : null}
-              <div className="settings-main-body">{children}</div>
-            </div>
-          </>
+              <div className="settings-main-body">
+                <div className="settings-main-body-inner">{children}</div>
+              </div>
+            </TabsContent>
+          </Tabs>
         ) : null}
       </DialogContent>
     </Dialog>

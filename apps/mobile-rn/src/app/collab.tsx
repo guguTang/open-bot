@@ -389,42 +389,86 @@ export default function CollabScreen(): JSX.Element {
           </View>
         </View>
 
-        <FormField
-          label="来源助手"
-          value={agents.find((a) => a.id === fromAgent)?.name ?? fromAgent}
-          onChangeText={(name) => {
-            const hit = agents.find((a) => a.name === name);
-            if (hit) setFromAgent(hit.id);
-          }}
-          placeholder={fromAgent ? "输入助手名以切换" : "默认使用第一个助手"}
-          hint="消息在总线上的署名来源。留空时后端回退到第一个助手"
-        />
+        <View className="gap-2">
+          <Typography.Paragraph color="muted" className="text-sm">
+            来源助手
+          </Typography.Paragraph>
+          <Typography.Paragraph color="muted" className="text-xs">
+            消息在总线上的署名来源。不选则后端回退到第一个助手
+          </Typography.Paragraph>
+          <View className="flex-row flex-wrap gap-2">
+            <Chip
+              size="sm"
+              variant={!fromAgent ? "soft" : "secondary"}
+              color={!fromAgent ? "accent" : "default"}
+              onPress={() => setFromAgent("")}
+            >
+              <Chip.Label>默认</Chip.Label>
+            </Chip>
+            {agents.map((a) => (
+              <Chip
+                key={a.id}
+                size="sm"
+                variant={fromAgent === a.id ? "soft" : "secondary"}
+                color={fromAgent === a.id ? "accent" : "default"}
+                onPress={() => setFromAgent(a.id)}
+              >
+                <Chip.Label>{a.name}</Chip.Label>
+              </Chip>
+            ))}
+          </View>
+        </View>
 
         {targetKind === "agent" ? (
-          <FormField
-            label="接收助手"
-            required
-            value={agents.find((a) => a.id === toAgent)?.name ?? toAgent}
-            onChangeText={(name) => {
-              const hit = agents.find((a) => a.name === name);
-              if (hit) setToAgent(hit.id);
-            }}
-            error={formError === "请选择接收的助手" ? formError : null}
-            placeholder="输入助手名"
-          />
+          <View className="gap-2">
+            <Typography.Paragraph color="muted" className="text-sm">
+              接收助手
+            </Typography.Paragraph>
+            <View className="flex-row flex-wrap gap-2">
+              {agents.map((a) => (
+                <Chip
+                  key={a.id}
+                  size="sm"
+                  variant={toAgent === a.id ? "soft" : "secondary"}
+                  color={toAgent === a.id ? "accent" : "default"}
+                  onPress={() => setToAgent(a.id)}
+                >
+                  <Chip.Label>{a.name}</Chip.Label>
+                </Chip>
+              ))}
+            </View>
+            {formError === "请选择接收的助手" ? (
+              <Typography.Paragraph className="text-xs text-danger">{formError}</Typography.Paragraph>
+            ) : null}
+          </View>
         ) : (
-          <FormField
-            label="接收频道"
-            required
-            value={channels.find((c) => c.id === channelId)?.name ?? channelId}
-            onChangeText={(name) => {
-              const hit = channels.find((c) => c.name === name);
-              if (hit) setChannelId(hit.id);
-            }}
-            error={formError === "请选择接收的频道" ? formError : null}
-            placeholder="输入频道名"
-            hint={channels.length === 0 ? "还没有频道，可先在首页新建群聊" : undefined}
-          />
+          <View className="gap-2">
+            <Typography.Paragraph color="muted" className="text-sm">
+              接收频道
+            </Typography.Paragraph>
+            {channels.length === 0 ? (
+              <Typography.Paragraph color="muted" className="text-xs">
+                还没有频道，可先在首页新建群聊
+              </Typography.Paragraph>
+            ) : (
+              <View className="flex-row flex-wrap gap-2">
+                {channels.map((c) => (
+                  <Chip
+                    key={c.id}
+                    size="sm"
+                    variant={channelId === c.id ? "soft" : "secondary"}
+                    color={channelId === c.id ? "accent" : "default"}
+                    onPress={() => setChannelId(c.id)}
+                  >
+                    <Chip.Label>{c.name}</Chip.Label>
+                  </Chip>
+                ))}
+              </View>
+            )}
+            {formError === "请选择接收的频道" ? (
+              <Typography.Paragraph className="text-xs text-danger">{formError}</Typography.Paragraph>
+            ) : null}
+          </View>
         )}
 
         <FormField
@@ -474,20 +518,32 @@ export default function CollabScreen(): JSX.Element {
                     <ListGroup.ItemDescription>
                       {c.members?.length ?? 0} 位成员
                     </ListGroup.ItemDescription>
-                    <View className="mt-2 flex-row flex-wrap items-center gap-2">
-                      <FormField
-                        label="新成员"
-                        value={agents.find((a) => a.id === picked)?.name ?? picked}
-                        onChangeText={(name) => {
-                          const hit = agents.find((a) => a.name === name);
-                          setMemberPick((prev) => ({ ...prev, [c.id]: hit?.id ?? "" }));
-                        }}
-                        placeholder="输入助手名"
-                      />
+                    <View className="mt-2 gap-2">
+                      <Typography.Paragraph color="muted" className="text-xs">
+                        新成员
+                      </Typography.Paragraph>
+                      <View className="flex-row flex-wrap gap-2">
+                        {agents
+                          .filter((a) => !(c.members ?? []).includes(a.id))
+                          .map((a) => (
+                            <Chip
+                              key={a.id}
+                              size="sm"
+                              variant={picked === a.id ? "soft" : "secondary"}
+                              color={picked === a.id ? "accent" : "default"}
+                              onPress={() =>
+                                setMemberPick((prev) => ({ ...prev, [c.id]: a.id }))
+                              }
+                            >
+                              <Chip.Label>{a.name}</Chip.Label>
+                            </Chip>
+                          ))}
+                      </View>
                       <Button
                         size="sm"
                         variant="secondary"
-                        isDisabled={addingMember === c.id}
+                        className="self-start"
+                        isDisabled={addingMember === c.id || !picked}
                         onPress={() => void addMember(c.id)}
                       >
                         <Button.Label>加入</Button.Label>

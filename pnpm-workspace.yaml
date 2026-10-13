@@ -6,6 +6,7 @@ packages:
 # 从 CDN 拉取的，必须放行；esbuild / unrs-resolver 是 Metro 与 Expo CLI 的依赖。
 onlyBuiltDependencies:
   - esbuild
-  - unrs-resolver
-  - heroui-pro
   - heroui-native-pro
+  - heroui-pro
+  - node-pty
+  - unrs-resolver

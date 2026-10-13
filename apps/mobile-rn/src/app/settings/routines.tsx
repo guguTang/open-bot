@@ -380,7 +380,7 @@ export default function RoutinesScreen(): JSX.Element {
                   </Button>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
                     className="flex-1"
                     isDisabled={busy}
                     onPress={() => startEdit(r)}

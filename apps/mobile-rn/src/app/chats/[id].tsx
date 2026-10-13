@@ -4,26 +4,36 @@ import { useLocalSearchParams } from "expo-router";
 import { Button, Typography } from "heroui-native";
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 
 import * as api from "@/api";
+import { isAbortError } from "@/api/http";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAgents, useMessages } from "@/queries";
 import { qk } from "@/queries/client";
-import type { Agent, AttachmentMeta, Message, ReactionUpdatedEvent } from "@/api/types";
+import type { Agent, AttachmentMeta, Channel, Message, ReactionUpdatedEvent } from "@/api/types";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import { BotOnboarding } from "@/components/BotOnboarding";
 import { Composer } from "@/components/Composer";
+import { GroupMembersSheet } from "@/components/GroupMembersSheet";
+import { Icon } from "@/components/Icon";
 import { MessageBubble, type UiMessage } from "@/components/MessageBubble";
 import { FilePreviewModal } from "@/components/FilePreviewModal";
 import { FeedbackModal } from "@/components/chat/FeedbackModal";
 import { MessageActionSheet } from "@/components/chat/MessageActionSheet";
-import { QuoteBar } from "@/components/chat/QuoteBar";
-import { RunStatus, deriveRunLabel } from "@/components/RunStatus";
+import { RunStatus } from "@/components/RunStatus";
 import { ScreenHeader } from "@/components/ScreenScaffold";
 import { ErrorAlert, MessageSkeleton } from "@/components/states";
 import { makeKey, type PickedFile } from "@/lib/attachments";
+import { toolNameLooksLikeSearch } from "@/lib/avatar";
 import {
   firstAttachmentIssue,
   mentionMembersOf,
@@ -31,78 +41,48 @@ import {
   shouldShowOnboarding,
 } from "@/lib/chat";
 import {
+  avatarPropsForMessage,
+  buildStreamHandlers,
+  mergeVisibleMessages,
+  toUiMessage,
+  type StreamingByAgent,
+} from "@/lib/conversationRun";
+import {
   onboardingStorageKey,
   setOnboardingDismissed,
   type OnboardingOption,
 } from "@/lib/onboarding";
 import { friendlyOpenError, parseSandboxHref, previewTitleFromPath } from "@/lib/workspace";
 import { useRealtimeEvents } from "@/providers/realtime";
+import { useSession } from "@/providers/session";
 import { useSecretPrompt } from "@/providers/secretPrompt";
+import { useAgentOnline, useAgentPresence } from "@/stores/realtime";
 
-const STREAMING_ID_PREFIX = "__streaming__:";
+/** 距底部多少像素内视为「贴底」，用于隐藏滚到底按钮。 */
+const NEAR_BOTTOM_PX = 96;
 
 /** 稳定空数组引用，避免 `?? []` 让下游 memo 每次都失效。 */
 const EMPTY_AGENTS: Agent[] = [];
 
-/** Parallel group: one streaming slot per agent_id ("_" = unknown until agent_start). */
-type StreamPart = { text: string; agentName?: string };
-type StreamingByAgent = Record<string, StreamPart>;
-
-/**
- * 服务端消息 → 气泡用的形状。
- *
- * 单独抽出来是因为消息会在三处进来：首屏加载、发送后重新拉取、WS 事件补拉。
- * 三处各写一遍字段映射，迟早会漏掉一个（漏 `reactions` 就表现为「点了没反应」）。
- */
-function toUiMessage(m: Message): UiMessage {
-  return {
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    ...(m.agent_id ? { agent_id: m.agent_id } : {}),
-    ...(m.reactions?.length ? { reactions: m.reactions } : {}),
-    ...(m.request_id ? { request_id: m.request_id } : {}),
-    ...(m.reply_to_id ? { reply_to_id: m.reply_to_id } : {}),
-    ...(m.thread_root_id ? { thread_root_id: m.thread_root_id } : {}),
-    ...(m.handoff ? { handoff: m.handoff } : {}),
-    ...(m.host_confirm ? { host_confirm: m.host_confirm } : {}),
-  };
-}
-
-/** Stamp AgentAvatar shape/color/name from agents[] by message.agent_id. */
-function avatarPropsForMessage(
-  m: UiMessage,
-  agents: Agent[],
-  primaryAgent: Agent | null
-): {
-  avatarShape?: string;
-  avatarColor?: string;
-  fallbackAgentName?: string;
-} {
-  const aid = m.agent_id || primaryAgent?.id;
-  const a = aid ? agents.find((x) => x.id === aid) : undefined;
-  return {
-    ...(a?.avatar_shape ? { avatarShape: a.avatar_shape } : {}),
-    ...(a?.avatar_color ? { avatarColor: a.avatar_color } : {}),
-    ...(m.agent_id && !m.agent_name && a?.name ? { fallbackAgentName: a.name } : {}),
-  };
-}
-
 export default function ChatScreen(): JSX.Element {
-  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const conversationId = String(id ?? "");
+  const { user } = useSession();
   const { refresh: refreshSecrets } = useSecretPrompt();
 
   const [pendingBubbles, setPendingBubbles] = useState<UiMessage[]>([]);
   const [title, setTitle] = useState("");
   const [memberIds, setMemberIds] = useState<string[] | undefined>();
+  const [channel, setChannel] = useState<Channel | null>(null);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [streamingByAgent, setStreamingByAgent] = useState<StreamingByAgent | null>(null);
   const [sending, setSending] = useState(false);
   const [runLabel, setRunLabel] = useState("");
+  /** 当前工具名，用于 working→searching 头像动画。 */
+  const [runActiveTool, setRunActiveTool] = useState<string | null>(null);
   /** 已经完成首次加载的会话 id。loading 由它派生，避免在 effect 里同步 setState。 */
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const loading = loadedFor !== conversationId;
@@ -133,7 +113,17 @@ export default function ChatScreen(): JSX.Element {
   const agents = useMemo(() => agentsQuery.data ?? EMPTY_AGENTS, [agentsQuery.data]);
 
   const abortRef = useRef<AbortController | null>(null);
+  /** 当前路由会话 id；发消息 catch 里用来区分「本页停止」和「已切走会话」。 */
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
   const scrollRef = useRef<ScrollView>(null);
+  /** 用户是否贴着底部；离开底部时显示「滚到底」浮钮。 */
+  const [nearBottom, setNearBottom] = useState(true);
+  /**
+   * 键盘弹起时 home indicator 已被键盘盖住，不能再叠 pb-safe，
+   * 否则会和 KeyboardAvoidingView 的 padding 叠成一大块空白。
+   */
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   /** 长按打开操作面板的目标消息 */
   const [sheetMessage, setSheetMessage] = useState<UiMessage | null>(null);
@@ -143,7 +133,7 @@ export default function ChatScreen(): JSX.Element {
   const [feedbackSource, setFeedbackSource] = useState<"feedback_menu" | "reaction_followup">(
     "feedback_menu"
   );
-  /** 引用回复的目标；非空时作曲框上方显示引用条 */
+  /** 引用回复的目标；非空时作曲卡内嵌引用条 */
   const [replyTo, setReplyTo] = useState<UiMessage | null>(null);
   /** 展开的线程根消息 id */
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
@@ -158,6 +148,49 @@ export default function ChatScreen(): JSX.Element {
     const fromMsg = last ? agents.find((a) => a.id === last.agent_id) : undefined;
     return fromMsg ?? agents[0] ?? null;
   }, [agents, memberIds, messages]);
+
+  /** 当前驱动 RunStatus / 动态头像的助手（群聊取正在流式的那个）。 */
+  const runFaceAgent = useMemo(() => {
+    if (streamingByAgent) {
+      const ids = Object.keys(streamingByAgent).filter((k) => k && k !== "_");
+      if (ids.length === 1) {
+        const hit = agents.find((a) => a.id === ids[0]);
+        if (hit) return hit;
+      }
+    }
+    return primaryAgent;
+  }, [streamingByAgent, agents, primaryAgent]);
+
+  const runPresence = useAgentPresence(runFaceAgent?.id, user?.id ?? null);
+  const headerOnline = useAgentOnline(primaryAgent?.id, user?.id ?? null);
+  const searchingHint = toolNameLooksLikeSearch(runActiveTool) || toolNameLooksLikeSearch(runLabel);
+
+  const headerSubtitle = useMemo(() => {
+    if (channel) {
+      const n = channel.members?.length ?? 0;
+      return n > 0 ? `${n} 位成员` : "群聊";
+    }
+    if (!primaryAgent) return undefined;
+    return headerOnline ? "在线" : undefined;
+  }, [channel, primaryAgent, headerOnline]);
+
+  const replyQuote = useMemo(() => {
+    if (!replyTo) return null;
+    return {
+      id: replyTo.id,
+      role: replyTo.role,
+      content: replyTo.content,
+      ...(replyTo.role !== "user"
+        ? {
+            agentName:
+              replyTo.agent_name ||
+              agents.find((a) => a.id === replyTo.agent_id)?.name ||
+              primaryAgent?.name ||
+              "助手",
+          }
+        : {}),
+    };
+  }, [replyTo, agents, primaryAgent]);
 
   /**
    * 消息本体是服务端状态，交给 TanStack Query。
@@ -176,11 +209,15 @@ export default function ChatScreen(): JSX.Element {
    * 回调闭包里的 `reload` 指向的是当次渲染的那个实例，
    * 依赖一变（比如切了会话）就可能拿着旧的。
    */
+  // 只用 refetch（TanStack Query 保证稳定），不要依赖整个 messagesQuery ——
+  // 查询结果对象每次渲染都是新引用，会让 reload 身份变化，进而触发下方 effect
+  // cleanup 把进行中的 send AbortController 掐掉（表现为 fetch aborted）。
+  const refetchMessages = messagesQuery.refetch;
   const refreshMessages = useCallback(async (): Promise<{ runActive: boolean }> => {
-    const { data } = await messagesQuery.refetch();
+    const { data } = await refetchMessages();
     setPendingBubbles([]);
     return { runActive: Boolean(data?.run_active) };
-  }, [messagesQuery]);
+  }, [refetchMessages]);
 
   const reload = useCallback(async () => {
     // 用 refetch 的返回值，而不是闭包里的 messagesQuery.data ——
@@ -190,47 +227,39 @@ export default function ChatScreen(): JSX.Element {
 
     // 服务端还有 run 在跑（App 被杀掉后重开）→ 重新挂回流
     const ctrl = new AbortController();
+    abortRef.current = ctrl;
     setSending(true);
     setRunLabel("正在思考…");
+    setRunActiveTool(null);
     api
       .subscribeConversationEvents(
         conversationId,
-        {
-          onAgentStart: (info) =>
-            setStreamingByAgent((prev) => ({
-              ...(prev || {}),
-              [info.agent_id]: {
-                text: prev?.[info.agent_id]?.text ?? "",
-                agentName: info.agent_name ?? prev?.[info.agent_id]?.agentName,
-              },
-            })),
-          onToken: (t, info) =>
-            setStreamingByAgent((prev) => {
-              const base = prev || {};
-              let key = (info?.agent_id || "").trim();
-              if (!key) {
-                const keys = Object.keys(base);
-                key = keys.length === 1 ? keys[0]! : "_";
-              }
-              const cur = base[key] || { text: "" };
-              return { ...base, [key]: { ...cur, text: cur.text + t } };
-            }),
+        buildStreamHandlers({
+          setStreamingByAgent,
+          setRunLabel,
+          setRunActiveTool,
+          setError,
+          setSending,
           onDone: () => {
-            setStreamingByAgent(null);
-            setSending(false);
-            setRunLabel("");
             void refreshMessages().then(() => undefined);
           },
-          onError: (m) => setError(m),
-        },
+        }),
         ctrl.signal
       )
       .catch((err: unknown) => {
-        if (!(err instanceof Error && err.name === "AbortError")) {
+        if (!isAbortError(err)) {
           setError(err instanceof Error ? err.message : "订阅中断");
         }
+      })
+      .finally(() => {
+        if (abortRef.current === ctrl) abortRef.current = null;
       });
   }, [conversationId, refreshMessages]);
+
+  // 始终读最新 reload，但 effect 只跟会话 id 走 —— 避免 reload 身份抖动时
+  // cleanup 误 abort 正在发送的 SSE。
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useEffect(() => {
     if (!conversationId) return;
@@ -238,7 +267,8 @@ export default function ChatScreen(): JSX.Element {
     // setState 都发生在 `await` 网络往返之后，不是渲染期同步写状态。
     // 规则无法跨 async 边界证明这点，只能在此显式说明。
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void reload()
+    void reloadRef
+      .current()
       .then(async () => {
         // 消息由 useMessages 自己管；这里只补会话元信息（标题、是否群聊）
         const [convList, channelList] = await Promise.all([
@@ -249,7 +279,12 @@ export default function ChatScreen(): JSX.Element {
         if (conv) {
           setTitle(conv.title);
           if (conv.channel_id) {
-            setMemberIds(channelList.find((c) => c.id === conv.channel_id)?.members);
+            const ch = channelList.find((c) => c.id === conv.channel_id) ?? null;
+            setChannel(ch);
+            setMemberIds(ch?.members);
+          } else {
+            setChannel(null);
+            setMemberIds(undefined);
           }
         }
         setLoadedFor(conversationId);
@@ -260,7 +295,18 @@ export default function ChatScreen(): JSX.Element {
         setLoadedFor(conversationId);
       });
     return () => abortRef.current?.abort();
-  }, [conversationId, reload]);
+  }, [conversationId]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   /**
    * 作曲框的补全数据源。
@@ -289,40 +335,17 @@ export default function ChatScreen(): JSX.Element {
     };
   }, [primaryAgent?.id]);
 
-  // 流式输出时贴着底部
+  // 流式输出时跟随底部；用户上滑离开底部后不抢滚动，由浮钮自行回底
   useEffect(() => {
+    if (!nearBottom) return;
     const parts = streamingByAgent ? Object.values(streamingByAgent) : [];
     if (parts.some((p) => p.text)) scrollRef.current?.scrollToEnd({ animated: true });
-  }, [streamingByAgent]);
+  }, [streamingByAgent, nearBottom]);
 
-  const visible = useMemo(() => {
-    // 主时间线只留没有 thread_root_id 的消息，以及当前展开的那条线程的全部内容。
-    // 与 Web 端一致：线程回复挂在根消息下面，不平铺进主时间线。
-    const mainline = messages.filter((m) => {
-      if (threadRootId) return true;
-      return !m.thread_root_id;
-    });
-    const base = threadRootId
-      ? messages.filter((m) => m.id === threadRootId || m.thread_root_id === threadRootId)
-      : mainline;
-    if (!streamingByAgent) return base;
-    const entries = Object.entries(streamingByAgent);
-    // Still thinking (no tokens yet): keep base so RunStatus can show; empty bubbles stay hidden.
-    if (entries.length === 0 || entries.every(([, p]) => !p.text)) {
-      return base;
-    }
-    const extras: UiMessage[] = entries
-      .filter(([, p]) => Boolean(p.text))
-      .map(([agentKey, p]) => ({
-        id: `${STREAMING_ID_PREFIX}${agentKey}`,
-        role: "assistant",
-        content: p.text,
-        streaming: true,
-        ...(agentKey !== "_" ? { agent_id: agentKey } : {}),
-        ...(p.agentName ? { agent_name: p.agentName } : {}),
-      }));
-    return [...base, ...extras];
-  }, [messages, streamingByAgent, threadRootId]);
+  const visible = useMemo(
+    () => mergeVisibleMessages(messages, streamingByAgent, threadRootId),
+    [messages, streamingByAgent, threadRootId]
+  );
 
   /** 每条根消息下面挂了几条线程回复，用来渲染「N 条回复」。 */
   const threadCounts = useMemo(() => {
@@ -515,6 +538,7 @@ export default function ChatScreen(): JSX.Element {
       setSending(true);
       setStreamingByAgent({});
       setRunLabel("正在思考…");
+      setRunActiveTool(null);
 
       // 本地先插一条，拿到即时的视觉反馈
       const optimistic: UiMessage = {
@@ -534,50 +558,19 @@ export default function ChatScreen(): JSX.Element {
         await api.sendMessageStream(
           conversationId,
           content,
-          {
-            onAgentStart: (info) =>
-              setStreamingByAgent((prev) => ({
-                ...(prev || {}),
-                [info.agent_id]: {
-                  text: prev?.[info.agent_id]?.text ?? "",
-                  agentName: info.agent_name ?? prev?.[info.agent_id]?.agentName,
-                },
-              })),
-            onToken: (t, info) =>
-              setStreamingByAgent((prev) => {
-                const base = prev || {};
-                let key = (info?.agent_id || "").trim();
-                if (!key) {
-                  const keys = Object.keys(base);
-                  key = keys.length === 1 ? keys[0]! : "_";
-                }
-                const cur = base[key] || { text: "" };
-                return { ...base, [key]: { ...cur, text: cur.text + t } };
-              }),
-            onStatus: (data) => setRunLabel((cur) => deriveRunLabel(data, cur || "正在思考…")),
-            onMeta: (meta) => {
-              if (meta.phase === "cancelled") setRunLabel("已停止");
-              // Seal this agent's stream on message_saved so avatar cannot stick to another bot.
-              if (meta.phase === "message_saved" && typeof meta.agent_id === "string" && meta.agent_id) {
-                const aid = meta.agent_id;
-                setStreamingByAgent((prev) => {
-                  if (!prev || !(aid in prev)) return prev;
-                  const next = { ...prev };
-                  delete next[aid];
-                  return Object.keys(next).length ? next : null;
-                });
-              }
-            },
-            onError: (m) => setError(m),
+          buildStreamHandlers({
+            setStreamingByAgent,
+            setRunLabel,
+            setRunActiveTool,
+            setError,
+            setSending,
+            withSendMeta: true,
             onDone: () => {
-              setStreamingByAgent(null);
-              setSending(false);
-              setRunLabel("");
               // 以服务端落库结果为准，避免本地拼的消息缺 id / 时间戳
               void reload().catch(() => undefined);
               void refreshSecrets();
             },
-          },
+          }),
           ctrl.signal,
           {
             ...(uploaded.length ? { attachments: uploaded } : {}),
@@ -588,19 +581,23 @@ export default function ChatScreen(): JSX.Element {
           }
         );
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          // 用户主动停止：服务端 run 仍在跑，重新拉一次拿最终结果
+        if (isAbortError(err)) {
+          // 用户点停止：服务端 run 可能仍在收尾，补拉一次；已切走会话则别再 reload
           setStreamingByAgent(null);
           setSending(false);
           setRunLabel("");
-          void reload().catch(() => undefined);
+          setRunActiveTool(null);
+          if (conversationIdRef.current === conversationId) {
+            void reload().catch(() => undefined);
+          }
         } else {
           setError(err instanceof Error ? err.message : "发送失败");
           setSending(false);
           setStreamingByAgent(null);
+          setRunActiveTool(null);
         }
       } finally {
-        abortRef.current = null;
+        if (abortRef.current === ctrl) abortRef.current = null;
       }
     },
     [
@@ -684,7 +681,7 @@ export default function ChatScreen(): JSX.Element {
    * 引导卡是否该出现 —— 渲染期直接派生。
    *
    * 之前是 `useState` + `useEffect` 判定：首屏先渲染 false，等 effect 跑完
-   * 才变 true，闪现一次。`shouldShowOnboarding` 换成 MMKV 同步读之后，
+   * 才变 true，闪现一次。`shouldShowOnboarding` 换成同步读本地偏好之后，
    * 这里可以纯派生，不用存也不用等。
    */
   const showOnboarding =
@@ -726,71 +723,130 @@ export default function ChatScreen(): JSX.Element {
     <KeyboardAvoidingView
       className="flex-1 bg-background"
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={insets.top}
+      // ScreenHeader 在本 View 内部，不要再加 top inset，否则会多顶出一整块空白
+      keyboardVerticalOffset={0}
     >
-      <ScreenHeader title={title || "对话"} />
+      <ScreenHeader
+        title={title || primaryAgent?.name || "对话"}
+        {...(headerSubtitle ? { subtitle: headerSubtitle } : {})}
+        leading={
+          primaryAgent && !channel ? (
+            <AgentAvatar
+              id={primaryAgent.id}
+              name={primaryAgent.name}
+              size={32}
+              shape={primaryAgent.avatar_shape}
+              color={primaryAgent.avatar_color}
+              online={headerOnline}
+            />
+          ) : null
+        }
+        right={
+          channel ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              isIconOnly
+              accessibilityLabel="群成员"
+              onPress={() => setMembersOpen(true)}
+            >
+              <Icon name="people-outline" size={22} tone="foreground" />
+            </Button>
+          ) : null
+        }
+      />
 
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1"
-        contentContainerClassName="gap-4 px-4 pt-5 pb-6"
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-        keyboardShouldPersistTaps="handled"
-      >
-        {loading ? <MessageSkeleton /> : null}
+      <View className="relative flex-1">
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          contentContainerClassName="gap-3.5 px-4 pt-4 pb-5"
+          onContentSizeChange={() => {
+            if (nearBottom) scrollRef.current?.scrollToEnd({ animated: false });
+          }}
+          onScroll={(e) => {
+            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+            const dist = contentSize.height - layoutMeasurement.height - contentOffset.y;
+            setNearBottom(dist <= NEAR_BOTTOM_PX);
+          }}
+          scrollEventThrottle={100}
+          keyboardShouldPersistTaps="handled"
+        >
+          {loading ? <MessageSkeleton /> : null}
 
-        {/* 显隐走上面派生的 showOnboarding。以前这里写的是
-            `!loading && messages.length === 0 && !streaming`，
-            绕过了 showOnboarding —— 结果「关过引导」这个状态算了却没用上，
-            点了关闭下次进来照样弹。 */}
-        {showOnboarding ? (
-          <BotOnboarding
-            onSelectOption={onOnboardingOption}
-            onCustomSubmit={onOnboardingCustom}
-            onDismiss={dismissOnboarding}
-          />
+          {/* 显隐走上面派生的 showOnboarding。以前这里写的是
+              `!loading && messages.length === 0 && !streaming`，
+              绕过了 showOnboarding —— 结果「关过引导」这个状态算了却没用上，
+              点了关闭下次进来照样弹。 */}
+          {showOnboarding ? (
+            <BotOnboarding
+              onSelectOption={onOnboardingOption}
+              onCustomSubmit={onOnboardingCustom}
+              onDismiss={dismissOnboarding}
+            />
+          ) : null}
+
+          {visible.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              conversationId={conversationId}
+              onSandboxLink={openSandboxLink}
+              // 只有群聊需要逐条标注发言者；单聊里每条都是同一个助手，标了是噪音
+              showAgentName={Boolean(memberIds?.length)}
+              {...(m.reply_to_id && messageById.get(m.reply_to_id)
+                ? { quoted: messageById.get(m.reply_to_id) as UiMessage }
+                : {})}
+              {...(threadCounts[m.id] ? { threadCount: threadCounts[m.id] } : {})}
+              onOpenThread={(rootId) => setThreadRootId((cur) => (cur === rootId ? null : rootId))}
+              onLongPress={() => setSheetMessage(m)}
+              onReply={() => startReply(m)}
+              onReactionChange={onReactionChange}
+              onRequestFeedback={(id) => openFeedback(id, "reaction_followup")}
+              {...(primaryAgent ? { fallbackAgentId: primaryAgent.id } : {})}
+              {...(primaryAgent ? { fallbackAgentName: primaryAgent.name } : {})}
+              {...avatarPropsForMessage(m, agents, primaryAgent)}
+            />
+          ))}
+
+          {sending && runLabel ? (
+            <RunStatus
+              label={runLabel}
+              agentId={runFaceAgent?.id}
+              agentName={runFaceAgent?.name ?? "助手"}
+              shape={runFaceAgent?.avatar_shape}
+              avatarColor={runFaceAgent?.avatar_color}
+              status={runPresence === "idle" ? "thinking" : runPresence}
+              searchingHint={searchingHint}
+            />
+          ) : null}
+
+          {error ? <ErrorAlert title="发送失败" description={error} /> : null}
+        </ScrollView>
+
+        {!nearBottom && !loading ? (
+          <Pressable
+            onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            accessibilityRole="button"
+            accessibilityLabel="滚到最新消息"
+            className="absolute right-4 bottom-3 z-10 size-9 items-center justify-center rounded-full border border-border bg-surface"
+          >
+            <Icon name="chevron-down" size={20} tone="muted" />
+          </Pressable>
         ) : null}
+      </View>
 
-        {visible.map((m) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            conversationId={conversationId}
-            onSandboxLink={openSandboxLink}
-            // 只有群聊需要逐条标注发言者；单聊里每条都是同一个助手，标了是噪音
-            showAgentName={Boolean(memberIds?.length)}
-            {...(m.reply_to_id && messageById.get(m.reply_to_id)
-              ? { quoted: messageById.get(m.reply_to_id) as UiMessage }
-              : {})}
-            {...(threadCounts[m.id] ? { threadCount: threadCounts[m.id] } : {})}
-            onOpenThread={(rootId) => setThreadRootId((cur) => (cur === rootId ? null : rootId))}
-            onLongPress={() => setSheetMessage(m)}
-            onReply={() => startReply(m)}
-            onReactionChange={onReactionChange}
-            onRequestFeedback={(id) => openFeedback(id, "reaction_followup")}
-            {...(primaryAgent ? { fallbackAgentId: primaryAgent.id } : {})}
-            {...(primaryAgent ? { fallbackAgentName: primaryAgent.name } : {})}
-            {...avatarPropsForMessage(m, agents, primaryAgent)}
-          />
-        ))}
-
-        {sending && runLabel ? <RunStatus label={runLabel} /> : null}
-
-        {error ? <ErrorAlert title="发送失败" description={error} /> : null}
-      </ScrollView>
-
-      <View className="border-t border-border bg-background pb-safe-offset-8">
+      <View className={`bg-background ${keyboardOpen ? "pb-2" : "pb-safe-offset-6"}`}>
         {threadRootId ? (
-          <View className="flex-row items-center justify-between px-5 pt-2">
-            <Typography.Paragraph className="text-xs text-accent-foreground">
-              正在查看线程 · {threadCounts[threadRootId] ?? 0} 条回复
+          <View className="mx-3 mt-2 flex-row items-center justify-between rounded-xl bg-accent-soft px-3 py-2">
+            <Typography.Paragraph className="text-xs text-accent-soft-foreground">
+              线程 · {threadCounts[threadRootId] ?? 0} 条回复
             </Typography.Paragraph>
             <Button size="sm" variant="ghost" onPress={() => setThreadRootId(null)}>
-              <Button.Label>返回主时间线</Button.Label>
+              <Button.Label className="text-accent-soft-foreground">返回</Button.Label>
             </Button>
           </View>
         ) : null}
-        <QuoteBar replyTo={replyTo} onClose={() => setReplyTo(null)} />
         <Composer
           value={draft}
           onChange={setDraft}
@@ -801,6 +857,8 @@ export default function ChatScreen(): JSX.Element {
           files={files}
           sending={sending}
           busy={uploading}
+          replyTo={replyQuote}
+          onClearReply={() => setReplyTo(null)}
           {...(primaryAgent ? { agentName: primaryAgent.name } : {})}
           mentionMembers={mentionMembers}
           allowEveryone={Boolean(memberIds?.length)}
@@ -830,9 +888,21 @@ export default function ChatScreen(): JSX.Element {
           source={feedbackSource}
           conversationId={conversationId}
           {...(primaryAgent ? { agentName: primaryAgent.name } : {})}
+          {...(primaryAgent ? { agentIdForTrain: primaryAgent.id } : {})}
           onSubmitted={() => setFeedbackMessage(null)}
         />
       ) : null}
+
+      <GroupMembersSheet
+        visible={membersOpen}
+        channel={channel}
+        agents={agents}
+        onClose={() => setMembersOpen(false)}
+        onChanged={(ch) => {
+          setChannel(ch);
+          setMemberIds(ch.members);
+        }}
+      />
 
       <FilePreviewModal
         open={filePreview.open}

@@ -1,4 +1,5 @@
 import { Button, Chip, Dialog, Label, Spinner, TextArea, Typography } from "heroui-native";
+import { useRouter } from "expo-router";
 import { useCallback, useState, type JSX } from "react";
 import { View } from "react-native";
 
@@ -31,6 +32,8 @@ type Props = {
   agentName?: string;
   /** 会话 id；消息自带时优先用消息上的 */
   conversationId?: string;
+  /** 提交后可跳转训练面板的 agent id */
+  agentIdForTrain?: string;
   /** 反馈来源：面板主动打开 = feedback_menu，负表情联动 = reaction_followup */
   source: FeedbackSource;
   /** 打开时的初始极性。Web 端两个入口都默认 negative */
@@ -54,15 +57,18 @@ export function FeedbackModal({
   message,
   agentName,
   conversationId,
+  agentIdForTrain,
   source,
   initialPolarity = "negative",
   onSubmitted,
 }: Props): JSX.Element {
+  const router = useRouter();
   const [polarity, setPolarity] = useState<FeedbackPolarity>(initialPolarity);
   const [reasons, setReasons] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [doneAgentId, setDoneAgentId] = useState<string | null>(null);
 
   // 每次打开都是干净的一张表：上一条消息的标签和说明不该漏到下一条。
   // 用 render 阶段的比较而不是 effect，避免每次开关多渲染一轮
@@ -76,6 +82,7 @@ export function FeedbackModal({
       setNote("");
       setError("");
       setBusy(false);
+      setDoneAgentId(null);
     }
   }
 
@@ -106,7 +113,12 @@ export function FeedbackModal({
         source,
       });
       onSubmitted?.(feedback);
-      onClose();
+      const trainId = agentIdForTrain || agentId;
+      if (trainId) {
+        setDoneAgentId(trainId);
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -181,7 +193,7 @@ export function FeedbackModal({
                   editable={!busy}
                   placeholder="想让它下次怎么改？"
                   maxLength={NOTE_LIMIT}
-                  className="min-h-[88px]"
+                  className="min-h-22"
                 />
                 <View className="flex-row justify-end">
                   <Typography.Paragraph color="muted" className="text-[10px]">
@@ -196,13 +208,32 @@ export function FeedbackModal({
             </View>
 
             <View className="mt-4 flex-row justify-end gap-3 pb-safe-or-2">
-              <Button size="sm" variant="secondary" isDisabled={busy} onPress={onClose}>
-                <Button.Label>取消</Button.Label>
-              </Button>
-              <Button size="sm" isDisabled={busy} onPress={() => void submit()}>
-                {busy ? <Spinner size="sm" color="accent-foreground" /> : null}
-                <Button.Label>{busy ? "提交中…" : "提交反馈"}</Button.Label>
-              </Button>
+              {doneAgentId ? (
+                <>
+                  <Button size="sm" variant="secondary" onPress={onClose}>
+                    <Button.Label>关闭</Button.Label>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onPress={() => {
+                      onClose();
+                      router.push(`/train?agentId=${encodeURIComponent(doneAgentId)}` as never);
+                    }}
+                  >
+                    <Button.Label>去训练</Button.Label>
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button size="sm" variant="secondary" isDisabled={busy} onPress={onClose}>
+                    <Button.Label>取消</Button.Label>
+                  </Button>
+                  <Button size="sm" isDisabled={busy} onPress={() => void submit()}>
+                    {busy ? <Spinner size="sm" color="accent-foreground" /> : null}
+                    <Button.Label>{busy ? "提交中…" : "提交反馈"}</Button.Label>
+                  </Button>
+                </>
+              )}
             </View>
           </Dialog.Content>
         </Dialog.Overlay>

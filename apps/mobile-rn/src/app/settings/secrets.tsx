@@ -1,11 +1,11 @@
-import { Button, Card, Chip, Input, Label, ListGroup, TextField, Typography } from "heroui-native";
+import { Button, Card, Chip, ListGroup, Typography } from "heroui-native";
 import type { JSX } from "react";
 import { useState } from "react";
 import { View } from "react-native";
 
 import type { BotSecretMeta, BotSecretRequest } from "@/api/types";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { FormField, SectionTitle } from "@/components/FormField";
+import { FormActions, FormField, FormStatus, PageIntro, SectionTitle } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { EmptyState } from "@/components/states";
 import { formatDateTime } from "@/lib/format";
@@ -164,9 +164,9 @@ export default function SecretsScreen(): JSX.Element {
         </Button>
       }
     >
-      <Typography.Paragraph color="muted">
+      <PageIntro>
         仅存元数据与密文；列表 API 永不返回明文。服务端需配置 ENCRYPTION_KEY / BOT_SECRETS_KEY。
-      </Typography.Paragraph>
+      </PageIntro>
 
       {requests.length > 0 ? (
         <View className="gap-3">
@@ -192,24 +192,16 @@ export default function SecretsScreen(): JSX.Element {
                   {formatDateTime(req.created_at)}
                 </Typography.Paragraph>
 
-                {/* 这里是唯一必须用裸 Input 的地方：FormField 没有 secureTextEntry，
-                    而密钥明文绝对不能明文显示。 */}
-                <TextField>
-                  <Label>
-                    <Label.Text>密钥值</Label.Text>
-                  </Label>
-                  <Input
-                    value={values[req.id] ?? ""}
-                    onChangeText={(next) => setValues((prev) => ({ ...prev, [req.id]: next }))}
-                    placeholder="粘贴 token / API key"
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!busy}
-                  />
-                </TextField>
+                <FormField
+                  label="密钥值"
+                  value={values[req.id] ?? ""}
+                  onChangeText={(next) => setValues((prev) => ({ ...prev, [req.id]: next }))}
+                  placeholder="粘贴 token / API key"
+                  secureTextEntry
+                  editable={!busy}
+                />
 
-                <View className="flex-row gap-2">
+                <FormActions>
                   <Button
                     size="sm"
                     variant="secondary"
@@ -227,7 +219,7 @@ export default function SecretsScreen(): JSX.Element {
                   >
                     <Button.Label>授权</Button.Label>
                   </Button>
-                </View>
+                </FormActions>
               </Card.Body>
             </Card>
           ))}
@@ -287,39 +279,31 @@ export default function SecretsScreen(): JSX.Element {
           hint="留空表示不限制来源"
         />
 
-        {/* 同上：明文输入必须用裸 Input，FormField 缺 secureTextEntry */}
-        <TextField isInvalid={formError === "请填写密钥值"}>
-          <Label>
-            <Label.Text>值 *</Label.Text>
-          </Label>
-          <Input
-            value={value}
-            onChangeText={setValue}
-            placeholder="粘贴 token / API key"
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!busy}
-          />
-          {formError === "请填写密钥值" ? (
-            <Label>
-              <Label.Text className="text-danger text-xs">{formError}</Label.Text>
-            </Label>
-          ) : (
-            <Label>
-              <Label.Text className="text-muted text-xs">
-                保存后只保留密文，页面不会再次显示
-              </Label.Text>
-            </Label>
-          )}
-        </TextField>
+        <FormField
+          label="值"
+          required
+          value={value}
+          onChangeText={setValue}
+          placeholder="粘贴 token / API key"
+          secureTextEntry
+          editable={!busy}
+          error={formError === "请填写密钥值" ? formError : null}
+          hint="保存后只保留密文，页面不会再次显示"
+        />
 
-        <Button size="sm" className="self-start" isDisabled={busy} onPress={() => void submit()}>
-          <Button.Label>{busy ? "保存中…" : "添加密钥"}</Button.Label>
-        </Button>
+        <FormActions>
+          <Button size="sm" isDisabled={busy} onPress={() => void submit()}>
+            <Button.Label>{busy ? "保存中…" : "添加密钥"}</Button.Label>
+          </Button>
+        </FormActions>
       </View>
 
-      {msg ? <Typography.Paragraph color="muted">{msg}</Typography.Paragraph> : null}
+      {msg ? (
+        <FormStatus
+          message={msg}
+          tone={msg.startsWith("已") ? "success" : msg.includes("失败") ? "danger" : "muted"}
+        />
+      ) : null}
     </ScreenScaffold>
   );
 }

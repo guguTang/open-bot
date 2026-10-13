@@ -1,6 +1,6 @@
 import { fetch as expoFetch } from "expo/fetch";
 
-import { API_BASE } from "./config";
+import { getApiBase } from "./config";
 import { getToken } from "./session";
 
 export class ApiError extends Error {
@@ -11,6 +11,17 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
   }
+}
+
+/**
+ * `expo/fetch` 被 AbortSignal 中止时，错误往往是
+ * `Error: fetch failed: The operation was aborted.`（name 仍是 Error），
+ * 而不是标准的 `AbortError`。统一用这个判断，避免把主动取消当成发送失败。
+ */
+export function isAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "AbortError" || err.name === "CanceledError") return true;
+  return /operation was aborted|AbortError|The user aborted/i.test(err.message);
 }
 
 async function readError(res: Response): Promise<string> {
@@ -39,7 +50,7 @@ export async function request<T>(
   const { auth = true, headers, ...rest } = init;
   const merged = auth ? await authHeaders(headers as Record<string, string>) : headers;
 
-  const res = await expoFetch(`${API_BASE}${path}`, { ...rest, headers: merged });
+  const res = await expoFetch(`${getApiBase()}${path}`, { ...rest, headers: merged });
   if (!res.ok) throw new ApiError(res.status, await readError(res));
 
   if (res.status === 204) return undefined as T;
@@ -60,7 +71,7 @@ export async function upload<T>(
   const { auth = true, headers, ...rest } = init;
   const merged = auth ? await authHeaders(headers as Record<string, string>) : headers;
 
-  const res = await expoFetch(`${API_BASE}${path}`, {
+  const res = await expoFetch(`${getApiBase()}${path}`, {
     ...rest,
     method: "POST",
     headers: merged,

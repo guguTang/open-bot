@@ -7,6 +7,7 @@ import {
   resolveClientDeviceType,
   shouldRegisterAsHost,
 } from "../../lib/clientEnv";
+import { formatRelativeTime } from "../../lib/formatTime";
 import {
   MACHINE_EXEC_POLICY_OPTIONS,
   normalizeMachineExecPolicy,
@@ -288,7 +289,7 @@ export function MachinesSettingsTab({
             ) : (
               machines.map((m) => (
                 <div className="llm-item" key={m.id}>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     {renamingMachineId === m.id ? (
                       <Field className="mb-1 max-w-sm">
                         <FieldLabel htmlFor={`rename-${m.id}`}>设备名称</FieldLabel>
@@ -319,7 +320,7 @@ export function MachinesSettingsTab({
                         {hostMachineId === m.id ? <span className="tag">当前</span> : null}
                       </div>
                     )}
-                    <div className="agent-desc">
+                    <div className="agent-desc whitespace-normal overflow-visible wrap-anywhere">
                       {m.platform}
                       {m.os ? ` · ${m.os}` : ""}
                       {m.arch ? ` · ${m.arch}` : ""}
@@ -328,10 +329,10 @@ export function MachinesSettingsTab({
                       {isLoginOnlyMachine(m)
                         ? ""
                         : ` · ${normalizeMachineExecPolicy(m.exec_policy) === "allow" ? "始终允许" : normalizeMachineExecPolicy(m.exec_policy) === "ask" ? "每次询问" : "不允许"}`}
-                      {m.last_seen ? ` · 最近 ${m.last_seen}` : ""}
+                      {m.last_seen ? ` · 最近 ${formatRelativeTime(m.last_seen)}` : ""}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     {renamingMachineId === m.id ? (
                       <>
                         <Button

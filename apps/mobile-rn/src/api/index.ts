@@ -1,6 +1,18 @@
+import type { ApprovalDecision } from "@/lib/toolAllowlist";
+
 import { detectClientContext } from "./client";
-import { API_BASE } from "./config";
-import { ApiError, expoFetch, filePart, request, toWebSocketBase, upload } from "./http";
+import { getApiBase } from "./config";
+import {
+  ApiError,
+  expoFetch,
+  filePart,
+  isAbortError,
+  request,
+  toWebSocketBase,
+  upload,
+} from "./http";
+
+export { isAbortError };
 import { readSSEStream } from "./sse";
 import { getToken } from "./session";
 import type {
@@ -39,6 +51,7 @@ import type {
   MCPToolEntry,
   Message,
   MessageFeedback,
+  MessageSource,
   OIDCConfig,
   ReactionUpdatedEvent,
   Routine,
@@ -300,7 +313,7 @@ export async function sendMessageStream(
   // 客户端环境信封：让助手知道「我的手机」而不是笼统的 web 客户端
   body.client = detectClientContext();
 
-  const res = await expoFetch(`${API_BASE}/v1/conversations/${conversationId}/messages`, {
+  const res = await expoFetch(`${getApiBase()}/v1/conversations/${conversationId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -324,7 +337,7 @@ export async function subscribeConversationEvents(
   signal?: AbortSignal
 ): Promise<void> {
   const token = await getToken();
-  const res = await expoFetch(`${API_BASE}/v1/conversations/${conversationId}/events`, {
+  const res = await expoFetch(`${getApiBase()}/v1/conversations/${conversationId}/events`, {
     headers: {
       Accept: "text/event-stream",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -382,6 +395,33 @@ export async function addChannelMember(channelId: string, agentId: string): Prom
   });
 }
 
+/**
+ * Remove a member from a channel.
+ * DELETE /v1/channels/{id}/members/{agentId}
+ */
+export async function removeChannelMember(channelId: string, agentId: string): Promise<Channel> {
+  const token = await getToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await expoFetch(
+    `${getApiBase()}/v1/channels/${encodeURIComponent(channelId)}/members/${encodeURIComponent(agentId)}`,
+    { method: "DELETE", headers }
+  );
+  if (!res.ok && res.status !== 204) {
+    throw new ApiError(res.status, await res.text().catch(() => `HTTP ${res.status}`));
+  }
+  if (res.status === 204) {
+    return { id: channelId, user_id: "", name: "", created_at: "" };
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return { id: channelId, user_id: "", name: "", created_at: "" };
+  }
+  return JSON.parse(text) as Channel;
+}
+
+/** @deprecated import from `@/lib/messageBody` — kept for barrel compatibility. */
+export { normalizeMessageSources } from "@/lib/messageBody";
+
 export async function postAgentBusMessage(body: {
   from_agent_id?: string;
   to_agent_id?: string;
@@ -416,7 +456,7 @@ export async function listAgentBusInbox(opts?: {
  */
 export async function agentBusWebSocketUrl(): Promise<string> {
   const t = (await getToken()) ?? "";
-  const wsBase = toWebSocketBase(API_BASE);
+  const wsBase = toWebSocketBase(getApiBase());
   const q = t ? `?token=${encodeURIComponent(t)}` : "";
   return `${wsBase}/v1/agent-bus/ws${q}`;
 }
@@ -552,7 +592,7 @@ export async function sandboxDesktopURL(extra?: { desktop_token?: string }): Pro
   if (token) q.set("access_token", token);
   if (extra?.desktop_token) q.set("desktop_token", extra.desktop_token);
   const qs = q.toString();
-  return `${API_BASE}/v1/sandbox/desktop${qs ? `?${qs}` : ""}`;
+  return `${getApiBase()}/v1/sandbox/desktop${qs ? `?${qs}` : ""}`;
 }
 
 export async function stopSandbox(): Promise<Sandbox> {
@@ -801,7 +841,7 @@ export async function uploadSkillPackage(file: {
 
 /** 导出技能包为 zip，返回可下载的 URL（鉴权头由调用方补）。 */
 export async function exportSkillZipURL(name: string): Promise<string> {
-  return `${API_BASE}/v1/skills/${encodeURIComponent(name)}/export`;
+  return `${getApiBase()}/v1/skills/${encodeURIComponent(name)}/export`;
 }
 
 /* ------------------------------------------------------------------ LLM tools 探测 */
@@ -882,8 +922,8 @@ export function absolutizeApiUrl(url: string): string {
   const u = (url || "").trim();
   if (!u) return "";
   if (/^(https?:|file:|data:)/i.test(u)) return u;
-  if (u.startsWith("/")) return `${API_BASE}${u}`;
-  return `${API_BASE}/${u}`;
+  if (u.startsWith("/")) return `${getApiBase()}${u}`;
+  return `${getApiBase()}/${u}`;
 }
 
 /**
@@ -949,7 +989,7 @@ export function imageDownloadFilename(name?: string, mime?: string, date = new D
 export function sandboxFileDownloadURL(path: string, opts?: { agent_id?: string }): string {
   const q = new URLSearchParams({ path });
   if (opts?.agent_id) q.set("agent_id", opts.agent_id);
-  return `${API_BASE}/v1/sandbox/files/download?${q.toString()}`;
+  return `${getApiBase()}/v1/sandbox/files/download?${q.toString()}`;
 }
 
 /* ------------------------------------------------------------------ 表情回应 */
@@ -980,7 +1020,7 @@ export async function deleteReaction(
 /** `/v1/events/ws`：在线绿点、presence、跨端消息、反应变更。与单会话 SSE 互补。 */
 export async function chatEventsWebSocketUrl(): Promise<string> {
   const t = (await getToken()) ?? "";
-  const wsBase = toWebSocketBase(API_BASE);
+  const wsBase = toWebSocketBase(getApiBase());
   const q = t ? `?token=${encodeURIComponent(t)}` : "";
   return `${wsBase}/v1/events/ws${q}`;
 }
@@ -998,19 +1038,131 @@ export async function createHostConfirm(
   });
 }
 
+/** HITL 审批三态 — 与 Web `apps/web/src/api/chat.ts` 对齐；定义在 toolAllowlist。 */
+export type { ApprovalDecision } from "@/lib/toolAllowlist";
+
+export type ApproveScope = {
+  tool?: string;
+  tool_group?: string;
+};
+
+export type ToolAllowlistEntry = {
+  id?: string;
+  tool?: string;
+  tool_group: string;
+  label?: string;
+  granted_at?: string;
+};
+
+function approveBoolFromDecision(decision: ApprovalDecision): boolean {
+  return decision !== "deny";
+}
+
+/**
+ * Decide a host_confirm card. Sends `status` (legacy) plus `decision` / `approve`
+ * so backends that grow 三态 on host-confirms need no second client change.
+ */
 export async function decideHostConfirm(
   conversationId: string,
   messageId: string,
-  status: "allowed" | "denied"
+  status: "allowed" | "denied",
+  opts?: { decision?: ApprovalDecision; scope?: ApproveScope; reason?: string }
 ): Promise<Message> {
+  const decision: ApprovalDecision =
+    opts?.decision ?? (status === "allowed" ? "allow_once" : "deny");
+  const payload: Record<string, unknown> = {
+    status,
+    decision,
+    approve: approveBoolFromDecision(decision),
+  };
+  if (opts?.scope) payload.scope = opts.scope;
+  if (opts?.reason) payload.reason = opts.reason;
   return request(
     `/v1/conversations/${conversationId}/host-confirms/${encodeURIComponent(messageId)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     }
   );
+}
+
+const TOOL_ALLOWLIST_GET_CANDIDATES = [
+  "/v1/me/tool-allowlist",
+  "/v1/settings/tool-allowlist",
+  "/v1/user/tool-allowlist",
+];
+
+/**
+ * List Always-allow entries. Tries known paths; returns [] if none exist yet.
+ */
+export async function listToolAllowlist(): Promise<ToolAllowlistEntry[]> {
+  const token = await getToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  for (const path of TOOL_ALLOWLIST_GET_CANDIDATES) {
+    try {
+      const res = await expoFetch(`${getApiBase()}${path}`, { headers });
+      if (res.status === 404) continue;
+      if (!res.ok) continue;
+      const data = (await res.json()) as
+        | ToolAllowlistEntry[]
+        | { items?: ToolAllowlistEntry[]; entries?: ToolAllowlistEntry[] };
+      const items = Array.isArray(data)
+        ? data
+        : Array.isArray(data.items)
+          ? data.items
+          : Array.isArray(data.entries)
+            ? data.entries
+            : [];
+      return items.filter((e) => e && typeof (e.tool_group || e.tool) === "string");
+    } catch {
+      /* try next */
+    }
+  }
+  return [];
+}
+
+/**
+ * Revoke one Always-allow entry. Returns true if a server accepted the revoke.
+ */
+export async function revokeToolAllowlistEntry(entry: {
+  id?: string;
+  tool_group: string;
+}): Promise<boolean> {
+  const token = await getToken();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  const group = encodeURIComponent(entry.tool_group);
+  const attempts: Array<() => Promise<Response>> = [];
+  if (entry.id) {
+    const id = encodeURIComponent(entry.id);
+    for (const base of TOOL_ALLOWLIST_GET_CANDIDATES) {
+      attempts.push(() =>
+        expoFetch(`${getApiBase()}${base}/${id}`, { method: "DELETE", headers })
+      );
+    }
+  }
+  for (const base of TOOL_ALLOWLIST_GET_CANDIDATES) {
+    attempts.push(() =>
+      expoFetch(`${getApiBase()}${base}?tool_group=${group}`, { method: "DELETE", headers })
+    );
+    attempts.push(() =>
+      expoFetch(`${getApiBase()}${base}`, {
+        method: "DELETE",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ tool_group: entry.tool_group }),
+      })
+    );
+  }
+  for (const run of attempts) {
+    try {
+      const res = await run();
+      if (res.status === 404) continue;
+      if (res.ok || res.status === 204) return true;
+    } catch {
+      /* try next */
+    }
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ 中断标记 */
@@ -1082,6 +1234,34 @@ export async function updateMachineLabel(id: string, label: string): Promise<Mac
 
 export async function fetchUserSettings(): Promise<UserSettings> {
   return request("/v1/me/settings");
+}
+
+/* ------------------------------------------------------------------ Gmail / 连接应用 */
+
+export type GmailIntegrationStatus = {
+  provider: string;
+  connected: boolean;
+  email?: string;
+  scopes?: string;
+  can_send?: boolean;
+  updated_at?: string;
+  oauth_configured: boolean;
+};
+
+export async function getGmailIntegrationStatus(): Promise<GmailIntegrationStatus> {
+  return request("/v1/integrations/gmail");
+}
+
+export async function startGmailConnect(): Promise<{ authorize_url: string; state?: string }> {
+  return request("/v1/integrations/gmail/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+}
+
+export async function disconnectGmail(): Promise<void> {
+  await request("/v1/integrations/gmail", { method: "DELETE" });
 }
 
 export async function updateUserSettings(body: {
@@ -1160,6 +1340,7 @@ export type {
   LessonPatch,
   LessonStatus,
   MessageFeedback,
+  MessageSource,
   OIDCConfig,
   ReactionUpdatedEvent,
   UserSettings,

@@ -1,99 +1,49 @@
-import { Typography, useThemeColor } from "heroui-native";
+import { Typography } from "heroui-native";
 import type { JSX } from "react";
-import { useEffect } from "react";
 import { View } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
+
+import { AgentAvatar } from "@/components/AgentAvatar";
+import type { BotPresenceStatus } from "@/lib/avatar";
+
+type Props = {
+  label: string;
+  agentId?: string;
+  agentName?: string;
+  shape?: string | null;
+  avatarColor?: string | null;
+  /** 产品五态；驱动 RobotHead（与 Web RunStatus 一致）。 */
+  status?: BotPresenceStatus | string;
+  searchingHint?: boolean;
+};
 
 /**
- * 生成 / 思考中的动画指示器。
- *
- * 对齐 `apps/web/src/components/RunStatus.tsx` 的 OpenClaw 风格 blob：
- * 外层上下浮动 + 轻微旋转，两个圆点错峰呼吸。CSS 动画在 RN 上没有对应物，
- * 这里用 Reanimated 的 `withRepeat` + `withTiming` 复刻，参数直接照搬 keyframes。
- *
- * 颜色取主题的 `accent` 而不是写死的 `#e85d4c`：思考中不是错误，
- * 用红色是在语义色上撒谎；而且写死的主题色不跟明暗走。
+ * 思考 / 工具中指示 —— 用动态 RobotHead，不再用独立 blob 动画。
+ * 对齐 `apps/web/src/components/RunStatus.tsx`。
  */
-function Blob(): JSX.Element {
-  const color = useThemeColor("accent");
-  const wobble = useSharedValue(0);
-  const pulseA = useSharedValue(0);
-  const pulseB = useSharedValue(0);
-
-  useEffect(() => {
-    const loop = (duration: number) =>
-      withRepeat(withTiming(1, { duration, easing: Easing.inOut(Easing.quad) }), -1, true);
-    wobble.value = loop(1400);
-    pulseA.value = loop(1100);
-    // B 圆点延迟 0.2s 起步，制造错峰感（CSS 里靠 animation-delay）
-    pulseB.value = withDelay(200, loop(1100));
-  }, [pulseA, pulseB, wobble]);
-
-  const outerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -3 * wobble.value }, { rotate: `${-2 + 5 * wobble.value}deg` }],
-  }));
-
-  const dotAStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + 0.08 * pulseA.value }],
-  }));
-
-  const dotBStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + 0.08 * pulseB.value }],
-  }));
-
-  return (
-    <Animated.View style={[{ width: 28, height: 22 }, outerStyle]}>
-      <Animated.View
-        style={[
-          dotAStyle,
-          {
-            position: "absolute",
-            left: 0,
-            top: 2,
-            width: 18,
-            height: 18,
-            borderRadius: 9,
-            backgroundColor: color,
-            opacity: 0.95,
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          dotBStyle,
-          {
-            position: "absolute",
-            right: 0,
-            top: 3,
-            width: 16,
-            height: 16,
-            borderRadius: 8,
-            backgroundColor: color,
-            opacity: 0.75,
-          },
-        ]}
-      />
-    </Animated.View>
-  );
-}
-
-/** `withDelay` 直接来自 reanimated，不需要额外封装。 */
-
-export function RunStatus({ label }: { label: string }): JSX.Element {
+export function RunStatus({
+  label,
+  agentId,
+  agentName = "助手",
+  shape,
+  avatarColor,
+  status = "thinking",
+  searchingHint = false,
+}: Props): JSX.Element {
   return (
     <View
       className="flex-row items-center gap-2.5 py-1"
       accessibilityRole="progressbar"
       accessibilityLabel={label}
     >
-      <Blob />
+      <AgentAvatar
+        id={agentId}
+        name={agentName}
+        size={28}
+        shape={shape}
+        color={avatarColor}
+        status={status}
+        searchingHint={searchingHint}
+      />
       <Typography.Paragraph color="muted" style={{ fontSize: 13.5 }}>
         {label}
       </Typography.Paragraph>
