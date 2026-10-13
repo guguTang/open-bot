@@ -1427,15 +1427,20 @@ async def openai_path(
             from . import gmail_api
 
             try:
+                atts = args.get("attachments")
+                if not isinstance(atts, list):
+                    atts = None
                 return json.dumps(
                     gmail_api.gmail_send(
                         str(user_id or ""),
                         conversation_id=str(conversation_id or ""),
+                        agent_id=str(agent_id or ""),
                         to=str(args.get("to") or ""),
                         subject=str(args.get("subject") or ""),
                         body=str(args.get("body") or ""),
                         cc=str(args.get("cc") or ""),
                         bcc=str(args.get("bcc") or ""),
+                        attachments=atts,
                     ),
                     ensure_ascii=False,
                 )

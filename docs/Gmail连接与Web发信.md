@@ -73,7 +73,7 @@ Google Cloud 配置要点：
 | 工具名 | 行为 | 确认 |
 |---|---|---|
 | `gmail_status` | 是否已连接 + 邮箱；未连接时返回引导文案 | 否 |
-| `gmail_send` | `to` / `subject` / `body`（可选 `cc`/`bcc`）→ Go `/internal/gmail/send`；**body 须为正文文本**，禁止只传工作区路径；MVP 无附件 | **是**（host_confirm） |
+| `gmail_send` | `to` / `subject` / `body` + 可选 `attachments[{path,filename?}]`（`/workspace` 内，≤5 个 / 5MB 每个 / 8MB 合计）→ multipart MIME → Gmail API；HTML/PDF/图片优先附件，body 短说明；禁止无附件时 body 只写路径 | **是**（host_confirm，预览含附件名） |
 
 命名对齐仓库：`snake_case`，与 `request_secret` / `host_shell` 一致。  
 未连接时 `gmail_send` 立即失败并提示去「设置 → 连接应用」；不创建确认卡。

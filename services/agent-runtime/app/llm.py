@@ -814,17 +814,16 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "name": "gmail_send",
             "description": (
                 "Send email via the user's connected Gmail (Web OAuth). "
-                "Always shows a chat confirm card (to / subject / body); never auto-sends. "
+                "Always shows a chat confirm card; never auto-sends. "
                 "If Gmail is not connected, returns an error telling the user to open "
                 "Settings → 连接应用. Do not invent a successful send. "
-                "Not for Resend or other relay APIs — this uses the user's own mailbox. "
-                "CRITICAL body rules: put the actual email text in `body`, never a file path "
-                "(e.g. /workspace/..., relative paths, or 'see file X'). "
-                "If the user wants a generated/workspace file emailed, read it first "
-                "(sandbox_read / host_read as appropriate) and paste the text into `body` "
-                "(summarize or truncate if huge). MVP has no attachments — for binary/images "
-                "say you can only send plain text in the body and offer a text alternative; "
-                "do not put the path in the body as a substitute."
+                "Attachments: pass workspace paths in `attachments` (under /workspace) for "
+                "HTML/PDF/images/etc. Prefer attaching generated HTML pages/关系图/files "
+                "instead of dumping source into body — use a short note in `body` and "
+                "attachments=[{path, filename?}]. "
+                "Limits: up to 5 files, 5MB each, 8MB total. "
+                "Body must not be only a filesystem path unless attachments are also set; "
+                "never put a path in body as a fake attachment."
             ),
             "parameters": {
                 "type": "object",
@@ -837,12 +836,27 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     "body": {
                         "type": "string",
                         "description": (
-                            "Plain-text email body content (the words the recipient should read). "
-                            "Never a filesystem path. Read files into this string before calling."
+                            "Plain-text note the recipient reads. Short is fine when attaching files. "
+                            "Never only a filesystem path (unless attachments are provided)."
                         ),
                     },
                     "cc": {"type": "string"},
                     "bcc": {"type": "string"},
+                    "attachments": {
+                        "type": "array",
+                        "description": (
+                            "Workspace files to attach. Each item: path (required, under /workspace), "
+                            "optional filename for the attachment name."
+                        ),
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "filename": {"type": "string"},
+                            },
+                            "required": ["path"],
+                        },
+                    },
                 },
                 "required": ["to", "subject", "body"],
             },

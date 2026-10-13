@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"net/mail"
 	"net/url"
 	"os"
@@ -21,6 +23,7 @@ import (
 	"github.com/tangxin/open-bot/services/api/internal/auth"
 	"github.com/tangxin/open-bot/services/api/internal/crypto"
 	"github.com/tangxin/open-bot/services/api/internal/db"
+	"github.com/tangxin/open-bot/services/api/internal/sandbox"
 )
 
 const (
@@ -36,6 +39,9 @@ const (
 	gmailDefaultScopes    = gmailScopeSend + " " + gmailScopeEmail
 	gmailOAuthStateTTL    = 10 * time.Minute
 	gmailConfirmTimeout   = 90 * time.Second
+	gmailMaxAttachments   = 5
+	gmailMaxAttachBytes   = 5 << 20 // 5 MiB per file
+	gmailMaxAttachTotal   = 8 << 20 // 8 MiB total raw attachment bytes
 )
 
 type gmailOAuthConfig struct {
@@ -145,7 +151,7 @@ func gmailBodyLooksLikePathOnly(body string) bool {
 }
 
 func gmailPathOnlyBodyHint() string {
-	return "邮件正文不能只是文件路径。请先读取文件内容，把实际文本写入 gmail_send 的 body（过大则摘要）；MVP 不支持附件。"
+	return "邮件正文不能只是文件路径。请把文件放进 attachments（工作区路径），或先读取内容写入 body；短正文 + 附件即可。"
 }
 
 func gmailInsufficientScopeError(msg string) bool {
@@ -435,13 +441,15 @@ func gmailNotConnectedHint(connected, configured bool) string {
 
 func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID         string `json:"user_id"`
-		ConversationID string `json:"conversation_id"`
-		To             string `json:"to"`
-		Cc             string `json:"cc"`
-		Bcc            string `json:"bcc"`
-		Subject        string `json:"subject"`
-		Body           string `json:"body"`
+		UserID         string               `json:"user_id"`
+		ConversationID string               `json:"conversation_id"`
+		AgentID        string               `json:"agent_id"`
+		To             string               `json:"to"`
+		Cc             string               `json:"cc"`
+		Bcc            string               `json:"bcc"`
+		Subject        string               `json:"subject"`
+		Body           string               `json:"body"`
+		Attachments    []gmailAttachmentIn `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -475,7 +483,8 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if gmailBodyLooksLikePathOnly(msgBody) {
+	hasAttachments := len(body.Attachments) > 0
+	if gmailBodyLooksLikePathOnly(msgBody) && !hasAttachments {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": false, "error": gmailPathOnlyBodyHint(),
 		})
@@ -500,7 +509,12 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 	}
 
 	cid := strings.TrimSpace(body.ConversationID)
-	preview := buildEmailPreview(subject, msgBody)
+	attachFiles, attachNames, aerr := s.loadGmailAttachments(uid, strings.TrimSpace(body.AgentID), body.Attachments)
+	if aerr != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": aerr.Error()})
+		return
+	}
+	preview := buildEmailPreview(subject, msgBody, attachNames)
 	rev := hostExecReview{
 		Tier:   hostExecReviewConfirm,
 		Reason: "将通过已连接的 Gmail（" + conn.AccountEmail + "）发送邮件，需你确认",
@@ -539,19 +553,20 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	rawMIME, err := buildRFC822Message(conn.AccountEmail, to, strings.TrimSpace(body.Cc), strings.TrimSpace(body.Bcc), subject, msgBody)
+	rawMIME, err := buildRFC822Message(conn.AccountEmail, to, strings.TrimSpace(body.Cc), strings.TrimSpace(body.Bcc), subject, msgBody, attachFiles)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "req_id": reqID})
 		return
 	}
 	msgID, err := gmailAPISend(r.Context(), access, rawMIME)
 	result := map[string]any{
-		"ok":        err == nil,
-		"req_id":    reqID,
-		"confirmed": true,
-		"from":      conn.AccountEmail,
-		"to":        to,
-		"subject":   subject,
+		"ok":          err == nil,
+		"req_id":      reqID,
+		"confirmed":   true,
+		"from":        conn.AccountEmail,
+		"to":          to,
+		"subject":     subject,
+		"attachments": attachNames,
 	}
 	if err != nil {
 		errMsg := err.Error()
@@ -566,16 +581,21 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, result)
 }
 
-func buildEmailPreview(subject, body string) string {
+func buildEmailPreview(subject, body string, attachNames []string) string {
 	s := strings.TrimSpace(subject)
 	b := strings.TrimSpace(body)
 	if s == "" {
 		s = "(无主题)"
 	}
-	if b == "" {
-		return s
+	var parts []string
+	parts = append(parts, s)
+	if b != "" {
+		parts = append(parts, b)
 	}
-	return s + "\n\n" + b
+	if len(attachNames) > 0 {
+		parts = append(parts, "附件："+strings.Join(attachNames, " · "))
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func validateEmailList(raw string) error {
@@ -602,11 +622,44 @@ func splitAddresses(raw string) []string {
 	return out
 }
 
-func buildRFC822Message(from, to, cc, bcc, subject, body string) (string, error) {
+type gmailAttachmentIn struct {
+	Path     string `json:"path"`
+	Filename string `json:"filename"`
+}
+
+type gmailAttachFile struct {
+	Filename string
+	MIMEType string
+	Data     []byte
+}
+
+func buildRFC822Message(from, to, cc, bcc, subject, body string, files []gmailAttachFile) (string, error) {
 	from = strings.TrimSpace(from)
 	if from == "" {
 		return "", errors.New("from address missing")
 	}
+	if len(files) == 0 {
+		var b strings.Builder
+		b.WriteString("From: " + from + "\r\n")
+		b.WriteString("To: " + to + "\r\n")
+		if cc != "" {
+			b.WriteString("Cc: " + cc + "\r\n")
+		}
+		if bcc != "" {
+			b.WriteString("Bcc: " + bcc + "\r\n")
+		}
+		b.WriteString("Subject: " + encodeHeader(subject) + "\r\n")
+		b.WriteString("MIME-Version: 1.0\r\n")
+		b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+		b.WriteString("\r\n")
+		b.WriteString(body)
+		if !strings.HasSuffix(body, "\n") {
+			b.WriteString("\r\n")
+		}
+		return b.String(), nil
+	}
+	boundary := "openbot_" + randomState()
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + to + "\r\n")
@@ -616,9 +669,11 @@ func buildRFC822Message(from, to, cc, bcc, subject, body string) (string, error)
 	if bcc != "" {
 		b.WriteString("Bcc: " + bcc + "\r\n")
 	}
-	// Encode subject if non-ASCII
 	b.WriteString("Subject: " + encodeHeader(subject) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\r\n")
+	b.WriteString("\r\n")
+	b.WriteString("--" + boundary + "\r\n")
 	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 	b.WriteString("\r\n")
@@ -626,7 +681,122 @@ func buildRFC822Message(from, to, cc, bcc, subject, body string) (string, error)
 	if !strings.HasSuffix(body, "\n") {
 		b.WriteString("\r\n")
 	}
+	for _, f := range files {
+		b.WriteString("--" + boundary + "\r\n")
+		ct := f.MIMEType
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		b.WriteString("Content-Type: " + ct + "\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"" + mimeFilename(f.Filename) + "\"\r\n")
+		b.WriteString("\r\n")
+		b.WriteString(chunkBase64(f.Data))
+		b.WriteString("\r\n")
+	}
+	b.WriteString("--" + boundary + "--\r\n")
 	return b.String(), nil
+}
+
+func mimeFilename(name string) string {
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "\"", "_")
+	name = strings.ReplaceAll(name, "\r", "")
+	name = strings.ReplaceAll(name, "\n", "")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "attachment"
+	}
+	for _, r := range name {
+		if r > 127 {
+			return mimeEncodeUTF8(name)
+		}
+	}
+	return name
+}
+
+func chunkBase64(data []byte) string {
+	enc := base64.StdEncoding.EncodeToString(data)
+	var b strings.Builder
+	for i := 0; i < len(enc); i += 76 {
+		end := i + 76
+		if end > len(enc) {
+			end = len(enc)
+		}
+		b.WriteString(enc[i:end])
+		b.WriteString("\r\n")
+	}
+	return strings.TrimRight(b.String(), "\r\n")
+}
+
+func gmailContentType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == ".html" || ext == ".htm" {
+		return "text/html; charset=UTF-8"
+	}
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
+}
+
+func (s *Server) loadGmailAttachments(userID, agentID string, specs []gmailAttachmentIn) ([]gmailAttachFile, []string, error) {
+	if len(specs) == 0 {
+		return nil, nil, nil
+	}
+	if len(specs) > gmailMaxAttachments {
+		return nil, nil, fmt.Errorf("最多 %d 个附件", gmailMaxAttachments)
+	}
+	var (
+		files []gmailAttachFile
+		names []string
+		total int64
+	)
+	for i, spec := range specs {
+		p := strings.TrimSpace(spec.Path)
+		if p == "" {
+			return nil, nil, fmt.Errorf("attachments[%d].path required", i)
+		}
+		wp, err := sandbox.ResolveWorkspacePath(p)
+		if err != nil {
+			return nil, nil, fmt.Errorf("附件路径无效 %q: %v", p, err)
+		}
+		op := s.fileOpFrom(userID, agentID, "", wp)
+		f, st, err := s.sandboxMgr().OpenWorkspaceFile(op)
+		if err != nil {
+			return nil, nil, fmt.Errorf("无法读取附件 %s: %v", wp, err)
+		}
+		size := st.Size()
+		if size > gmailMaxAttachBytes {
+			_ = f.Close()
+			return nil, nil, fmt.Errorf("附件 %s 过大（上限 %d MB/个）", filepath.Base(wp), gmailMaxAttachBytes>>20)
+		}
+		if total+size > gmailMaxAttachTotal {
+			_ = f.Close()
+			return nil, nil, fmt.Errorf("附件总大小超过 %d MB", gmailMaxAttachTotal>>20)
+		}
+		data, err := io.ReadAll(io.LimitReader(f, int64(gmailMaxAttachBytes)+1))
+		_ = f.Close()
+		if err != nil {
+			return nil, nil, fmt.Errorf("读取附件失败 %s: %v", wp, err)
+		}
+		if int64(len(data)) > gmailMaxAttachBytes {
+			return nil, nil, fmt.Errorf("附件 %s 过大（上限 %d MB/个）", filepath.Base(wp), gmailMaxAttachBytes>>20)
+		}
+		total += int64(len(data))
+		name := strings.TrimSpace(spec.Filename)
+		if name == "" {
+			name = filepath.Base(wp)
+		}
+		name = filepath.Base(name)
+		files = append(files, gmailAttachFile{
+			Filename: name,
+			MIMEType: gmailContentType(name),
+			Data:     data,
+		})
+		names = append(names, name)
+	}
+	return files, names, nil
 }
 
 func encodeHeader(s string) string {

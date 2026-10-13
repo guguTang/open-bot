@@ -72,8 +72,12 @@ function actionCopy(item: HostConfirmPayload): { detail: string; danger: boolean
     };
   }
   if (item.op === "email_send") {
+    const attachLine = (item.preview || "")
+      .split("\n")
+      .map((s) => s.trim())
+      .find((s) => s.startsWith("附件："));
     return {
-      detail: [item.path && `收件人：${item.path}`, item.dest && `主题：${item.dest}`]
+      detail: [item.path && `收件人：${item.path}`, item.dest && `主题：${item.dest}`, attachLine]
         .filter(Boolean)
         .join("\n"),
       danger: false,

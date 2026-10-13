@@ -59,7 +59,7 @@ func TestValidateEmailList(t *testing.T) {
 }
 
 func TestBuildRFC822Message(t *testing.T) {
-	raw, err := buildRFC822Message("me@x.com", "you@y.com", "", "", "Hello", "Body line")
+	raw, err := buildRFC822Message("me@x.com", "you@y.com", "", "", "Hello", "Body line", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,5 +209,56 @@ func TestGmailBodyLooksLikePathOnly(t *testing.T) {
 	}
 	if gmailBodyLooksLikePathOnly("见附件说明如下：\n/workspace/x.md") {
 		t.Fatal("multiline with path mention is content")
+	}
+}
+
+
+func TestBuildRFC822MultipartAttachment(t *testing.T) {
+	files := []gmailAttachFile{{
+		Filename: "关系图.html",
+		MIMEType: "text/html; charset=UTF-8",
+		Data:     []byte("<html><body>hi</body></html>"),
+	}}
+	raw, err := buildRFC822Message("me@x.com", "you@y.com", "", "", "图", "见附件", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(raw, "Content-Type: multipart/mixed") {
+		t.Fatalf("missing multipart: %s", raw[:200])
+	}
+	if !strings.Contains(raw, "Content-Disposition: attachment;") {
+		t.Fatal("missing attachment disposition")
+	}
+	if !strings.Contains(raw, "text/html") {
+		t.Fatal("missing html content-type")
+	}
+	if !strings.Contains(raw, "见附件") {
+		t.Fatal("missing body")
+	}
+}
+
+func TestGmailContentType(t *testing.T) {
+	if got := gmailContentType("a.HTML"); !strings.HasPrefix(got, "text/html") {
+		t.Fatalf("html=%q", got)
+	}
+	if got := gmailContentType("x.pdf"); got != "application/pdf" && !strings.Contains(got, "pdf") {
+		// mime.TypeByExtension may return application/pdf
+		if got == "application/octet-stream" {
+			t.Fatalf("pdf=%q", got)
+		}
+	}
+}
+
+func TestBuildEmailPreviewAttachments(t *testing.T) {
+	p := buildEmailPreview("主题", "短正文", []string{"a.html", "b.pdf"})
+	if !strings.Contains(p, "附件：a.html · b.pdf") {
+		t.Fatalf("preview=%q", p)
+	}
+}
+
+func TestGmailBodyLooksLikePathOnlyWithAttachmentsPolicy(t *testing.T) {
+	// Guard is call-site: path-only + no attachments. Helper still true for paths.
+	if !gmailBodyLooksLikePathOnly("/workspace/a.html") {
+		t.Fatal("path")
 	}
 }

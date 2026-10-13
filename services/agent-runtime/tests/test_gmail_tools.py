@@ -73,3 +73,26 @@ def test_gmail_send_requires_fields_passed():
     assert payload["conversation_id"] == "cid"
     assert payload["cc"] == "c@e.com"
     assert payload["bcc"] == "b@e.com"
+
+
+def test_gmail_send_attachments_passed():
+    with patch.object(gmail_api.sbx, "_post", return_value={"ok": True}) as post:
+        gmail_api.gmail_send(
+            "u",
+            conversation_id="cid",
+            agent_id="agent-1",
+            to="t@e.com",
+            subject="S",
+            body="见附件",
+            attachments=[{"path": "/workspace/a.html", "filename": "关系图.html"}],
+        )
+    payload = post.call_args[0][1]
+    assert payload["agent_id"] == "agent-1"
+    assert payload["attachments"][0]["path"] == "/workspace/a.html"
+    assert payload["attachments"][0]["filename"] == "关系图.html"
+
+
+def test_gmail_send_tool_def_has_attachments():
+    send = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "gmail_send")
+    props = (send["function"]["parameters"] or {}).get("properties") or {}
+    assert "attachments" in props
