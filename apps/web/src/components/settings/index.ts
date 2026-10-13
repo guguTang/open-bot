@@ -8,3 +8,4 @@ export { RoutinesSettingsTab, type RoutinesSettingsTabProps } from "./RoutinesSe
 export { SandboxSettingsTab, type SandboxSettingsTabProps } from "./SandboxSettingsTab";
 export { SecretsSettingsTab, type SecretsSettingsTabProps } from "./SecretsSettingsTab";
 export { SkillsSettingsTab, type SkillsSettingsTabProps } from "./SkillsSettingsTab";
+export { IntegrationsSettingsTab, type IntegrationsSettingsTabProps } from "./IntegrationsSettingsTab";

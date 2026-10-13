@@ -798,6 +798,46 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "gmail_status",
+            "description": (
+                "Check whether the current user has connected Gmail in Web Settings → 连接应用. "
+                "Returns connected, email, and a hint if not connected. "
+                "Call this before gmail_send when unsure. Desktop himalaya/google-workspace skills "
+                "are separate (host_shell); prefer this for web users without a connected computer."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gmail_send",
+            "description": (
+                "Send email via the user's connected Gmail (Web OAuth). "
+                "Always shows a chat confirm card (to / subject / body); never auto-sends. "
+                "If Gmail is not connected, returns an error telling the user to open "
+                "Settings → 连接应用. Do not invent a successful send. "
+                "Not for Resend or other relay APIs — this uses the user's own mailbox."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {
+                        "type": "string",
+                        "description": "Recipient email(s), comma-separated",
+                    },
+                    "subject": {"type": "string"},
+                    "body": {"type": "string", "description": "Plain-text body"},
+                    "cc": {"type": "string"},
+                    "bcc": {"type": "string"},
+                },
+                "required": ["to", "subject", "body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_machines",
             "description": (
                 "List the user's registered computers. Each row has id, label, platform, connected, "

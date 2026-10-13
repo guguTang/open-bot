@@ -22,6 +22,7 @@ export type ToolFamilyId =
   | "ssh_exec"
   | "ssh_write"
   | "ssh_delete"
+  | "email"
   | "other";
 
 export type ToolAllowEntry = {
@@ -44,6 +45,7 @@ const FAMILY_LABEL: Record<ToolFamilyId, string> = {
   file_move: "移动/重命名",
   ssh_exec: "远程命令",
   ssh_write: "远程写入",
+  email: "邮件发送",
   ssh_delete: "远程删除",
   other: "其他操作",
 };
@@ -88,6 +90,7 @@ export function toolFamilyForHostOp(op: string, path = ""): ToolFamilyId {
   if (o === "move") return "file_move";
   if (o === "ssh_write") return "ssh_write";
   if (o === "ssh_delete") return "ssh_delete";
+  if (o === "email_send") return "email";
   return "other";
 }
 
@@ -116,6 +119,8 @@ export function toolLabelForHostOp(op: string, path = ""): string {
       return "host_read";
     case "open":
       return "host_open";
+    case "email_send":
+      return "gmail_send";
     default:
       return op ? `host_${op}` : "host_tool";
   }

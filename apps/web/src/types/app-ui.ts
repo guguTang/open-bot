@@ -21,6 +21,7 @@ export type SettingsTab =
   | "sandbox"
   | "machines"
   | "secrets"
+  | "integrations"
   | "review";
 
 export const SETTINGS_TITLE: Record<SettingsTab, string> = {
@@ -34,6 +35,7 @@ export const SETTINGS_TITLE: Record<SettingsTab, string> = {
   sandbox: "运行环境",
   machines: "电脑",
   secrets: "密钥",
+  integrations: "连接应用",
   review: "审核",
 };
 

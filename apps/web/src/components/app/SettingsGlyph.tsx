@@ -3,6 +3,7 @@ import {
   Clock,
   Cpu,
   KeyRound,
+  Mail,
   List,
   Monitor,
   Package,
@@ -41,6 +42,8 @@ export function SettingsGlyph({ id }: { id: SettingsTab }) {
       return <Clock {...iconProps} />;
     case "secrets":
       return <KeyRound {...iconProps} />;
+    case "integrations":
+      return <Mail {...iconProps} />;
     case "review":
       return <ShieldCheck {...iconProps} />;
   }

@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -30,6 +31,7 @@ import {
   useRoutinesSettings,
   useSandboxSettings,
   useSecretsSettings,
+  useIntegrationsSettings,
   useSkillsSettings,
 } from "./settings";
 import type { ChatSettingsSlice, SettingsShell } from "./settings/types";
@@ -102,6 +104,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     setHostWritesOn,
   });
   const secrets = useSecretsSettings();
+  const integrations = useIntegrationsSettings();
   const review = useReviewSettings(userId);
 
   const defaultLLM = useMemo(
@@ -120,6 +123,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
       refreshSandbox: sandbox.refreshSandbox,
       refreshMachines: machinesHook.refreshMachines,
       refreshSecrets: secrets.refreshSecrets,
+      refreshIntegrations: integrations.refresh,
       refreshToolAllowlist: review.refreshToolAllowlist,
     }),
     [
@@ -132,6 +136,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
       sandbox.refreshSandbox,
       machinesHook.refreshMachines,
       secrets.refreshSecrets,
+      integrations.refresh,
       review.refreshToolAllowlist,
     ],
   );
@@ -199,6 +204,58 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
   );
 
   const closeSettings = useCallback(() => setShowSettings(false), []);
+
+  // OAuth return: /?open_settings=integrations&gmail_connected=1
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("open_settings");
+    if (!tab) return;
+    const allowed: SettingsTab[] = [
+      "general",
+      "bot",
+      "llm",
+      "skills",
+      "mcp",
+      "compact",
+      "routines",
+      "sandbox",
+      "machines",
+      "secrets",
+      "integrations",
+      "review",
+    ];
+    if (!allowed.includes(tab as SettingsTab)) return;
+    openSettings(tab as SettingsTab);
+    if (tab === "integrations") {
+      if (params.get("gmail_connected") === "1") {
+        integrations.setMsg("Gmail 已连接");
+      }
+      const err = params.get("gmail_error");
+      if (err) {
+        const hints: Record<string, string> = {
+          token_exchange_network:
+            "无法访问 Google 换票接口（多为未走代理）。请在仓库根 .env 设置 HTTPS_PROXY=http://127.0.0.1:端口（Clash/Surge 等），重启 API 后再连",
+          redirect_uri_mismatch:
+            "redirect_uri 与 Google Cloud 凭据不一致，请核对 GOOGLE_OAUTH_REDIRECT_URI",
+          invalid_client: "Client ID/Secret 无效，请核对 GOOGLE_OAUTH_CLIENT_*",
+          invalid_grant: "授权码无效或已使用，请再点一次「连接 Gmail」",
+          token_exchange_failed: "换取 token 失败，请查看 API 日志中的 gmail oauth 行",
+          missing_gmail_send_scope:
+            "未获得 gmail.send 发送权限。请确认 Google Cloud 同意屏幕已添加该范围，重新连接时在授权页勾选发送邮件",
+        };
+        integrations.setMsg("Gmail 连接失败：" + (hints[err] ?? err));
+      }
+      void integrations.refresh();
+    }
+    params.delete("open_settings");
+    params.delete("gmail_connected");
+    params.delete("gmail_error");
+    const q = params.toString();
+    const next = window.location.pathname + (q ? `?${q}` : "") + window.location.hash;
+    window.history.replaceState({}, "", next);
+  }, [openSettings, integrations]);
+
 
   const onCopyEmail = useCallback((email: string) => {
     void navigator.clipboard.writeText(email || "").then(() => {
@@ -286,6 +343,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     sandbox,
     machines: machinesHook,
     secrets,
+    integrations,
     review,
     clientEnv,
     hostMachineId,

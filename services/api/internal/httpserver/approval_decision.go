@@ -111,6 +111,8 @@ func HostOpToolIdentity(op string) (tool, toolGroup string) {
 		return "host_move", "file_move"
 	case "ls", "read", "open":
 		return "host_" + op, "host_read"
+	case "email_send":
+		return "gmail_send", "email"
 	default:
 		if op == "" {
 			return "", ""
@@ -144,6 +146,10 @@ func applyUserToolAllowlist(
 		return base
 	}
 	if base.Tier != hostExecReviewConfirm {
+		return base
+	}
+	// Product: never auto-send email (不擅自代发).
+	if strings.EqualFold(strings.TrimSpace(op), "email_send") {
 		return base
 	}
 	policy = db.NormalizeMachineExecPolicy(policy)

@@ -19,6 +19,7 @@ const SETTINGS_NAV: ReadonlyArray<readonly [SettingsTab, string]> = [
   ["compact", "压缩"],
   ["routines", "例行任务"],
   ["secrets", "密钥"],
+  ["integrations", "连接应用"],
 ];
 
 export type AppSettingsDialogProps = {

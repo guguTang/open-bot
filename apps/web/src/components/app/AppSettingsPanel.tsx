@@ -17,6 +17,7 @@ import {
   RoutinesSettingsTab,
   SandboxSettingsTab,
   SecretsSettingsTab,
+  IntegrationsSettingsTab,
   SkillsSettingsTab,
 } from "../settings";
 import type { AppSettingsBundle } from "../../hooks/useAppSettings";
@@ -59,6 +60,7 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
     sandbox,
     machines,
     secrets,
+    integrations,
     review,
     hostMachineId,
     clientEnv,
@@ -353,6 +355,17 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
           secretMsg={secrets.secretMsg}
           onSubmitSecret={secrets.onSubmitSecret}
           onDeleteSecret={secrets.onDeleteSecret}
+        />
+      )}
+
+      {settingsTab === "integrations" && (
+        <IntegrationsSettingsTab
+          gmail={integrations.gmail}
+          busy={integrations.busy}
+          msg={integrations.msg}
+          onConnectGmail={integrations.connectGmail}
+          onDisconnectGmail={integrations.disconnect}
+          onRefresh={integrations.refresh}
         />
       )}
     </AppSettingsDialog>

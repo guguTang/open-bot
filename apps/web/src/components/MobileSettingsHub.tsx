@@ -14,6 +14,7 @@ export type SettingsHubNav =
   | "compact"
   | "routines"
   | "secrets"
+  | "integrations"
   | "general"
   | "review";
 
@@ -179,6 +180,13 @@ export function MobileSettingsHub({
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("compact")}>
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">数据与压缩</span>
+            </span>
+            <Chevron />
+          </button>
+          <button type="button" className="settings-hub-row" onClick={() => onNavigate("integrations")}>
+            <span className="settings-hub-row-main">
+              <span className="settings-hub-row-title">连接应用</span>
+              <span className="settings-hub-row-sub">Gmail 等邮箱授权</span>
             </span>
             <Chevron />
           </button>

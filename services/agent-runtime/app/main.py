@@ -1412,6 +1412,36 @@ async def openai_path(
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)})
 
+        if name == "gmail_status":
+            from . import gmail_api
+
+            try:
+                return json.dumps(
+                    gmail_api.gmail_status(str(user_id or "")),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+        if name == "gmail_send":
+            from . import gmail_api
+
+            try:
+                return json.dumps(
+                    gmail_api.gmail_send(
+                        str(user_id or ""),
+                        conversation_id=str(conversation_id or ""),
+                        to=str(args.get("to") or ""),
+                        subject=str(args.get("subject") or ""),
+                        body=str(args.get("body") or ""),
+                        cc=str(args.get("cc") or ""),
+                        bcc=str(args.get("bcc") or ""),
+                    ),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
         if name.startswith("mcp__") or mcp_client.parse_qualified_tool(name):
             result = await mcp_client.resolve_and_call(
                 servers=mcp_servers,

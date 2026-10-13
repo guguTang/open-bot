@@ -140,6 +140,8 @@ func classifyHostExecReview(op, path, dest string) hostExecReview {
 		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "删除远程文件，需你确认", Code: "ssh_delete"}
 	case "ssh_exec":
 		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "远程执行命令，需你确认", Code: "ssh_exec"}
+	case "email_send":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "将通过已连接的 Gmail 发送邮件，需你确认", Code: "email_send_confirm"}
 	case "shell":
 		if dest == "terminal" {
 			return hostExecReview{Tier: hostExecReviewConfirm, Reason: "将打开终端窗口，需你确认", Code: "terminal"}
@@ -235,7 +237,7 @@ func hostExecHardDenied(op, path, dest string) (bool, hostExecReview) {
 
 func hostOpNeedsConfirm(op string) bool {
 	switch op {
-	case "write", "delete", "move", "shell", "ssh_write", "ssh_delete", "ssh_exec":
+	case "write", "delete", "move", "shell", "ssh_write", "ssh_delete", "ssh_exec", "email_send":
 		return true
 	default:
 		return false
@@ -799,6 +801,8 @@ func hostOpChineseLabel(op string) string {
 		return "远程只读"
 	case "ssh_write", "ssh_delete", "ssh_exec":
 		return "远程写入 远程删除 远程命令"
+	case "email_send":
+		return "发送邮件 Gmail"
 	default:
 		return op
 	}

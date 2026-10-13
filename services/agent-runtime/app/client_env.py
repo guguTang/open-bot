@@ -289,6 +289,8 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "send_to_agent": "发送给助手",
     "request_secret": "请求密钥",
     "secret_http": "带密钥请求",
+    "gmail_status": "Gmail 连接状态",
+    "gmail_send": "Gmail 发信",
     "clone_agent": "复制助手",
 }
 

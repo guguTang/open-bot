@@ -626,12 +626,16 @@ func (s *Server) requestChatHostConfirm(
 	}
 
 	reqID = uuid.NewString()
+	previewLimit := 180
+	if op == "email_send" {
+		previewLimit = 1200
+	}
 	payload := hostConfirmPayload{
 		ReqID:      reqID,
 		Op:         op,
 		Path:       path,
 		Dest:       dest,
-		Preview:    clipRunes(preview, 180),
+		Preview:    clipRunes(preview, previewLimit),
 		Status:     "pending",
 		Reason:     rev.Reason,
 		ReviewTier: string(rev.Tier),
@@ -863,6 +867,12 @@ func (s *Server) handleDecideHostConfirm(w http.ResponseWriter, r *http.Request)
 		}
 		var allowEntry any
 		if decision == DecisionAlwaysAllow {
+			if strings.EqualFold(payload.Op, "email_send") {
+				writeJSON(w, http.StatusBadRequest, map[string]string{
+					"error": "email_send 不支持始终允许（不擅自代发）",
+				})
+				return
+			}
 			scope := InferScopeFromHostConfirm(payload.Op, body.Scope)
 			if scope.ToolGroup == "" && scope.Tool == "" {
 				writeJSON(w, http.StatusBadRequest, map[string]string{

@@ -10,6 +10,7 @@ export type SettingsRefreshApi = {
   refreshSandbox: () => Promise<unknown>;
   refreshMachines: () => Promise<unknown>;
   refreshSecrets: () => Promise<unknown>;
+  refreshIntegrations: () => Promise<unknown>;
   refreshToolAllowlist: () => Promise<unknown> | void;
 };
 
@@ -68,6 +69,9 @@ export async function refreshSettingsForTab(
       return;
     case "secrets":
       await run(() => api.refreshSecrets());
+      return;
+    case "integrations":
+      await run(() => api.refreshIntegrations());
       return;
     default: {
       const _exhaustive: never = tab;

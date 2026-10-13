@@ -234,3 +234,11 @@ export {
   updateMachine,
   deleteMachine,
 } from "./api/machines";
+
+
+export {
+  type GmailIntegrationStatus,
+  getGmailIntegrationStatus,
+  startGmailConnect,
+  disconnectGmail,
+} from "./api/gmail";

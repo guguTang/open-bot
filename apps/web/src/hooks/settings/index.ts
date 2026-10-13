@@ -7,4 +7,5 @@ export { useSkillsSettings } from "./useSkillsSettings";
 export { useSecretsSettings } from "./useSecretsSettings";
 export { useCompactSettings } from "./useCompactSettings";
 export { useReviewSettings } from "./useReviewSettings";
+export { useIntegrationsSettings } from "./useIntegrationsSettings";
 export type { ChatSettingsSlice, SettingsShell } from "./types";
