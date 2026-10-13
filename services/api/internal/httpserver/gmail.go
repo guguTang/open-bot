@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,12 +13,13 @@ import (
 	"log"
 	"mime"
 	"net/http"
-	"path/filepath"
 	"net/mail"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tangxin/open-bot/services/api/internal/auth"
@@ -27,21 +29,22 @@ import (
 )
 
 const (
-	gmailProvider          = "gmail"
-	gmailAuthURL           = "https://accounts.google.com/o/oauth2/v2/auth"
-	gmailTokenURL          = "https://oauth2.googleapis.com/token"
-	gmailUserInfoURL       = "https://www.googleapis.com/oauth2/v2/userinfo"
-	gmailSendURL           = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+	gmailProvider         = "gmail"
+	gmailAuthURL          = "https://accounts.google.com/o/oauth2/v2/auth"
+	gmailTokenURL         = "https://oauth2.googleapis.com/token"
+	gmailUserInfoURL      = "https://www.googleapis.com/oauth2/v2/userinfo"
+	gmailSendURL          = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 	gmailOAuthStateCookie = "openbot_gmail_oauth_state"
 	gmailScopeSend        = "https://www.googleapis.com/auth/gmail.send"
 	gmailScopeEmail       = "https://www.googleapis.com/auth/userinfo.email"
 	// Space-separated scopes for the authorize request (must include gmail.send).
-	gmailDefaultScopes    = gmailScopeSend + " " + gmailScopeEmail
-	gmailOAuthStateTTL    = 10 * time.Minute
-	gmailConfirmTimeout   = 90 * time.Second
-	gmailMaxAttachments   = 5
-	gmailMaxAttachBytes   = 5 << 20 // 5 MiB per file
-	gmailMaxAttachTotal   = 8 << 20 // 8 MiB total raw attachment bytes
+	gmailDefaultScopes  = gmailScopeSend + " " + gmailScopeEmail
+	gmailOAuthStateTTL  = 10 * time.Minute
+	gmailConfirmTimeout = 90 * time.Second
+	gmailMaxAttachments = 5
+	gmailMaxAttachBytes = 5 << 20 // 5 MiB per file
+	gmailMaxAttachTotal = 8 << 20 // 8 MiB total raw attachment bytes
+	gmailSendDedupeTTL  = 2 * time.Minute
 )
 
 type gmailOAuthConfig struct {
@@ -439,16 +442,114 @@ func gmailNotConnectedHint(connected, configured bool) string {
 	return "尚未连接 Gmail。请用户打开「设置 → 连接应用」点击「连接 Gmail」完成授权后再发信。"
 }
 
+// ---- single-flight / short dedupe for identical gmail_send ----
+// Models often emit gmail_send twice in one turn (or retry after success). Without
+// dedupe each call creates another host_confirm card. Same fingerprint shares one
+// confirm + one Gmail API send; recent successes return without a new card.
+
+type gmailSendFlight struct {
+	done   chan struct{}
+	result map[string]any
+}
+
+type gmailSendRecent struct {
+	result    map[string]any
+	expiresAt time.Time
+}
+
+var (
+	gmailSendFlightMu sync.Mutex
+	gmailSendFlights  = map[string]*gmailSendFlight{}
+	gmailSendRecents  = map[string]gmailSendRecent{}
+)
+
+func gmailSendFingerprint(uid, cid, to, cc, bcc, subject, body string, atts []gmailAttachmentIn) string {
+	var b strings.Builder
+	b.WriteString(uid)
+	b.WriteByte('|')
+	b.WriteString(cid)
+	b.WriteByte('|')
+	b.WriteString(strings.TrimSpace(to))
+	b.WriteByte('|')
+	b.WriteString(strings.TrimSpace(cc))
+	b.WriteByte('|')
+	b.WriteString(strings.TrimSpace(bcc))
+	b.WriteByte('|')
+	b.WriteString(strings.TrimSpace(subject))
+	b.WriteByte('|')
+	b.WriteString(body)
+	b.WriteByte('|')
+	for _, a := range atts {
+		b.WriteString(strings.TrimSpace(a.Path))
+		b.WriteByte(':')
+		b.WriteString(strings.TrimSpace(a.Filename))
+		b.WriteByte(';')
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:16])
+}
+
+func gmailSendCloneResult(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	out := make(map[string]any, len(src)+2)
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func gmailSendBeginFlight(key string) (flight *gmailSendFlight, leader bool, recent map[string]any) {
+	gmailSendFlightMu.Lock()
+	defer gmailSendFlightMu.Unlock()
+	now := time.Now()
+	for k, ent := range gmailSendRecents {
+		if now.After(ent.expiresAt) {
+			delete(gmailSendRecents, k)
+		}
+	}
+	if ent, ok := gmailSendRecents[key]; ok && now.Before(ent.expiresAt) {
+		return nil, false, gmailSendCloneResult(ent.result)
+	}
+	if existing, ok := gmailSendFlights[key]; ok {
+		return existing, false, nil
+	}
+	flight = &gmailSendFlight{done: make(chan struct{})}
+	gmailSendFlights[key] = flight
+	return flight, true, nil
+}
+
+func gmailSendFinishFlight(key string, result map[string]any) {
+	gmailSendFlightMu.Lock()
+	defer gmailSendFlightMu.Unlock()
+	flight := gmailSendFlights[key]
+	delete(gmailSendFlights, key)
+	cloned := gmailSendCloneResult(result)
+	if flight != nil {
+		flight.result = cloned
+		close(flight.done)
+	}
+	if result != nil {
+		if ok, _ := result["ok"].(bool); ok {
+			gmailSendRecents[key] = gmailSendRecent{
+				result:    cloned,
+				expiresAt: time.Now().Add(gmailSendDedupeTTL),
+			}
+		}
+	}
+}
+
 func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID         string               `json:"user_id"`
-		ConversationID string               `json:"conversation_id"`
-		AgentID        string               `json:"agent_id"`
-		To             string               `json:"to"`
-		Cc             string               `json:"cc"`
-		Bcc            string               `json:"bcc"`
-		Subject        string               `json:"subject"`
-		Body           string               `json:"body"`
+		UserID         string              `json:"user_id"`
+		ConversationID string              `json:"conversation_id"`
+		AgentID        string              `json:"agent_id"`
+		To             string              `json:"to"`
+		Cc             string              `json:"cc"`
+		Bcc            string              `json:"bcc"`
+		Subject        string              `json:"subject"`
+		Body           string              `json:"body"`
 		Attachments    []gmailAttachmentIn `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -509,9 +610,51 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 	}
 
 	cid := strings.TrimSpace(body.ConversationID)
+	// Product: 不擅自代发 — never skip confirm via allowlist.
+	if cid == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "error": "conversation_id required for confirm-before-send",
+		})
+		return
+	}
+
+	fp := gmailSendFingerprint(uid, cid, to, strings.TrimSpace(body.Cc), strings.TrimSpace(body.Bcc), subject, msgBody, body.Attachments)
+	flight, leader, recent := gmailSendBeginFlight(fp)
+	if recent != nil {
+		recent["deduped"] = true
+		recent["already_sent"] = true
+		if _, ok := recent["note"]; !ok {
+			recent["note"] = "相同邮件刚刚已发送成功，未再次确认或重发。不要再次调用 gmail_send。"
+		}
+		writeJSON(w, http.StatusOK, recent)
+		return
+	}
+	if !leader {
+		select {
+		case <-flight.done:
+			out := gmailSendCloneResult(flight.result)
+			if out == nil {
+				out = map[string]any{"ok": false, "error": "并发发信失败"}
+			}
+			out["deduped"] = true
+			if _, ok := out["note"]; !ok {
+				out["note"] = "与进行中的相同发信合并为一次确认/发送。"
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		case <-r.Context().Done():
+			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": "cancelled"})
+			return
+		}
+	}
+
+	var result map[string]any
+	defer func() { gmailSendFinishFlight(fp, result) }()
+
 	attachFiles, attachNames, aerr := s.loadGmailAttachments(uid, strings.TrimSpace(body.AgentID), body.Attachments)
 	if aerr != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": aerr.Error()})
+		result = map[string]any{"ok": false, "error": aerr.Error()}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	preview := buildEmailPreview(subject, msgBody, attachNames)
@@ -520,46 +663,43 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 		Reason: "将通过已连接的 Gmail（" + conn.AccountEmail + "）发送邮件，需你确认",
 		Code:   "email_send_confirm",
 	}
-	// Product: 不擅自代发 — never skip confirm via allowlist.
-	if cid == "" {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok": false, "error": "conversation_id required for confirm-before-send",
-		})
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), gmailConfirmTimeout)
 	defer cancel()
 	allowed, reqID, cerr := s.requestChatHostConfirm(
 		ctx, uid, cid, "email_send", to, subject, preview, rev,
 	)
 	if cerr != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
+		result = map[string]any{
 			"ok": false, "denied": true, "error": cerr.Error(), "req_id": reqID,
-		})
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	if !allowed {
-		writeJSON(w, http.StatusOK, map[string]any{
+		result = map[string]any{
 			"ok": false, "denied": true, "error": "用户拒绝了这次发信", "req_id": reqID,
-		})
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 
 	access, err := s.resolveGmailAccessToken(r.Context(), uid, conn)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
+		result = map[string]any{
 			"ok": false, "connected": false,
 			"error": "Gmail 授权已失效，请重新在「设置 → 连接应用」连接：" + err.Error(),
-		})
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	rawMIME, err := buildRFC822Message(conn.AccountEmail, to, strings.TrimSpace(body.Cc), strings.TrimSpace(body.Bcc), subject, msgBody, attachFiles)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error(), "req_id": reqID})
+		result = map[string]any{"ok": false, "error": err.Error(), "req_id": reqID}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	msgID, err := gmailAPISend(r.Context(), access, rawMIME)
-	result := map[string]any{
+	result = map[string]any{
 		"ok":          err == nil,
 		"req_id":      reqID,
 		"confirmed":   true,
@@ -576,6 +716,7 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 		result["error"] = errMsg
 	} else {
 		result["message_id"] = msgID
+		result["note"] = "邮件已发送成功。不要再次调用 gmail_send 重发同一封邮件。"
 	}
 	s.finishHostConfirm(uid, cid, result)
 	writeJSON(w, http.StatusOK, result)

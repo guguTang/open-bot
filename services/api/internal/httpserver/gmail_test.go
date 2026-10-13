@@ -262,3 +262,37 @@ func TestGmailBodyLooksLikePathOnlyWithAttachmentsPolicy(t *testing.T) {
 		t.Fatal("path")
 	}
 }
+
+
+func TestGmailSendFingerprintStable(t *testing.T) {
+	a := gmailSendFingerprint("u", "c", "a@x.com", "", "", "S", "B", []gmailAttachmentIn{{Path: "/workspace/a.html"}})
+	b := gmailSendFingerprint("u", "c", "a@x.com", "", "", "S", "B", []gmailAttachmentIn{{Path: "/workspace/a.html"}})
+	if a == "" || a != b {
+		t.Fatalf("a=%q b=%q", a, b)
+	}
+	c := gmailSendFingerprint("u", "c", "a@x.com", "", "", "S", "B2", nil)
+	if a == c {
+		t.Fatal("body change should change fingerprint")
+	}
+}
+
+func TestGmailSendFlightDedupe(t *testing.T) {
+	key := "test-flight-" + randomState()
+	f1, lead1, recent := gmailSendBeginFlight(key)
+	if !lead1 || f1 == nil || recent != nil {
+		t.Fatalf("leader1 lead=%v flight=%v recent=%v", lead1, f1 != nil, recent != nil)
+	}
+	f2, lead2, recent2 := gmailSendBeginFlight(key)
+	if lead2 || f2 != f1 || recent2 != nil {
+		t.Fatalf("follower should join same flight")
+	}
+	gmailSendFinishFlight(key, map[string]any{"ok": true, "message_id": "m1"})
+	<-f2.done
+	if f2.result["message_id"] != "m1" {
+		t.Fatalf("follower result=%v", f2.result)
+	}
+	_, _, recent3 := gmailSendBeginFlight(key)
+	if recent3 == nil || recent3["message_id"] != "m1" {
+		t.Fatalf("recent=%v", recent3)
+	}
+}

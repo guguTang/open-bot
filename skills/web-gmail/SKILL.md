@@ -15,7 +15,7 @@ description: Send mail with Web Gmail (gmail_send/gmail_status); attach HTML/PDF
 ## 步骤
 
 1. 不确定是否已连 → `gmail_status`；未连接或 `can_send=false` 按 hint 引导设置页。
-2. 调用 `gmail_send`（确认卡 → 用户允许一次才发送）。
+2. **同一封邮件只调用一次** `gmail_send`（确认卡 → 用户允许一次才发送）。成功或返回 `already_sent`/`deduped` 后不要再调；不要为同一封邮件并行/重复调用。
 3. **发文件 / HTML / 关系图 / PDF / 图片**：用 `attachments`，不要把整页源码糊进 `body`。
    - 例：`attachments: [{ "path": "/workspace/bots/.../关系图.html", "filename": "关系图.html" }]`
    - `body` 写一句短说明即可（如「见附件关系图」）。

@@ -823,7 +823,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "attachments=[{path, filename?}]. "
                 "Limits: up to 5 files, 5MB each, 8MB total. "
                 "Body must not be only a filesystem path unless attachments are also set; "
-                "never put a path in body as a fake attachment."
+                "never put a path in body as a fake attachment. "
+                "Call gmail_send exactly once per email. After ok:true / message_id (or "
+                "already_sent/deduped), stop — do not call gmail_send again for the same mail."
             ),
             "parameters": {
                 "type": "object",
