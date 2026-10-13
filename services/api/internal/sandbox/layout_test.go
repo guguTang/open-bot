@@ -179,3 +179,29 @@ func TestListDirDoesNotRemapWorkspaceRoot(t *testing.T) {
 		t.Fatalf("expected shared+bots at workspace root, got %#v", entries)
 	}
 }
+
+func TestReadFilePercentEncodedPath(t *testing.T) {
+	root := t.TempDir()
+	m := NewManager(Config{DataRoot: root, Enabled: true, Image: "x", DockerBin: "docker"})
+	uid := "user-pct"
+	aid := "bot-pct"
+	if _, err := m.EnsureLayout(uid, aid, ModeTeam); err != nil {
+		t.Fatal(err)
+	}
+	name := "社会保险个人权益记录-内容摘要.html"
+	botFile := filepath.Join(m.BotHost(uid, aid), "out", name)
+	if err := os.MkdirAll(filepath.Dir(botFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(botFile, []byte("<html>社保</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	encoded := "/workspace/bots/" + aid + "/out/%E7%A4%BE%E4%BC%9A%E4%BF%9D%E9%99%A9%E4%B8%AA%E4%BA%BA%E6%9D%83%E7%9B%8A%E8%AE%B0%E5%BD%95-%E5%86%85%E5%AE%B9%E6%91%98%E8%A6%81.html"
+	content, err := m.ReadFile(FileOp{UserID: uid, AgentID: aid, Mode: ModeTeam, Path: encoded}, 0)
+	if err != nil {
+		t.Fatalf("percent-encoded read: %v", err)
+	}
+	if content != "<html>社保</html>" {
+		t.Fatalf("content=%q", content)
+	}
+}

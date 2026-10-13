@@ -48,11 +48,27 @@ export function looksLikeHtml(content: string, hintPathOrLang?: string): boolean
   );
 }
 
+/**
+ * Decode %XX sequences from remark-rehype / browser URL normalization so
+ * sandbox:/workspace/.../中文.html survives the markdown→href pipeline.
+ * Malformed escapes are left unchanged.
+ */
+export function decodeWorkspacePath(raw: string): string {
+  const s = raw || "";
+  if (!s.includes("%")) return s;
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 /** Map any user/tool path onto /workspace/... (never leave bare /tetris.html). */
 export function normalizeWorkspacePath(raw: string): string {
-  let p = (raw || "").trim();
+  let p = decodeWorkspacePath((raw || "").trim());
   if (!p) return "/workspace";
   p = p.replace(/^sandbox:(?:\/\/)?/i, "").trim();
+  p = decodeWorkspacePath(p);
   if (!p) return "/workspace";
   if (!p.startsWith("/")) {
     p = `/workspace/${p}`;

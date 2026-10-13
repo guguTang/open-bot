@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -565,10 +566,17 @@ func (m *Manager) Exec(ctx context.Context, userID, cmdStr, workdir string, time
 
 // ResolveWorkspacePath maps a user-supplied path to an absolute path under /workspace.
 // Bare absolute paths like /tetris.html are treated as /workspace/tetris.html (common tool/UI footgun).
+// Percent-encoded segments (from remark-rehype / browser href normalization) are decoded so
+// /workspace/.../%E4%B8%AD.html resolves to the real UTF-8 filename.
 func ResolveWorkspacePath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
 		p = "/workspace"
+	}
+	if strings.Contains(p, "%") {
+		if unesc, err := url.PathUnescape(p); err == nil {
+			p = unesc
+		}
 	}
 	p = filepath.Clean(p)
 	if !strings.HasPrefix(p, "/") {
