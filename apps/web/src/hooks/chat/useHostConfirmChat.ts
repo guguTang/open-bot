@@ -150,7 +150,11 @@ export function useHostConfirmChat(deps: {
             .then((saved) => acceptServerMessage(saved))
             .catch(() => {});
         }
-        if (runRequestId) {
+        // Host-confirm for email_send parks on Go's confirm gate, not LangGraph
+        // interrupt(). Calling /approve here with Command(resume=...) when the
+        // durable thread is mid-tool (or idle) raises EmptyInputError and can
+        // spur a re-plan → second gmail_send → second card.
+        if (runRequestId && parsed.op !== "email_send") {
           void approveConversation(convId, {
             request_id: runRequestId,
             decision,

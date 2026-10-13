@@ -17,27 +17,59 @@ _task: asyncio.Task | None = None
 _stop = asyncio.Event()
 
 
+async def _heal_journal_status(thread_id: str, status: str) -> None:
+    """Best-effort journal status update so stuck rows leave list_resumable."""
+    try:
+        journal = get_journal()
+        await asyncio.to_thread(
+            journal.upsert_thread,
+            {
+                "thread_id": thread_id,
+                "status": status,
+                "conversation_id": "",
+                "user_id": "",
+                "org_id": "",
+                "agent_id": "",
+                "request_id": "",
+            },
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("resume heal journal failed thread=%s status=%s", thread_id, status)
+
+
 async def resume_thread(thread_id: str) -> dict[str, Any]:
-    """Continue a thread from last checkpoint (ainvoke None). Skip waiting_approval."""
+    """Inspect a resumable journal thread; never auto-ainvoke without work.
+
+    LangGraph 1.2+: ``ainvoke(None)`` only continues a checkpoint that is already
+    mid-graph (``CONFIG_KEY_RESUMING`` / pending next). Approval interrupts need
+    ``Command(resume=...)`` via ``approve_thread``. A finished or empty checkpoint
+    plus ``ainvoke(None)`` raises ``EmptyInputError: Received no input for
+    __start__`` — which used to spam logs and leave journal status stuck in
+    ``running``/``interrupted``, so the conversation stayed "busy" and the model
+    could re-plan another ``gmail_send`` (extra confirm cards).
+    """
     graph = await get_compiled_graph()
     config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
     snap = await graph.aget_state(config)
     values = getattr(snap, "values", None) or {}
     status = str(values.get("status") or "")
     tasks = getattr(snap, "tasks", None) or ()
+    next_nodes = list(getattr(snap, "next", None) or [])
 
     if status in ("done", "aborted", "failed"):
         return {"ok": True, "skipped": True, "reason": status, "thread_id": thread_id}
     if is_approval_pause(tasks):
-        # Human gate — presence only, do not auto-run.
+        # Human gate — presence only, do not auto-run. Heal journal if still
+        # listed as running/interrupted so list_resumable stops picking it up.
         logger.info("resume skip waiting_approval thread=%s", thread_id)
+        await _heal_journal_status(thread_id, "waiting_approval")
         return {
             "ok": True,
             "skipped": True,
             "reason": "waiting_approval",
             "thread_id": thread_id,
         }
-    if tasks:
+    if tasks or next_nodes:
         # Next node is scheduled, but this process has no model credentials or
         # tool handler. Auto-ainvoke would 401 and leave status=running, which
         # makes every later user message queue-and-close. The next /v1/runs
@@ -50,26 +82,22 @@ async def resume_thread(thread_id: str) -> dict[str, Any]:
             "thread_id": thread_id,
         }
 
-    try:
-        result = await graph.ainvoke(None, config)
-        new_status = str((result or {}).get("status") or "")
-        journal = get_journal()
-        await asyncio.to_thread(
-            journal.upsert_thread,
-            {
-                "thread_id": thread_id,
-                "status": new_status or "done",
-                "conversation_id": "",
-                "user_id": "",
-                "org_id": "",
-                "agent_id": "",
-                "request_id": "",
-            },
-        )
-        return {"ok": True, "thread_id": thread_id, "status": new_status}
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("resume failed thread=%s", thread_id)
-        return {"ok": False, "thread_id": thread_id, "error": str(exc)[:300]}
+    # No pending tasks/next — nothing to continue. Do NOT ainvoke(None): that
+    # raises EmptyInputError (no input for __start__). Heal stuck journal rows
+    # so they drop out of list_resumable (running/interrupted).
+    logger.info(
+        "resume skip no_pending_work thread=%s values_status=%s",
+        thread_id,
+        status or "(empty)",
+    )
+    await _heal_journal_status(thread_id, "done")
+    return {
+        "ok": True,
+        "skipped": True,
+        "reason": "no_pending_work",
+        "thread_id": thread_id,
+        "healed_status": "done",
+    }
 
 
 async def scan_and_resume(*, limit: int = 50) -> list[dict[str, Any]]:

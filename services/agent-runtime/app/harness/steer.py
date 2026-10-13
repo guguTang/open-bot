@@ -97,9 +97,25 @@ async def approve_thread(
     reason: str = "",
     root_obs: Any | None = None,
 ) -> dict[str, Any]:
-    """Resume an interrupt with an approval decision."""
+    """Resume an interrupt with an approval decision via Command(resume=...).
+
+    Host-confirm Allow (e.g. gmail_send) must not call this unless the durable
+    graph is actually paused on ``interrupt()``. Otherwise LangGraph raises
+    EmptyInputError ("Received empty Command input" / no input for __start__)
+    and a failed resume can leave the turn looking broken so the model re-plans
+    another send → another confirm card.
+    """
     graph = await get_compiled_graph()
     config = {"configurable": {"thread_id": thread_id}}
+    snap = await graph.aget_state(config)
+    tasks = getattr(snap, "tasks", None) or ()
+    if not is_approval_pause(tasks):
+        return {
+            "ok": False,
+            "thread_id": thread_id,
+            "error": "not_waiting_approval",
+            "status": str((getattr(snap, "values", None) or {}).get("status") or ""),
+        }
     payload = {"approve": bool(approve), "reason": reason or ""}
     journal = JournalSession(thread_id=thread_id, client=get_journal())
     if approve:
