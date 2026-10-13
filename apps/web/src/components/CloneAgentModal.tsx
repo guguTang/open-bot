@@ -47,11 +47,15 @@ function CloneAgentModalForm({ agent, onClose, onCloned }: FormProps) {
       ref={dialogRef}
       className="modal-backdrop"
       aria-labelledby="clone-agent-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
     >
-      <div className="modal clone-agent-modal" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="modal-backdrop-mask"
+        aria-label="关闭"
+        disabled={busy}
+        onClick={onClose}
+      />
+      <div className="modal clone-agent-modal">
         <div className="modal-head">
           <h3 id="clone-agent-modal-title">复制助手「{agent.name}」</h3>
           <button type="button" className="ghost" onClick={onClose} disabled={busy}>

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "rules": {
+    "react-doctor/no-high-complexity-react-function": "off",
+    "react-doctor/no-giant-component": "off"
+  }
+}

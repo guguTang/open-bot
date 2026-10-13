@@ -168,14 +168,15 @@ function GroupMembersSettingsDialog({ channel, agents, onClose, onChanged }: Dia
       ref={dialogRef}
       className={`modal-backdrop group-channel-backdrop${sheetForm ? " group-channel-backdrop-sheet" : ""}`}
       aria-label={`${title} ${localChannel.name}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
     >
-      <div
-        className={`modal group-channel-modal${sheetForm ? " group-channel-modal-shell" : ""}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <button
+        type="button"
+        className="modal-backdrop-mask"
+        aria-label="关闭"
+        disabled={busy}
+        onClick={onClose}
+      />
+      <div className={`modal group-channel-modal${sheetForm ? " group-channel-modal-shell" : ""}`}>
         <div className="modal-head group-channel-modal-head">
           {sheetForm ? (
             <>

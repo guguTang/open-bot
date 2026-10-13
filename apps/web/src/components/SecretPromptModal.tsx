@@ -57,11 +57,15 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props) {
       ref={dialogRef}
       className="modal-backdrop"
       aria-labelledby="secret-prompt-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
     >
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="modal-backdrop-mask"
+        aria-label="关闭"
+        disabled={busy}
+        onClick={onClose}
+      />
+      <div className="modal">
         <div className="modal-head">
           <h3 id="secret-prompt-modal-title">需要密钥：{request.name || "secret"}</h3>
           <button type="button" className="ghost" onClick={onClose}>

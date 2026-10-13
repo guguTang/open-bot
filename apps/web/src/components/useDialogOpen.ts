@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 export type UseDialogOpenOptions = {
   /** When false, use `show()` instead of `showModal()`. Default true. */
@@ -21,9 +21,12 @@ export function useDialogOpen(
   const ref = useRef<HTMLDialogElement>(null);
   const onCloseRef = useRef(onClose);
   const optionsRef = useRef(options);
-  onCloseRef.current = onClose;
-  optionsRef.current = options;
   const suppressCloseEventRef = useRef(false);
+
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+    optionsRef.current = options;
+  });
 
   useEffect(() => {
     const dialog = ref.current;

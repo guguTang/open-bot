@@ -932,6 +932,27 @@ dialog.modal-backdrop:not([open]) {
   display: none;
 }
 
+/* Full-bleed dismiss control behind the modal panel (keeps handlers off <dialog>). */
+.modal-backdrop-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.modal-backdrop > .modal,
+.modal-backdrop > .preview-modal,
+.modal-backdrop > .clone-agent-modal,
+.modal-backdrop > .group-channel-modal,
+.modal-backdrop > .bot-avatar-modal {
+  position: relative;
+  z-index: 1;
+}
+
 .modal {
   width: min(420px, 100%);
   background: var(--bg-elevated);

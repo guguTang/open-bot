@@ -104,6 +104,8 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
     };
   }, [open, sheetForm]);
 
+  const dialogRef = useDialogOpen(open, onClose, { blockDismiss: busy });
+
   if (!open || !agent) return null;
 
   const submit = async (e: FormEvent) => {
@@ -125,21 +127,21 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
   };
 
   const closeIcon = <X size={16} strokeWidth={2} aria-hidden />;
-  const dialogRef = useDialogOpen(open, onClose, { blockDismiss: busy });
 
   return (
     <dialog
       ref={dialogRef}
       className={`modal-backdrop${sheetForm ? " bot-avatar-backdrop-sheet bot-avatar-backdrop-shell settings-backdrop-shell" : ""}`}
       aria-label={`Bot 形象 ${agent.name}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
     >
-      <div
-        className={`modal bot-avatar-modal${sheetForm ? " bot-avatar-modal-sheet bot-avatar-modal-shell" : ""}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <button
+        type="button"
+        className="modal-backdrop-mask"
+        aria-label="关闭"
+        disabled={busy}
+        onClick={onClose}
+      />
+      <div className={`modal bot-avatar-modal${sheetForm ? " bot-avatar-modal-sheet bot-avatar-modal-shell" : ""}`}>
         {sheetForm ? (
           <div className="settings-shell-subhead">
             <button
@@ -252,11 +254,11 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
                 ))}
               </select>
               {machinesLoaded && machines.length === 0 ? (
-                <div className="muted small whitespace-normal leading-[1.45] [overflow-wrap:anywhere]">
+                <div className="muted small whitespace-normal leading-[1.45] wrap-anywhere">
                   还没有已连接的电脑。手机不能当作优先电脑。
                 </div>
               ) : (
-                <div className="muted small whitespace-normal leading-[1.45] [overflow-wrap:anywhere]">
+                <div className="muted small whitespace-normal leading-[1.45] wrap-anywhere">
                   本地能力跟「你在哪台电脑上发这条消息」走，不会锁死创建时选的那台。优先电脑仅在路由需要兜底时使用。
                 </div>
               )}

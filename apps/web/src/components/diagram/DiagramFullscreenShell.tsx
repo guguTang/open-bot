@@ -63,16 +63,19 @@ export function DiagramFullscreenShell({
     <dialog
       ref={dialogRef}
       className={cn(
-        "m-0 max-h-none max-w-none border-none p-0 text-inherit",
+        "relative m-0 max-h-none max-w-none border-none p-0 text-inherit",
         diagramFsBackdropClass,
         variant === "image" && diagramFsBackdropImageClass,
       )}
       aria-label={ariaLabel}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
-      <div className={variant === "image" ? diagramFsShellImageClass : diagramFsShellClass}>
+      <button type="button" className="modal-backdrop-mask" aria-label="关闭" onClick={onClose} />
+      <div
+        className={cn(
+          "relative z-1",
+          variant === "image" ? diagramFsShellImageClass : diagramFsShellClass,
+        )}
+      >
         <div className={diagramFsToolbarClass}>
           <span className={diagramPillClass}>{label}</span>
           {toolbarCenter}

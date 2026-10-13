@@ -35,11 +35,9 @@ export function HtmlPreviewModal({
       ref={dialogRef}
       className="modal-backdrop preview-backdrop"
       aria-label={title || "HTML 预览"}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
-      <div className="modal preview-modal" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="modal-backdrop-mask" aria-label="关闭" onClick={onClose} />
+      <div className="modal preview-modal">
         <div className="modal-head">
           <h3>{title || "HTML 预览"}</h3>
           <div className="modal-head-actions">
