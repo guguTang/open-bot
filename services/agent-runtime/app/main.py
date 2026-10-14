@@ -33,7 +33,7 @@ from .llm import (
     strip_think,
     tools_enabled,
 )
-from .harness.long_task import apply_after_interrupt_hint
+from .harness.long_task import apply_after_interrupt_hint, apply_host_list_hint
 from .tool_markup import strip_tool_markup
 from .memory import (
     MemoryStore,
@@ -749,6 +749,9 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                 system,
                 dynamic_system,
                 after_interrupt=bool(getattr(body, "after_interrupt", False)),
+            )
+            system, dynamic_system = apply_host_list_hint(
+                system, dynamic_system, str(body.content or "")
             )
 
             dialog = [m for m in history if m["role"] in ("user", "assistant", "summary")]

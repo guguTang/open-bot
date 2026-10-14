@@ -12,11 +12,13 @@ import (
 )
 
 const (
-	askRouteRecentMax    = 8
-	askRouteMsgRunes     = 400
-	askRouteContextRunes = 2400
-	askRouteJobRunes     = 200
-	askRouteQuestionMax  = 4000
+	askRouteRecentMax   = 8
+	askRouteMsgRunes    = 400
+	askRouteJobRunes    = 200
+	askRouteQuestionMax = 4000
+	// Laya rejects the decide call once state + questions pass ~1100 runes.
+	askRouteDecisionRunes = 640
+	askRouteLatestRunes   = 180
 	// Below this, a colleague choice stays with the current bot.
 	askHandoffConfidenceFloor = 0.5
 )
@@ -56,30 +58,22 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	if len(candidates) == 0 {
 		return askDecisionPack{}, false
 	}
+	selfJob := askSelfJob(self)
 	keyToID := map[string]string{}
+	// none is scored like a colleague: the text is this bot's own job, not a rule.
 	criteria := map[string]string{
-		"none": "不问同事。你的岗位盖得住就留在自己这里，两边都能干也留在自己这里。闲聊，或名单里没有只有对方能做的人，同样不问。",
+		"none": selfJob,
 	}
-	var roster []string
+	var choices []askChoiceLine
 	for i, peer := range candidates {
 		key := fmt.Sprintf("c%d", i)
-		name := strings.TrimSpace(peer.Name)
-		if name == "" {
-			name = peer.ID
-		}
 		desc := oneLine(peer.Description)
 		keyToID[key] = peer.ID
-		criteria[key] = name + " — " + desc
-		roster = append(roster, "- "+key+" "+name+"："+desc)
+		criteria[key] = desc
+		choices = append(choices, askChoiceLine{key: key, desc: desc})
 	}
 	summary, recent := splitAskContext(history)
-	var b strings.Builder
-	b.WriteString("你的岗位：")
-	b.WriteString(askSelfJob(self))
-	b.WriteString("\n\n同事：\n")
-	b.WriteString(strings.Join(roster, "\n"))
-	b.WriteString("\n\n会话：\n")
-	state := fitAskState(b.String(), askConversationBlock(summary, recent), askRouteContextRunes+askRouteJobRunes*2)
+	state := askDecisionState(askLatestUser(recent), askConversationBlock(summary, recent))
 	question := askColleagueQuestion(summary, recent)
 	if strings.TrimSpace(question) == "" {
 		return askDecisionPack{}, false
@@ -90,19 +84,56 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 		Question: question,
 		Questions: map[string]any{
 			"ask": map[string]any{
-				"type": "choice",
-				"instructions": "选择这一回合是否要请一位同事来做。用户自己的话点名某位就选那位。" +
-					"标成同事的旧回复不是点名，也不表示这一回合还要找他。" +
-					"只有这件事落在对方岗位描述里、而你的岗位盖不住时，才选对应的一位。" +
-					"你能做、两边都能做、闲聊、没有对口的人，选 none。只选一个。",
-				"criteria": criteria,
+				"type":         "choice",
+				"instructions": askDecisionRules(choices),
+				"criteria":     criteria,
 			},
 		},
 	}, true
 }
 
+type askChoiceLine struct {
+	key  string
+	desc string
+}
+
+func askLatestUser(recent []runtimeMsg) string {
+	last := ""
+	for _, m := range recent {
+		text := strings.TrimSpace(m.Content)
+		if m.Role != "user" || colleagueNoteName(text) != "" {
+			continue
+		}
+		last = askRouteUtterance(text)
+	}
+	return last
+}
+
+func askDecisionState(latest, convo string) string {
+	latest = clipRunes(oneLine(latest), askRouteLatestRunes)
+	header := "当前：" + latest + "\n会话：\n"
+	return fitAskState(header, convo, askRouteDecisionRunes)
+}
+
+func askDecisionRules(choices []askChoiceLine) string {
+	var b strings.Builder
+	b.WriteString("只判断当前最新一条用户消息。历史只用来理解指代，不当作当前任务。")
+	b.WriteString("当前请求点名某同事才选该同事；只提及同事或引用旧回复不算当前指派。")
+	b.WriteString("自己的岗位盖得住，或两边都能做，或闲聊、没有明确对口的人，选 none。")
+	b.WriteString("只有同事职责明确匹配且自己盖不住时才选该同事。")
+	b.WriteString("不得因为历史中曾经调用过某位同事就再选。超出本职也不自动转交。")
+	b.WriteString("选项：")
+	for _, c := range choices {
+		b.WriteString(c.key + " ")
+	}
+	b.WriteString("none。只输出选项。")
+	return b.String()
+}
+
 // askTargetFromAnswers maps a decision choice onto one colleague id.
-// none, unknown keys, and a weak confidence stay with the current bot.
+// none and unknown keys stay. Laya's confidence is 1 minus the entropy of the
+// choice distribution, so a 0.72/0.28 split scores about 0.15. The chosen
+// option's own probability is what the floor compares.
 func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) string {
 	raw, _ := answers["ask"].(map[string]any)
 	if raw == nil {
@@ -112,10 +143,33 @@ func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) str
 	if choice == "" || choice == "<nil>" || strings.EqualFold(choice, "none") {
 		return ""
 	}
-	if conf, ok := answerConfidence(raw["confidence"]); ok && conf < askHandoffConfidenceFloor {
+	if !askChoiceClearsFloor(raw, choice) {
 		return ""
 	}
 	return strings.TrimSpace(keyToID[choice])
+}
+
+func askChoiceClearsFloor(raw map[string]any, choice string) bool {
+	score, ok := answerConfidence(raw["confidence"])
+	if p, has := choiceProbability(raw["probabilities"], choice); has && p > score {
+		score = p
+		ok = true
+	}
+	if !ok {
+		return true
+	}
+	return score >= askHandoffConfidenceFloor
+}
+
+func choiceProbability(v any, choice string) (float64, bool) {
+	probs, _ := v.(map[string]any)
+	if probs == nil {
+		if typed, ok := v.(map[string]string); ok {
+			return answerConfidence(typed[choice])
+		}
+		return 0, false
+	}
+	return answerConfidence(probs[choice])
 }
 
 func answerConfidence(v any) (float64, bool) {

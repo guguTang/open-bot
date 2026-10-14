@@ -14,13 +14,6 @@ import re
 DELIVERY_TOOLS = frozenset({"sandbox_write", "sandbox_shell"})
 
 HOST_DELETE_TOOLS = frozenset({"host_delete", "host_ssh_delete"})
-HOST_LIST_TOOLS = frozenset({
-    "host_ls",
-    "host_ssh_ls",
-    "list_machines",
-    "host_shell",
-    "load_skill",
-})
 
 # Fed back into the same run. Not shown to the user and not matched against
 # the model's previous sentence.
@@ -47,6 +40,8 @@ _LIST_INTENT = re.compile(
     re.IGNORECASE,
 )
 _DELETE_CONTEXT = re.compile(r"(删|删除|delete|拒绝|允许|确认卡|mp4)", re.IGNORECASE)
+_OWN_ASK_MARKER = "请处理用户刚说的："
+_MD_LINK = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
 
 def history_has_artifact(messages: list[dict] | None) -> bool:
@@ -122,8 +117,32 @@ def last_assistant_text(messages: list[dict] | None) -> str:
     return ""
 
 
+def own_user_ask(text: str) -> str:
+    """The user's own latest sentence, without the colleague brief around it."""
+    raw = (text or "").strip()
+    idx = raw.rfind(_OWN_ASK_MARKER)
+    if idx >= 0:
+        return raw[idx + len(_OWN_ASK_MARKER) :].strip()
+    return raw
+
+
+def host_list_hint(text: str) -> str | None:
+    """Prompt line for this turn when the user is asking about files on their computer.
+
+    Link titles such as 「下载俄罗斯方块页面」and earlier colleague replies do not count.
+    """
+    visible = _MD_LINK.sub(" ", own_user_ask(text))
+    if _LIST_INTENT.search(visible):
+        return CONTINUE_HOST_LIST
+    return None
+
+
 def host_followup_prompt(tools_used: list[str] | None, messages: list[dict] | None) -> str | None:
-    """If the user asked for a host mutation/list but no tool ran, nudge once."""
+    """If the user asked to delete on the computer but no delete tool ran, nudge once.
+
+    Listing the computer is decided before the turn, via host_list_hint. It is not
+    appended after the model has already finished other work.
+    """
     used = set(tools_used or [])
     text = last_real_user_text(messages)
     if not text:
@@ -133,6 +152,4 @@ def host_followup_prompt(tools_used: list[str] | None, messages: list[dict] | No
     ):
         if used.isdisjoint(HOST_DELETE_TOOLS):
             return CONTINUE_HOST_DELETE
-    if _LIST_INTENT.search(text) and used.isdisjoint(HOST_LIST_TOOLS):
-        return CONTINUE_HOST_LIST
     return None

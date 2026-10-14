@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 from ..deferral import (
     CONTINUE_WORK,
     host_followup_prompt,
+    host_list_hint,
     last_real_user_text,
     turn_unfinished,
 )
@@ -38,6 +39,18 @@ def apply_after_interrupt_hint(
     if not after_interrupt:
         return system, dynamic_system
     hint = AFTER_INTERRUPT_HINT
+    system_out = (f"{system}\n\n{hint}").strip() if (system or "").strip() else hint
+    dynamic_out = (
+        (f"{dynamic_system}\n\n{hint}").strip() if (dynamic_system or "").strip() else hint
+    )
+    return system_out, dynamic_out
+
+
+def apply_host_list_hint(system: str, dynamic_system: str, user_text: str) -> tuple[str, str]:
+    """Add the host-list line before the model acts, only for this turn's own ask."""
+    hint = host_list_hint(user_text)
+    if not hint:
+        return system, dynamic_system
     system_out = (f"{system}\n\n{hint}").strip() if (system or "").strip() else hint
     dynamic_out = (
         (f"{dynamic_system}\n\n{hint}").strip() if (dynamic_system or "").strip() else hint

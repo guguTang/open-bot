@@ -1,4 +1,10 @@
-from app.deferral import CONTINUE_HOST_DELETE, CONTINUE_HOST_LIST, host_followup_prompt, turn_unfinished
+from app.deferral import (
+    CONTINUE_HOST_DELETE,
+    CONTINUE_HOST_LIST,
+    host_followup_prompt,
+    host_list_hint,
+    turn_unfinished,
+)
 
 
 def test_chat_without_a_file_is_finished():
@@ -90,9 +96,14 @@ def test_host_retry_after_denied_forces_delete():
     assert host_followup_prompt(["host_ls"], messages) == CONTINUE_HOST_DELETE
 
 
-def test_host_list_intent_forces_ls():
-    messages = [{"role": "user", "content": "看看下载文件夹最大的文件排前三的"}]
-    assert host_followup_prompt([], messages) == CONTINUE_HOST_LIST
-    assert host_followup_prompt(["host_ls"], messages) is None
-    assert host_followup_prompt(["host_shell"], messages) is None
-    assert host_followup_prompt(["load_skill"], messages) is None
+def test_host_list_hint_uses_the_users_own_sentence():
+    assert host_list_hint("看看下载文件夹最大的文件排前三的") == CONTINUE_HOST_LIST
+    brief = (
+        "会话上下文：\n"
+        "同事代码：已经做好。[下载俄罗斯方块页面](sandbox:/workspace/bots/a/tetris.html)\n\n"
+        "请处理用户刚说的：游戏区域的当前方块不显示"
+    )
+    assert host_list_hint(brief) is None
+    messages = [{"role": "user", "content": brief}]
+    assert host_followup_prompt(["sandbox_shell"], messages) is None
+    assert host_followup_prompt([], messages) is None

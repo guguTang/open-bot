@@ -38,8 +38,17 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if _, hasNone := criteria["none"]; !hasNone {
 		t.Fatal("missing none")
 	}
-	if !strings.Contains(criteria["none"], "两边都能干") {
-		t.Fatalf("none should keep overlapping work: %s", criteria["none"])
+	if criteria["none"] != "写作与改稿" {
+		t.Fatalf("none should be the current job, got %s", criteria["none"])
+	}
+	if strings.Contains(pack.State, "# 角色") || strings.Contains(pack.State, "决策原则") {
+		t.Fatalf("rules should stay in instructions, not the state:\n%s", pack.State)
+	}
+	if !strings.HasPrefix(pack.State, "当前：帮我写个html页面，简单的计算器") {
+		t.Fatalf("latest ask should lead the state:\n%s", pack.State)
+	}
+	if runeLen(pack.State) > askRouteDecisionRunes {
+		t.Fatalf("state too long for Laya: %d", runeLen(pack.State))
 	}
 	if criteria["c0"] == "" || !strings.Contains(criteria["c0"], "代码") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
@@ -88,6 +97,23 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.8}}, keys); got != "coder" {
 		t.Fatalf("confident c0 -> %s", got)
 	}
+	// Laya confidence is 1-entropy. 0.72 vs 0.28 yields ~0.15, but the choice probability clears the floor.
+	snake := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.1457",
+		"probabilities": map[string]any{"c0": "0.7209", "none": "0.2791"},
+	}}
+	if got := askTargetFromAnswers(snake, keys); got != "coder" {
+		t.Fatalf("choice probability should hand off: %q", got)
+	}
+	weak := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.1457",
+		"probabilities": map[string]any{"c0": "0.40", "none": "0.60"},
+	}}
+	if got := askTargetFromAnswers(weak, keys); got != "" {
+		t.Fatalf("low choice probability should stay: %q", got)
+	}
 }
 
 func TestAskRouteUtteranceDropsFileBody(t *testing.T) {
@@ -133,7 +159,7 @@ func TestAskContextLabelsColleagueReply(t *testing.T) {
 	}
 	ask, _ := pack.Questions["ask"].(map[string]any)
 	inst, _ := ask["instructions"].(string)
-	if !strings.Contains(inst, "标成同事的旧回复不是点名") {
+	if !strings.Contains(inst, "不算当前指派") || !strings.Contains(inst, "不得因为历史中曾经调用过某位同事") {
 		t.Fatalf("instructions: %s", inst)
 	}
 }
@@ -172,6 +198,29 @@ func TestAskDecisionKeepsRollingSummary(t *testing.T) {
 	}
 	if !strings.Contains(pack.State, "社保") || !strings.Contains(pack.State, "用户：给我身份证信息") {
 		t.Fatalf("summary or ask missing:\n%s", pack.State)
+	}
+}
+
+func TestAskDecisionStateStaysInsideLayaWindow(t *testing.T) {
+	self := &db.Agent{ID: "writer", Description: "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。"}
+	peers := []*db.Agent{{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。远程 SSH 先 load_skill host-ssh。"}}
+	history := []runtimeMsg{
+		{Role: "assistant", Content: strings.Repeat("社保缴费记录很长。", 80)},
+		{Role: "user", Content: "帮我写个小游戏，贪吃蛇"},
+	}
+	pack, ok := buildAskDecision(self, peers, history)
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	if !strings.HasPrefix(pack.State, "当前：帮我写个小游戏，贪吃蛇") {
+		t.Fatalf("latest ask dropped:\n%s", pack.State)
+	}
+	if runeLen(pack.State) > askRouteDecisionRunes {
+		t.Fatalf("state %d exceeds %d", runeLen(pack.State), askRouteDecisionRunes)
+	}
+	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
+	if runeLen(inst) > 220 {
+		t.Fatalf("instructions too long: %d %s", runeLen(inst), inst)
 	}
 }
 
