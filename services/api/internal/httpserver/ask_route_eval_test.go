@@ -10,7 +10,7 @@ import (
 
 // askEvalRoster is a writer, a coder, a designer, and an editor who shares the
 // writer's job. The editor is dropped before cN keys are assigned. Display
-// names are not substrings of the job text, so 点名/<name> is unambiguous.
+// names are not substrings of the job text, so criteria stay description-only.
 func askEvalRoster() (*db.Agent, []*db.Agent) {
 	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
 	peers := []*db.Agent{
@@ -58,6 +58,10 @@ func TestAskHandoffRoutingEval(t *testing.T) {
 			map[string]any{"c0": "0.7209", "none": "0.2791"}, "coder"),
 		evalLayaProbability(t, self, peers, "Laya 低选项概率", "留下", "c0", "0.1457",
 			map[string]any{"c0": "0.40", "none": "0.60"}, ""),
+		evalLayaProbability(t, self, peers, "Laya 选项概率领先不足", "留下", "c1", "0.9",
+			map[string]any{"c0": "0.41", "c1": "0.55", "none": "0.04"}, ""),
+		evalLayaProbability(t, self, peers, "Laya 选项概率明显领先", "交接 coder", "c0", "0.1457",
+			map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"}, "coder"),
 	}
 	var b strings.Builder
 	b.WriteString("\n| 用例 | 期望 | 实测 |\n|---|---|---|\n")
@@ -244,19 +248,11 @@ func askEvalShapeProblems(pack askDecisionPack, ok bool, latest string, peers []
 			problems = append(problems, "instructions missing "+key)
 		}
 		text := criteria[key]
-		if !strings.Contains(text, "本职能做或未点名则勿选") || !strings.Contains(text, "勿因历史曾转而选") {
+		if !strings.HasPrefix(text, "仅当最新句明确需要：") || !strings.Contains(text, "本职能做或未点名则勿选") || !strings.Contains(text, "勿因历史曾转而选") || strings.Contains(text, "点名/") {
 			problems = append(problems, key+" criteria shape")
 		}
-		label := ""
-		if peer := byID[pack.KeyToID[key]]; peer != nil {
-			label = askPeerNameLabel(peer.Name)
-		}
-		if label == "" {
-			if !strings.HasPrefix(text, "仅当最新句明确需要：") {
-				problems = append(problems, key+" missing unnamed form")
-			}
-		} else if !strings.Contains(text, "点名/"+label) {
-			problems = append(problems, key+" missing 点名/"+label)
+		if peer := byID[pack.KeyToID[key]]; peer != nil && strings.TrimSpace(peer.Name) != "" && strings.Contains(text, strings.TrimSpace(peer.Name)) {
+			problems = append(problems, key+" contains display name "+peer.Name)
 		}
 	}
 	if !strings.Contains(inst, "none。") {

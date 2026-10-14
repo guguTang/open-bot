@@ -20,12 +20,13 @@ const (
 	askRouteLatestRunes   = 180
 	// Colleague criteria are one-line triggers, not full job posts.
 	askCriteriaTriggerRunes = 60
-	// Short display name so Laya can bind 「点名/名」 to a cN.
-	askPeerNameRunes = 12
 	// Optional self-job tail after the none routing default.
 	askNoneJobRunes = 48
 	// Below this, a colleague choice stays with the current bot.
 	askHandoffConfidenceFloor = 0.5
+	// When probabilities are present, the chosen option must also lead the
+	// next option by at least this much. A bare peak just over the floor stays.
+	askHandoffProbabilityMargin = 0.15
 )
 
 const askNoneCriteriaLead = "本职可答；或与下列同事职责重叠；或闲聊/模糊/未点名。默认。"
@@ -67,7 +68,8 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	}
 	keyToID := map[string]string{}
 	// none leads with the stay-here default. A short self job may follow.
-	// Colleague keys carry a short display name plus a clipped trigger.
+	// Colleague keys are description triggers. Names stay out; @/点名 is handled
+	// before the decision model.
 	criteria := map[string]string{
 		"none": askNoneCriteria(self),
 	}
@@ -75,7 +77,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	for i, peer := range candidates {
 		key := fmt.Sprintf("c%d", i)
 		keyToID[key] = peer.ID
-		criteria[key] = askPeerCriteria(peer.Name, peer.Description)
+		criteria[key] = askPeerCriteria(peer.Description)
 		choices = append(choices, askChoiceLine{key: key})
 	}
 	summary, recent := splitAskContext(history)
@@ -129,22 +131,9 @@ func askNoneCriteria(agent *db.Agent) string {
 	return askNoneCriteriaLead + clipRunes(job, askNoneJobRunes)
 }
 
-func askPeerCriteria(name, desc string) string {
+func askPeerCriteria(desc string) string {
 	trigger := clipRunes(oneLine(desc), askCriteriaTriggerRunes)
-	label := askPeerNameLabel(name)
-	tail := "。本职能做或未点名则勿选。勿因历史曾转而选。"
-	if label == "" {
-		return "仅当最新句明确需要：" + trigger + tail
-	}
-	return "仅当最新句点名/" + label + "，或明确需要：" + trigger + tail
-}
-
-func askPeerNameLabel(name string) string {
-	name = clipRunes(oneLine(name), askPeerNameRunes)
-	if name == "" || name == "…" {
-		return ""
-	}
-	return name
+	return "仅当最新句明确需要：" + trigger + "。本职能做或未点名则勿选。勿因历史曾转而选。"
 }
 
 func askDecisionRules(choices []askChoiceLine) string {
@@ -162,9 +151,8 @@ func askDecisionRules(choices []askChoiceLine) string {
 }
 
 // askTargetFromAnswers maps a decision choice onto one colleague id.
-// none and unknown keys stay. Laya's confidence is 1 minus the entropy of the
-// choice distribution, so a 0.72/0.28 split scores about 0.15. The chosen
-// option's own probability is what the floor compares.
+// none and unknown keys stay. With a probability map, the chosen option must
+// clear the floor and lead the next option. Without one, confidence is the floor.
 func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) string {
 	raw, _ := answers["ask"].(map[string]any)
 	if raw == nil {
@@ -181,26 +169,55 @@ func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) str
 }
 
 func askChoiceClearsFloor(raw map[string]any, choice string) bool {
-	score, ok := answerConfidence(raw["confidence"])
-	if p, has := choiceProbability(raw["probabilities"], choice); has && p > score {
-		score = p
-		ok = true
+	if chosen, second, ok := choiceProbabilityLead(raw["probabilities"], choice); ok {
+		return chosen+1e-9 >= askHandoffConfidenceFloor && chosen-second+1e-9 >= askHandoffProbabilityMargin
 	}
+	score, ok := answerConfidence(raw["confidence"])
 	if !ok {
 		return true
 	}
 	return score >= askHandoffConfidenceFloor
 }
 
-func choiceProbability(v any, choice string) (float64, bool) {
-	probs, _ := v.(map[string]any)
-	if probs == nil {
-		if typed, ok := v.(map[string]string); ok {
-			return answerConfidence(typed[choice])
-		}
-		return 0, false
+// choiceProbabilityLead reads the chosen option and the next-highest other
+// option. Missing probabilities, or a missing chosen key, are not a lead.
+func choiceProbabilityLead(v any, choice string) (chosen, second float64, ok bool) {
+	probs := probabilityValues(v)
+	if len(probs) == 0 {
+		return 0, 0, false
 	}
-	return answerConfidence(probs[choice])
+	chosen, ok = probs[choice]
+	if !ok {
+		return 0, 0, false
+	}
+	for key, p := range probs {
+		if key == choice {
+			continue
+		}
+		if p > second {
+			second = p
+		}
+	}
+	return chosen, second, true
+}
+
+func probabilityValues(v any) map[string]float64 {
+	out := map[string]float64{}
+	switch probs := v.(type) {
+	case map[string]any:
+		for key, raw := range probs {
+			if p, ok := answerConfidence(raw); ok {
+				out[key] = p
+			}
+		}
+	case map[string]string:
+		for key, raw := range probs {
+			if p, ok := answerConfidence(raw); ok {
+				out[key] = p
+			}
+		}
+	}
+	return out
 }
 
 func answerConfidence(v any) (float64, bool) {

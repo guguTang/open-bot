@@ -54,11 +54,11 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state too long for Laya: %d", runeLen(pack.State))
 	}
-	if !strings.Contains(criteria["c0"], "点名/代码") || !strings.Contains(criteria["c0"], "或明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
+	if !strings.HasPrefix(criteria["c0"], "仅当最新句明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
 	}
-	if strings.HasPrefix(criteria["c0"], "代码") || strings.Contains(criteria["c0"], "代码 —") {
-		t.Fatalf("c0 should bind the name as 点名/代码, got %#v", criteria["c0"])
+	if strings.Contains(criteria["c0"], "点名/") || strings.HasPrefix(criteria["c0"], "代码") || strings.Contains(criteria["c0"], "代码 —") {
+		t.Fatalf("c0 should be the job trigger only, got %#v", criteria["c0"])
 	}
 	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
 	for _, needle := range []string{"优先级", "不确定选 none", "不算指派", "不得因曾转某同事再选", "c0 ", "c1 ", "none。只输出选项，无解释。"} {
@@ -110,7 +110,7 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.8}}, keys); got != "coder" {
 		t.Fatalf("confident c0 -> %s", got)
 	}
-	// Laya confidence is 1-entropy. 0.72 vs 0.28 yields ~0.15, but the choice probability clears the floor.
+	// 0.72 vs 0.28 clears both the floor and the 0.15 lead.
 	snake := map[string]any{"ask": map[string]any{
 		"choice":        "c0",
 		"confidence":    "0.1457",
@@ -126,6 +126,24 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	}}
 	if got := askTargetFromAnswers(weak, keys); got != "" {
 		t.Fatalf("low choice probability should stay: %q", got)
+	}
+	// A peak just over 0.5 that does not lead the next option stays, even if
+	// the entropy confidence looks high.
+	narrow := map[string]any{"ask": map[string]any{
+		"choice":        "c1",
+		"confidence":    0.9,
+		"probabilities": map[string]any{"c0": "0.41", "c1": "0.55", "none": "0.04"},
+	}}
+	if got := askTargetFromAnswers(narrow, keys); got != "" {
+		t.Fatalf("narrow lead should stay: %q", got)
+	}
+	lead := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.1457",
+		"probabilities": map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"},
+	}}
+	if got := askTargetFromAnswers(lead, keys); got != "coder" {
+		t.Fatalf("clear lead should hand off: %q", got)
 	}
 }
 
@@ -357,18 +375,10 @@ func TestAskPeerCandidatesDropSameJob(t *testing.T) {
 	}
 }
 
-func TestAskPeerCriteriaName(t *testing.T) {
-	named := askPeerCriteria("画板", "负责界面设计，不改仓库")
-	if !strings.Contains(named, "点名/画板") || !strings.Contains(named, "或明确需要：负责界面设计，不改仓库") {
-		t.Fatalf("named = %s", named)
-	}
-	unnamed := askPeerCriteria("  ", "负责写代码")
-	if !strings.HasPrefix(unnamed, "仅当最新句明确需要：负责写代码") || strings.Contains(unnamed, "点名/") {
-		t.Fatalf("unnamed = %s", unnamed)
-	}
-	long := askPeerCriteria(strings.Repeat("名", 20), "写代码")
-	if !strings.Contains(long, "点名/"+strings.Repeat("名", askPeerNameRunes)+"…") {
-		t.Fatalf("clipped name = %s", long)
+func TestAskPeerCriteriaDescriptionOnly(t *testing.T) {
+	got := askPeerCriteria("负责界面设计，不改仓库")
+	if !strings.HasPrefix(got, "仅当最新句明确需要：负责界面设计，不改仓库") || strings.Contains(got, "点名/") || strings.Contains(got, "画板") {
+		t.Fatalf("criteria = %s", got)
 	}
 }
 
