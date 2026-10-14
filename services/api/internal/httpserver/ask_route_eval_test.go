@@ -8,9 +8,9 @@ import (
 	"github.com/tangxin/open-bot/services/api/internal/db"
 )
 
-// askEvalRoster is a writer who can draft, plus a coder and a designer whose
-// display names do not appear inside their job text. That keeps the "no display
-// name in cN" check from passing by accident.
+// askEvalRoster is a writer, a coder, a designer, and an editor who shares the
+// writer's job. The editor is dropped before cN keys are assigned. Display
+// names are not substrings of the job text, so 点名/<name> is unambiguous.
 func askEvalRoster() (*db.Agent, []*db.Agent) {
 	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
 	peers := []*db.Agent{
@@ -232,31 +232,39 @@ func askEvalShapeProblems(pack askDecisionPack, ok bool, latest string, peers []
 	if strings.HasPrefix(criteria["none"], "负责") {
 		problems = append(problems, "none criteria starts with the job")
 	}
+	byID := map[string]*db.Agent{}
+	for _, peer := range peers {
+		if peer != nil {
+			byID[peer.ID] = peer
+		}
+	}
 	for i := 0; i < len(pack.KeyToID); i++ {
 		key := fmt.Sprintf("c%d", i)
 		if !strings.Contains(inst, key+" ") {
 			problems = append(problems, "instructions missing "+key)
 		}
 		text := criteria[key]
-		if !strings.HasPrefix(text, "仅当最新句明确需要：") || !strings.Contains(text, "本职能做或未点名则勿选") || !strings.Contains(text, "勿因历史曾转而选") {
+		if !strings.Contains(text, "本职能做或未点名则勿选") || !strings.Contains(text, "勿因历史曾转而选") {
 			problems = append(problems, key+" criteria shape")
+		}
+		label := ""
+		if peer := byID[pack.KeyToID[key]]; peer != nil {
+			label = askPeerNameLabel(peer.Name)
+		}
+		if label == "" {
+			if !strings.HasPrefix(text, "仅当最新句明确需要：") {
+				problems = append(problems, key+" missing unnamed form")
+			}
+		} else if !strings.Contains(text, "点名/"+label) {
+			problems = append(problems, key+" missing 点名/"+label)
 		}
 	}
 	if !strings.Contains(inst, "none。") {
 		problems = append(problems, "instructions missing none")
 	}
-	for _, peer := range peers {
-		name := strings.TrimSpace(peer.Name)
-		if name == "" {
-			continue
-		}
-		for key, text := range criteria {
-			if key == "none" {
-				continue
-			}
-			if strings.Contains(text, name) {
-				problems = append(problems, key+" contains display name "+name)
-			}
+	for _, id := range pack.KeyToID {
+		if id == "editor" {
+			problems = append(problems, "editor with the same job as self was kept")
 		}
 	}
 	if !strings.Contains(pack.Question, "请处理用户刚说的："+latest) {

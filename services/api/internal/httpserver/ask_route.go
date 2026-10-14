@@ -20,6 +20,8 @@ const (
 	askRouteLatestRunes   = 180
 	// Colleague criteria are one-line triggers, not full job posts.
 	askCriteriaTriggerRunes = 60
+	// Short display name so Laya can bind 「点名/名」 to a cN.
+	askPeerNameRunes = 12
 	// Optional self-job tail after the none routing default.
 	askNoneJobRunes = 48
 	// Below this, a colleague choice stays with the current bot.
@@ -59,13 +61,13 @@ type askDecisionPack struct {
 // No tool list. With a summary, the state is that summary plus the turns
 // after it. Without one, it is the current conversation context.
 func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (askDecisionPack, bool) {
-	candidates := askPeerCandidates(selfIDOf(self), peers)
+	candidates := askPeerCandidates(self, peers)
 	if len(candidates) == 0 {
 		return askDecisionPack{}, false
 	}
 	keyToID := map[string]string{}
 	// none leads with the stay-here default. A short self job may follow.
-	// Colleague keys are triggers only: no display names.
+	// Colleague keys carry a short display name plus a clipped trigger.
 	criteria := map[string]string{
 		"none": askNoneCriteria(self),
 	}
@@ -73,7 +75,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	for i, peer := range candidates {
 		key := fmt.Sprintf("c%d", i)
 		keyToID[key] = peer.ID
-		criteria[key] = askPeerCriteria(peer.Description)
+		criteria[key] = askPeerCriteria(peer.Name, peer.Description)
 		choices = append(choices, askChoiceLine{key: key})
 	}
 	summary, recent := splitAskContext(history)
@@ -127,9 +129,22 @@ func askNoneCriteria(agent *db.Agent) string {
 	return askNoneCriteriaLead + clipRunes(job, askNoneJobRunes)
 }
 
-func askPeerCriteria(desc string) string {
+func askPeerCriteria(name, desc string) string {
 	trigger := clipRunes(oneLine(desc), askCriteriaTriggerRunes)
-	return "仅当最新句明确需要：" + trigger + "。本职能做或未点名则勿选。勿因历史曾转而选。"
+	label := askPeerNameLabel(name)
+	tail := "。本职能做或未点名则勿选。勿因历史曾转而选。"
+	if label == "" {
+		return "仅当最新句明确需要：" + trigger + tail
+	}
+	return "仅当最新句点名/" + label + "，或明确需要：" + trigger + tail
+}
+
+func askPeerNameLabel(name string) string {
+	name = clipRunes(oneLine(name), askPeerNameRunes)
+	if name == "" || name == "…" {
+		return ""
+	}
+	return name
 }
 
 func askDecisionRules(choices []askChoiceLine) string {
@@ -200,22 +215,108 @@ func answerConfidence(v any) (float64, bool) {
 	}
 }
 
-func askPeerCandidates(selfID string, agents []*db.Agent) []*db.Agent {
-	selfID = strings.TrimSpace(selfID)
+func askPeerCandidates(self *db.Agent, agents []*db.Agent) []*db.Agent {
+	selfID := selfIDOf(self)
+	selfJob := askNormJob(askSelfJobText(self))
+	seen := map[string]struct{}{}
 	var out []*db.Agent
 	for _, a := range agents {
 		if a == nil || strings.TrimSpace(a.ID) == "" || a.ID == selfID {
 			continue
 		}
-		if strings.TrimSpace(a.Description) == "" {
+		job := askNormJob(a.Description)
+		if job == "" {
 			continue
 		}
+		if selfJob != "" && job == selfJob {
+			continue
+		}
+		if _, ok := seen[job]; ok {
+			continue
+		}
+		seen[job] = struct{}{}
 		out = append(out, a)
 		if len(out) >= peerRosterMax {
 			break
 		}
 	}
 	return out
+}
+
+// askNormJob collapses whitespace and clips to the criteria trigger so a peer
+// with the same visible job as self, or as an earlier peer, is one candidate.
+func askNormJob(s string) string {
+	s = oneLine(s)
+	r := []rune(s)
+	if len(r) > askCriteriaTriggerRunes {
+		r = r[:askCriteriaTriggerRunes]
+	}
+	return string(r)
+}
+
+// askNamedPeer returns the one colleague the latest sentence assigns with
+// @Name or 点名Name / 点名 Name. A longer unique name wins. Zero or several
+// matches stay empty so the decision model still runs.
+func askNamedPeer(latest string, peers []*db.Agent) string {
+	latest = strings.ToLower(oneLine(latest))
+	if latest == "" {
+		return ""
+	}
+	bestLen := 0
+	bestID := ""
+	ambiguous := false
+	for _, peer := range peers {
+		if peer == nil {
+			continue
+		}
+		name := strings.ToLower(oneLine(peer.Name))
+		if name == "" || !askAssignsName(latest, name) {
+			continue
+		}
+		n := runeLen(name)
+		id := strings.TrimSpace(peer.ID)
+		switch {
+		case n > bestLen:
+			bestLen = n
+			bestID = id
+			ambiguous = false
+		case n == bestLen && id != bestID:
+			ambiguous = true
+		}
+	}
+	if ambiguous || bestID == "" {
+		return ""
+	}
+	return bestID
+}
+
+func askAssignsName(latestLower, nameLower string) bool {
+	if nameLower == "" {
+		return false
+	}
+	if strings.Contains(latestLower, "@"+nameLower) {
+		return true
+	}
+	return strings.Contains(latestLower, "点名"+nameLower) || strings.Contains(latestLower, "点名 "+nameLower)
+}
+
+// resolveAskRoute skips the decision model when the latest sentence names one
+// colleague. Otherwise it calls decide and maps the choice.
+func resolveAskRoute(ctx context.Context, latest string, peers []*db.Agent, pack askDecisionPack, decide func(context.Context, any, map[string]any) (map[string]any, error)) (string, error) {
+	if id := askNamedPeer(latest, peers); id != "" {
+		return id, nil
+	}
+	if decide == nil {
+		return "", nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	answers, err := decide(ctx, pack.State, pack.Questions)
+	if err != nil {
+		return "", err
+	}
+	return askTargetFromAnswers(answers, pack.KeyToID), nil
 }
 
 func askSelfJobText(agent *db.Agent) string {
@@ -480,28 +581,32 @@ func (s *Server) routeAskColleague(ctx context.Context, payload map[string]any) 
 		log.Printf("ask_route get agent: %v", err)
 		return
 	}
-	peers := askPeerCandidates(agentID, agents)
+	peers := askPeerCandidates(self, agents)
 	if !askRouteShouldCall(channelID, payloadAskDepth(payload), allow, after, provider, len(peers)) {
 		return
 	}
-	if deps == nil || deps.Decide == nil {
-		return
-	}
-	pack, ok := buildAskDecision(self, peers, payloadHistory(payload))
+	history := payloadHistory(payload)
+	pack, ok := buildAskDecision(self, peers, history)
 	if !ok {
 		return
+	}
+	_, recent := splitAskContext(history)
+	var decideFn func(context.Context, any, map[string]any) (map[string]any, error)
+	if deps != nil && deps.Decide != nil {
+		decideFn = func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+			dctx, cancel := context.WithTimeout(ctx, autoPickDecisionTimeout)
+			defer cancel()
+			return deps.Decide(dctx, state, questions)
+		}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	dctx, cancel := context.WithTimeout(ctx, autoPickDecisionTimeout)
-	answers, err := deps.Decide(dctx, pack.State, pack.Questions)
-	cancel()
+	target, err := resolveAskRoute(ctx, askLatestUser(recent), peers, pack, decideFn)
 	if err != nil {
 		log.Printf("ask_route decision err=%v", err)
 		return
 	}
-	target := askTargetFromAnswers(answers, pack.KeyToID)
 	if target == "" || target == agentID {
 		return
 	}

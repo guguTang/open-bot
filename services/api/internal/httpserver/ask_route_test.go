@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -53,11 +54,11 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state too long for Laya: %d", runeLen(pack.State))
 	}
-	if !strings.HasPrefix(criteria["c0"], "仅当最新句明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
+	if !strings.Contains(criteria["c0"], "点名/代码") || !strings.Contains(criteria["c0"], "或明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
 	}
 	if strings.HasPrefix(criteria["c0"], "代码") || strings.Contains(criteria["c0"], "代码 —") {
-		t.Fatalf("c0 should not lead with the display name: %#v", criteria["c0"])
+		t.Fatalf("c0 should bind the name as 点名/代码, got %#v", criteria["c0"])
 	}
 	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
 	for _, needle := range []string{"优先级", "不确定选 none", "不算指派", "不得因曾转某同事再选", "c0 ", "c1 ", "none。只输出选项，无解释。"} {
@@ -329,4 +330,91 @@ func TestApplyAskRouteResultDisablesRedo(t *testing.T) {
 	if !strings.Contains(system, "停下来等用户") || !strings.Contains(system, "不要立刻再问") {
 		t.Fatalf("needs_user note missing: %s", system)
 	}
+}
+
+func TestAskPeerCandidatesDropSameJob(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障：改项目、查 bug"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+		{ID: "editor", Name: "润色", Description: "负责写东西与改稿：邮件、文档、文案"},
+		{ID: "coder2", Name: "码农二号", Description: "负责写代码与排障：改项目、查 bug"},
+		{ID: "blank", Name: "空", Description: "  "},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "你好"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	got := map[string]bool{}
+	for _, id := range pack.KeyToID {
+		got[id] = true
+	}
+	if !got["coder"] || !got["design"] || got["editor"] || got["coder2"] || got["writer"] {
+		t.Fatalf("KeyToID = %#v", pack.KeyToID)
+	}
+	if len(pack.KeyToID) != 2 {
+		t.Fatalf("want coder and design only, got %#v", pack.KeyToID)
+	}
+}
+
+func TestAskPeerCriteriaName(t *testing.T) {
+	named := askPeerCriteria("画板", "负责界面设计，不改仓库")
+	if !strings.Contains(named, "点名/画板") || !strings.Contains(named, "或明确需要：负责界面设计，不改仓库") {
+		t.Fatalf("named = %s", named)
+	}
+	unnamed := askPeerCriteria("  ", "负责写代码")
+	if !strings.HasPrefix(unnamed, "仅当最新句明确需要：负责写代码") || strings.Contains(unnamed, "点名/") {
+		t.Fatalf("unnamed = %s", unnamed)
+	}
+	long := askPeerCriteria(strings.Repeat("名", 20), "写代码")
+	if !strings.Contains(long, "点名/"+strings.Repeat("名", askPeerNameRunes)+"…") {
+		t.Fatalf("clipped name = %s", long)
+	}
+}
+
+func TestAskNameShortCircuitSkipsDecide(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+		{ID: "editor", Name: "润色", Description: "负责写东西与改稿：邮件、文档、文案"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	candidates := askPeerCandidates(self, peers)
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{"choice": "none", "confidence": "0.9"}}, nil
+	}
+	check := func(latest, want string, wantCall int) {
+		t.Helper()
+		called = 0
+		got, err := resolveAskRoute(context.Background(), latest, candidates, pack, decide)
+		if err != nil {
+			t.Fatalf("%s: %v", latest, err)
+		}
+		if got != want || called != wantCall {
+			t.Fatalf("%s: target=%q calls=%d, want %q calls=%d", latest, got, called, want, wantCall)
+		}
+	}
+	check("@码农 修空指针", "coder", 0)
+	check("点名画板做登录页", "design", 0)
+	check("点名 画板做登录页", "design", 0)
+	check("@CODER 修一下", "", 1)
+	coder := candidates[0]
+	coder.Name = "Coder"
+	check("@coder 修一下", "coder", 0)
+	coder.Name = "码农"
+	check("码农上次那句先别改，你帮我把开场改顺", "", 1)
+	history := []runtimeMsg{
+		{Role: "user", Content: "@码农 帮我写个计算器"},
+		{Role: "user", Content: "【码农】计算器页面已写好。"},
+		{Role: "user", Content: "今天晚饭吃什么"},
+	}
+	_, recent := splitAskContext(history)
+	check(askLatestUser(recent), "", 1)
+	check("@码农 @画板 你们一起看", "", 1)
 }
