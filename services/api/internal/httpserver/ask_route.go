@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,11 +24,18 @@ const (
 	// Optional self-job tail after the none routing default.
 	askNoneJobRunes = 48
 	// Below this, a colleague choice stays with the current bot.
-	askHandoffConfidenceFloor = 0.5
+	askHandoffConfidenceFloor = 0.55
 	// When probabilities are present, the chosen option must also lead the
 	// next option by at least this much. A bare peak just over the floor stays.
 	askHandoffProbabilityMargin = 0.15
 )
+
+// askSpecialtyLexicon is a small set of exclusive cues. A peer scores a group
+// only when its own description already contains one cue from that group.
+var askSpecialtyLexicon = [][]string{
+	{"代码", "bug", "空指针", "排障"},
+	{"界面", "设计", "画板", "配色"},
+}
 
 const askNoneCriteriaLead = "本职可答；或与下列同事职责重叠；或闲聊/模糊/未点名。默认。"
 
@@ -317,10 +325,14 @@ func askAssignsName(latestLower, nameLower string) bool {
 	return strings.Contains(latestLower, "点名"+nameLower) || strings.Contains(latestLower, "点名 "+nameLower)
 }
 
-// resolveAskRoute skips the decision model when the latest sentence names one
-// colleague. Otherwise it calls decide and maps the choice.
-func resolveAskRoute(ctx context.Context, latest string, peers []*db.Agent, pack askDecisionPack, decide func(context.Context, any, map[string]any) (map[string]any, error)) (string, error) {
+// resolveAskRoute picks a colleague in order: explicit @/点名, one exclusive
+// specialty keyword, then the decision model. A bare name with no @/点名
+// cancels whatever the model picked.
+func resolveAskRoute(ctx context.Context, latest string, self *db.Agent, peers []*db.Agent, pack askDecisionPack, decide func(context.Context, any, map[string]any) (map[string]any, error)) (string, error) {
 	if id := askNamedPeer(latest, peers); id != "" {
+		return id, nil
+	}
+	if id := askKeywordPeer(latest, self, peers); id != "" {
 		return id, nil
 	}
 	if decide == nil {
@@ -333,7 +345,119 @@ func resolveAskRoute(ctx context.Context, latest string, peers []*db.Agent, pack
 	if err != nil {
 		return "", err
 	}
-	return askTargetFromAnswers(answers, pack.KeyToID), nil
+	target := askTargetFromAnswers(answers, pack.KeyToID)
+	if target != "" && askBareNameVeto(latest, peers) {
+		return "", nil
+	}
+	return target, nil
+}
+
+// askKeywordPeer hands off only when one peer's description activates a
+// specialty cue that shows up in the latest sentence, and the current bot
+// does not cover that same specialty.
+func askKeywordPeer(latest string, self *db.Agent, peers []*db.Agent) string {
+	latest = askKeywordUtterance(latest, peers)
+	if latest == "" {
+		return ""
+	}
+	type hit struct {
+		id     string
+		groups map[int]struct{}
+	}
+	var hits []hit
+	for _, peer := range peers {
+		groups := askUtteranceSpecialties(latest, peer)
+		if len(groups) == 0 {
+			continue
+		}
+		hits = append(hits, hit{id: strings.TrimSpace(peer.ID), groups: groups})
+	}
+	if len(hits) != 1 || hits[0].id == "" {
+		return ""
+	}
+	selfGroups := askUtteranceSpecialties(latest, self)
+	for g := range hits[0].groups {
+		if _, ok := selfGroups[g]; ok {
+			return ""
+		}
+	}
+	return hits[0].id
+}
+
+// askKeywordUtterance drops colleague display names so 「@画板」 is not also a
+// design-cue hit. Explicit @ / 点名 is handled before this step.
+func askKeywordUtterance(latest string, peers []*db.Agent) string {
+	text := strings.ToLower(oneLine(latest))
+	var names []string
+	for _, peer := range peers {
+		if peer == nil {
+			continue
+		}
+		name := strings.ToLower(oneLine(peer.Name))
+		if runeLen(name) < 2 {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool { return runeLen(names[i]) > runeLen(names[j]) })
+	for _, name := range names {
+		text = strings.ReplaceAll(text, name, " ")
+	}
+	return text
+}
+
+func askUtteranceSpecialties(latest string, agent *db.Agent) map[int]struct{} {
+	out := map[int]struct{}{}
+	if agent == nil || latest == "" {
+		return out
+	}
+	desc := strings.ToLower(oneLine(agent.Description))
+	for i, cues := range askSpecialtyLexicon {
+		if !descriptionAnchors(desc, cues) {
+			continue
+		}
+		for _, cue := range cues {
+			if strings.Contains(latest, strings.ToLower(cue)) {
+				out[i] = struct{}{}
+				break
+			}
+		}
+	}
+	return out
+}
+
+func descriptionAnchors(desc string, cues []string) bool {
+	if desc == "" {
+		return false
+	}
+	for _, cue := range cues {
+		if strings.Contains(desc, strings.ToLower(cue)) {
+			return true
+		}
+	}
+	return false
+}
+
+// askBareNameVeto is true when the latest sentence mentions a colleague by
+// display name without @ or 点名. That mention must not become a handoff.
+func askBareNameVeto(latest string, peers []*db.Agent) bool {
+	text := strings.ToLower(oneLine(latest))
+	if text == "" {
+		return false
+	}
+	for _, peer := range peers {
+		if peer == nil {
+			continue
+		}
+		name := strings.ToLower(oneLine(peer.Name))
+		if runeLen(name) < 2 || !strings.Contains(text, name) {
+			continue
+		}
+		if !askAssignsName(text, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func askSelfJobText(agent *db.Agent) string {
@@ -619,7 +743,7 @@ func (s *Server) routeAskColleague(ctx context.Context, payload map[string]any) 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	target, err := resolveAskRoute(ctx, askLatestUser(recent), peers, pack, decideFn)
+	target, err := resolveAskRoute(ctx, askLatestUser(recent), self, peers, pack, decideFn)
 	if err != nil {
 		log.Printf("ask_route decision err=%v", err)
 		return

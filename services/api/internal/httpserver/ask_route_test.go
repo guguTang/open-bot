@@ -127,8 +127,19 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	if got := askTargetFromAnswers(weak, keys); got != "" {
 		t.Fatalf("low choice probability should stay: %q", got)
 	}
-	// A peak just over 0.5 that does not lead the next option stays, even if
-	// the entropy confidence looks high.
+	// 0.504 used to clear 0.5. The floor is 0.55, so it stays even with a wide lead.
+	justOver := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.9",
+		"probabilities": map[string]any{"c0": "0.504", "none": "0.10"},
+	}}
+	if got := askTargetFromAnswers(justOver, keys); got != "" {
+		t.Fatalf("0.504 should stay: %q", got)
+	}
+	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.52}}, keys); got != "" {
+		t.Fatalf("0.52 confidence should stay: %q", got)
+	}
+	// A peak that clears 0.55 but does not lead the next option stays.
 	narrow := map[string]any{"ask": map[string]any{
 		"choice":        "c1",
 		"confidence":    0.9,
@@ -402,7 +413,7 @@ func TestAskNameShortCircuitSkipsDecide(t *testing.T) {
 	check := func(latest, want string, wantCall int) {
 		t.Helper()
 		called = 0
-		got, err := resolveAskRoute(context.Background(), latest, candidates, pack, decide)
+		got, err := resolveAskRoute(context.Background(), latest, self, candidates, pack, decide)
 		if err != nil {
 			t.Fatalf("%s: %v", latest, err)
 		}
@@ -411,6 +422,7 @@ func TestAskNameShortCircuitSkipsDecide(t *testing.T) {
 		}
 	}
 	check("@码农 修空指针", "coder", 0)
+	check("登录接口空指针，帮我改代码修掉", "coder", 0)
 	check("点名画板做登录页", "design", 0)
 	check("点名 画板做登录页", "design", 0)
 	check("@CODER 修一下", "", 1)
@@ -427,4 +439,69 @@ func TestAskNameShortCircuitSkipsDecide(t *testing.T) {
 	_, recent := splitAskContext(history)
 	check(askLatestUser(recent), "", 1)
 	check("@码农 @画板 你们一起看", "", 1)
+}
+
+func TestAskBareNameVetoStays(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":        "c0",
+			"confidence":    "0.2",
+			"probabilities": map[string]any{"c0": "0.80", "c1": "0.10", "none": "0.10"},
+		}}, nil
+	}
+	latest := "码农上次那句先别改，你帮我把开场改顺"
+	got, err := resolveAskRoute(context.Background(), latest, self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || called != 1 {
+		t.Fatalf("bare mention target=%q calls=%d", got, called)
+	}
+}
+
+func TestAskKeywordShortCircuitSkipsDecide(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{"choice": "none", "confidence": "0.9"}}, nil
+	}
+	latest := "登录接口空指针，帮我改代码修掉"
+	got, err := resolveAskRoute(context.Background(), latest, self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "coder" || called != 0 {
+		t.Fatalf("keyword target=%q calls=%d", got, called)
+	}
+	codingSelf := &db.Agent{ID: "writer", Name: "写手", Description: "负责写代码与改稿"}
+	if id := askKeywordPeer(latest, codingSelf, peers); id != "" {
+		t.Fatalf("self covering code should not short-circuit, got %s", id)
+	}
+	both := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "coder2", Name: "另一个", Description: "负责改 bug 和空指针"},
+	}
+	if id := askKeywordPeer(latest, self, both); id != "" {
+		t.Fatalf("two code peers should fall through, got %s", id)
+	}
 }
