@@ -677,9 +677,25 @@ class _PGMemoryBackend:
                     """,
                     (content, uid, tier, scope_name, tag),
                 ).fetchone()
+                if row is not None:
+                    if self._vector_enabled:
+                        emb = embed_one(content)
+                        if emb is not None and len(emb) == self._embedding_dim:
+                            conn.execute(
+                                "UPDATE memories SET embedding = %s::vector WHERE id = %s",
+                                (vector_literal(emb), row[0]),
+                            )
+                            row = conn.execute(
+                                """
+                                SELECT id, tier, content, tags, created_at, updated_at, user_id, TRUE,
+                                       scope, agent_id, channel_id, peer_agent_id
+                                FROM memories WHERE id = %s
+                                """,
+                                (row[0],),
+                            ).fetchone()
+                    conn.commit()
+                    return self._row_to_item(row)
                 conn.commit()
-        if row is not None:
-            return self._row_to_item(row)
         return self.write(content, tier=tier, tags=[tag], user_id=user_id, scope=scope_name, agent_id=agent, channel_id=channel, peer_agent_id=peer)
 
     def list_items(

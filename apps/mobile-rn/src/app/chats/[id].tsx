@@ -795,6 +795,7 @@ export default function ChatScreen(): JSX.Element {
               onSandboxLink={openSandboxLink}
               // 只有群聊需要逐条标注发言者；单聊里每条都是同一个助手，标了是噪音
               showAgentName={Boolean(memberIds?.length)}
+              {...(primaryAgent?.id ? { ownerAgentId: primaryAgent.id } : {})}
               {...(m.reply_to_id && messageById.get(m.reply_to_id)
                 ? { quoted: messageById.get(m.reply_to_id) as UiMessage }
                 : {})}

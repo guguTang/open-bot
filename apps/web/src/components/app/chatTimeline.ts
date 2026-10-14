@@ -58,7 +58,7 @@ export function speakerNameForMessage(
   if (channelId) return name;
   const speakerId = (message.agent_id || "").trim();
   const ownerId = (conversationAgentId || "").trim();
-  if (speakerId && ownerId && speakerId !== ownerId) return `来自 ${name}`;
+  if (speakerId && ownerId && speakerId !== ownerId) return `来自于 ${name} 的消息`;
   return undefined;
 }
 

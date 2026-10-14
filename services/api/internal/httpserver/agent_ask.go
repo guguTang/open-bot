@@ -86,6 +86,11 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
+	toName := strings.TrimSpace(to.Name)
+	if toName == "" {
+		toName = toID
+	}
+	s.ensureAskNoticeOnParent(userID, body.ParentConversationID, toID, toName, key)
 	if reply, convID, ok := s.cachedAskReply(userID, targetConv.ID, toID, key); ok {
 		visible, needsUser := splitAskNeedUser(reply)
 		s.ensureAskReplyOnParent(userID, body.ParentConversationID, toID, visible, key)
@@ -122,10 +127,6 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 	msgs, err := s.db.ListMessages(userID, targetConv.ID)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
-	}
-	toName := strings.TrimSpace(to.Name)
-	if toName == "" {
-		toName = toID
 	}
 	history := historyForRuntime(msgs, toID, speakerNamesForHistory(s.db, msgs, toID, toName))
 	content := question
@@ -317,6 +318,29 @@ func (s *Server) ensureAskReplyOnParent(userID, parentConvID, toAgentID, reply, 
 	msg, err := s.db.AddMessageWithOpts(parent.ID, "assistant", reply, db.AddMessageOpts{
 		AgentID:   toAgentID,
 		RequestID: key,
+	})
+	if err != nil {
+		return
+	}
+	s.publishConversationMessage(userID, msg)
+}
+
+func (s *Server) ensureAskNoticeOnParent(userID, parentConvID, toAgentID, toName, key string) {
+	parentConvID = strings.TrimSpace(parentConvID)
+	if parentConvID == "" || strings.TrimSpace(key) == "" {
+		return
+	}
+	noticeID := key + ":notice"
+	if _, err := s.db.FindMessageByRequestID(parentConvID, noticeID); err == nil {
+		return
+	}
+	name := strings.TrimSpace(toName)
+	if name == "" {
+		name = "同事"
+	}
+	msg, err := s.db.AddMessageWithOpts(parentConvID, "ask_notice", "消息通知了 "+name, db.AddMessageOpts{
+		AgentID:   toAgentID,
+		RequestID: noticeID,
 	})
 	if err != nil {
 		return

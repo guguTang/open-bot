@@ -13,6 +13,13 @@ export function stickFromScrollMetrics(scrollHeight: number, scrollTop: number, 
   return { stickToBottom: near, showScrollBottom: !near };
 }
 
+/** 反向列滚动容器：0 是底部，往上翻 scrollTop 变成负数。 */
+export function stickFromReverseScroll(scrollTop: number): ScrollStick {
+  const distanceFromBottom = scrollTop < 0 ? -scrollTop : 0;
+  const near = distanceFromBottom < NEAR_BOTTOM_PX;
+  return { stickToBottom: near, showScrollBottom: !near };
+}
+
 export function pinStick(): ScrollStick {
   return { stickToBottom: true, showScrollBottom: false };
 }

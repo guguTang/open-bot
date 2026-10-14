@@ -41,8 +41,8 @@ export function ChatComposerDock({ messagesRef }: { messagesRef: RefObject<HTMLD
   const scrollToBottom = (smooth = false) => {
     const el = messagesRef.current;
     if (!el) return;
-    if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    else el.scrollTop = el.scrollHeight;
+    if (smooth) el.scrollTo({ top: 0, behavior: "smooth" });
+    else el.scrollTop = 0;
     applyScrollStick(pinStick());
   };
 

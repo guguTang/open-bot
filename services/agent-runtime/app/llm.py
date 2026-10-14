@@ -629,6 +629,24 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "read_upload",
+            "description": (
+                "Read the parsed text of a file this user uploaded, including files from other conversations. "
+                "Use when the user follows up on a document, spreadsheet, or PDF they sent earlier. "
+                "query is a filename or a short phrase from the file; attachment_id is the id from memory when known."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "attachment_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "memory_recall",
             "description": (
                 "Recall memories for this conversation. More specific scopes "

@@ -299,6 +299,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/gmail/send", s.requireInternal(s.handleInternalGmailSend))
 	mux.HandleFunc("POST /internal/routines/run", s.requireInternal(s.handleInternalRunRoutine))
 	mux.HandleFunc("POST /internal/conversation-tasks/enqueue", s.requireInternal(s.handleInternalEnqueueTask))
+	mux.HandleFunc("POST /internal/uploads/read", s.requireInternal(s.handleInternalReadUploads))
 	mux.HandleFunc("POST /internal/memory-recalls", s.requireInternal(s.handleInternalRecordMemoryRecall))
 	mux.HandleFunc("POST /internal/harness/entries", s.requireInternal(s.handleInternalHarnessEntry))
 	mux.HandleFunc("POST /internal/harness/threads", s.requireInternal(s.handleInternalHarnessThread))
@@ -1375,12 +1376,13 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		parseTimeout := resolveDocParseTimeout(parseTimeoutOverride)
-		built, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments, parseTimeout)
+		built, extracts, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments, parseTimeout)
 		if berr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": berr.Error()})
 			return
 		}
 		runtimeContent = built
+		s.persistAttachmentExtracts(r.Context(), uid, conv.ID, extracts)
 	}
 
 	var replyParent *db.Message

@@ -1,7 +1,7 @@
 import { type RefObject, useMemo } from "react";
 import { agentNameMap } from "../../../lib/app/workspaceDerived";
-import { stickFromScrollMetrics } from "../../../lib/scrollStick";
-import { applyScrollStick, useChatStore } from "../../../stores/chat";
+import { stickFromReverseScroll } from "../../../lib/scrollStick";
+import { applyScrollStick, chatScrollRef, useChatStore } from "../../../stores/chat";
 import { chatSessionActions } from "../../../stores/sessionActions";
 import { useShellStore } from "../../../stores/shell";
 import { useWorkspaceStore } from "../../../stores/workspace";
@@ -54,8 +54,8 @@ export function ChatTranscript({ messagesRef }: { messagesRef: RefObject<HTMLDiv
 
   const onMessagesScroll = () => {
     const el = messagesRef.current;
-    if (!el) return;
-    applyScrollStick(stickFromScrollMetrics(el.scrollHeight, el.scrollTop, el.clientHeight));
+    if (!el || chatScrollRef.suppressStick) return;
+    applyScrollStick(stickFromReverseScroll(el.scrollTop));
   };
 
   const jumpFromTimeline = (parentId: string) => {
@@ -76,18 +76,20 @@ export function ChatTranscript({ messagesRef }: { messagesRef: RefObject<HTMLDiv
         ref={messagesRef}
         onScroll={onMessagesScroll}
       >
-        {view.banner ? <ChatTranscriptBanner banner={view.banner} chatProcessing={chatProcessing} /> : null}
-        {view.indexed.mainTimeline.map((message) => (
-          <TranscriptMessage
-            key={message.id}
-            message={message}
-            wire={wire}
-            replyCount={view.indexed.replyCountByRoot.get(message.id) || 0}
-            onOpenThread={(rootId) => chatSessionActions().setOpenThreadRootId(rootId)}
-            onJumpToParent={jumpFromTimeline}
-          />
-        ))}
-        {view.showLiveRun ? <LiveRunStatus /> : null}
+        <div className="messages-column">
+          {view.banner ? <ChatTranscriptBanner banner={view.banner} chatProcessing={chatProcessing} /> : null}
+          {view.indexed.mainTimeline.map((message) => (
+            <TranscriptMessage
+              key={message.id}
+              message={message}
+              wire={wire}
+              replyCount={view.indexed.replyCountByRoot.get(message.id) || 0}
+              onOpenThread={(rootId) => chatSessionActions().setOpenThreadRootId(rootId)}
+              onJumpToParent={jumpFromTimeline}
+            />
+          ))}
+          {view.showLiveRun ? <LiveRunStatus /> : null}
+        </div>
       </div>
       <ChatThreadPanel wire={wire} />
     </>

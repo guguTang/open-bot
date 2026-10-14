@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ const (
 	askRouteContextRunes = 2400
 	askRouteJobRunes     = 200
 	askRouteQuestionMax  = 4000
+	// Below this, a colleague choice stays with the current bot.
+	askHandoffConfidenceFloor = 0.5
 )
 
 const askRoutedNote = "本回合已请同事完成这件事，回复已经出现在当前会话里。不要再用自己的工具把同一件事做一遍，也不要复述同事的话。若没有新的信息，用不超过十五个字收尾。"
@@ -76,8 +79,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	b.WriteString("\n\n同事：\n")
 	b.WriteString(strings.Join(roster, "\n"))
 	b.WriteString("\n\n会话：\n")
-	b.WriteString(askContextBlock(summary, recent))
-	state := clipRunes(b.String(), askRouteContextRunes+askRouteJobRunes*2)
+	state := fitAskState(b.String(), askConversationBlock(summary, recent), askRouteContextRunes+askRouteJobRunes*2)
 	question := askColleagueQuestion(summary, recent)
 	if strings.TrimSpace(question) == "" {
 		return askDecisionPack{}, false
@@ -89,7 +91,8 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 		Questions: map[string]any{
 			"ask": map[string]any{
 				"type": "choice",
-				"instructions": "选择这一回合是否要请一位同事来做。用户点名某位就选那位。" +
+				"instructions": "选择这一回合是否要请一位同事来做。用户自己的话点名某位就选那位。" +
+					"标成同事的旧回复不是点名，也不表示这一回合还要找他。" +
 					"只有这件事落在对方岗位描述里、而你的岗位盖不住时，才选对应的一位。" +
 					"你能做、两边都能做、闲聊、没有对口的人，选 none。只选一个。",
 				"criteria": criteria,
@@ -99,7 +102,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 }
 
 // askTargetFromAnswers maps a decision choice onto one colleague id.
-// none and unknown keys ask nobody.
+// none, unknown keys, and a weak confidence stay with the current bot.
 func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) string {
 	raw, _ := answers["ask"].(map[string]any)
 	if raw == nil {
@@ -109,7 +112,22 @@ func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) str
 	if choice == "" || choice == "<nil>" || strings.EqualFold(choice, "none") {
 		return ""
 	}
+	if conf, ok := answerConfidence(raw["confidence"]); ok && conf < askHandoffConfidenceFloor {
+		return ""
+	}
 	return strings.TrimSpace(keyToID[choice])
+}
+
+func answerConfidence(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func askPeerCandidates(selfID string, agents []*db.Agent) []*db.Agent {
@@ -166,17 +184,20 @@ func splitAskContext(history []runtimeMsg) (summary string, recent []runtimeMsg)
 	return summary, recent
 }
 
-func askContextBlock(summary string, recent []runtimeMsg) string {
+// askConversationBlock is the conversation the choice model sees, and the brief
+// a chosen colleague receives. Replies and the rolling summary stay in. Inlined
+// file bodies stay out. Colleague notes are labeled as that colleague.
+func askConversationBlock(summary string, recent []runtimeMsg) string {
 	var lines []string
 	if strings.TrimSpace(summary) != "" {
 		lines = append(lines, "[摘要] "+clipRunes(oneLine(summary), askRouteMsgRunes))
 	}
 	for _, m := range recent {
-		text := strings.TrimSpace(m.Content)
-		if text == "" {
+		label, text, ok := handoffLine(m)
+		if !ok {
 			continue
 		}
-		lines = append(lines, askRoleLabel(m.Role)+"："+clipRunes(oneLine(askRouteUtterance(text)), askRouteMsgRunes))
+		lines = append(lines, label+"："+clipRunes(oneLine(text), askRouteMsgRunes))
 	}
 	if len(lines) == 0 {
 		return "（没有更早的对话）"
@@ -184,14 +205,69 @@ func askContextBlock(summary string, recent []runtimeMsg) string {
 	return strings.Join(lines, "\n")
 }
 
+// fitAskState keeps the job header and the newest conversation lines when the
+// choice text is over the cap. Clipping the tail would drop the user's latest ask.
+func fitAskState(header, convo string, limit int) string {
+	header = strings.TrimRight(header, "\n") + "\n"
+	lines := strings.Split(convo, "\n")
+	for len(lines) > 1 && runeLen(header+strings.Join(lines, "\n")) > limit {
+		lines = lines[1:]
+	}
+	body := strings.Join(lines, "\n")
+	state := header + body
+	if runeLen(state) <= limit {
+		return state
+	}
+	room := limit - runeLen(header)
+	if room < 1 {
+		return clipRunes(header, limit)
+	}
+	tail := []rune(body)
+	if len(tail) > room {
+		tail = tail[len(tail)-room:]
+	}
+	return header + string(tail)
+}
+
+func runeLen(s string) int {
+	return len([]rune(s))
+}
+
+func handoffLine(m runtimeMsg) (label, text string, ok bool) {
+	text = strings.TrimSpace(m.Content)
+	if text == "" {
+		return "", "", false
+	}
+	switch m.Role {
+	case "assistant":
+		return "助手", text, true
+	case "user":
+		if name := colleagueNoteName(text); name != "" {
+			body := text
+			if i := strings.Index(text, "】"); i >= 0 {
+				body = strings.TrimSpace(text[i+len("】"):])
+			}
+			if body == "" {
+				return "", "", false
+			}
+			return "同事" + name, body, true
+		}
+		return "用户", askRouteUtterance(text), true
+	default:
+		return "", "", false
+	}
+}
+
 func askColleagueQuestion(summary string, recent []runtimeMsg) string {
 	lastUser := ""
 	for _, m := range recent {
-		if m.Role == "user" {
-			lastUser = askRouteUtterance(strings.TrimSpace(m.Content))
+		text := strings.TrimSpace(m.Content)
+		if m.Role != "user" || colleagueNoteName(text) != "" {
+			continue
 		}
+		lastUser = askRouteUtterance(text)
 	}
-	block := askContextBlock(summary, recent)
+	block := askConversationBlock(summary, recent)
 	if lastUser == "" {
 		return clipRunes(block, askRouteQuestionMax)
 	}
@@ -208,17 +284,23 @@ func askRouteUtterance(text string) string {
 	return text
 }
 
-func askRoleLabel(role string) string {
-	switch role {
-	case "user":
-		return "用户"
-	case "assistant":
-		return "助手"
-	case "summary":
-		return "摘要"
-	default:
-		return "系统"
+// colleagueNoteName reads the label written by formatOtherAgentHistoryNote.
+// Those rows stay role=user for the chat model, so the decision view must not
+// present them as the user naming that colleague.
+func colleagueNoteName(content string) string {
+	text := strings.TrimSpace(content)
+	if !strings.HasPrefix(text, "【") {
+		return ""
 	}
+	end := strings.Index(text, "】")
+	if end <= len("【") || end > 40 {
+		return ""
+	}
+	name := strings.TrimSpace(text[len("【"):end])
+	if name == "" || strings.HasPrefix(name, "回复") {
+		return ""
+	}
+	return name
 }
 
 func oneLine(s string) string {

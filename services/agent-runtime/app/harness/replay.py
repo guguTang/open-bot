@@ -11,6 +11,7 @@ _SAFE_DEFAULT = frozenset(
     {
         "load_skill",
         "memory_recall",
+        "read_upload",
         "list_machines",
         "list_routines",
         "sandbox_ls",

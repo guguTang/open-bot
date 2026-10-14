@@ -70,7 +70,7 @@ export const useChatStore = create<ChatStore>()((set) => ({
 export const replyTargetRef: { current: ComposerReplyTarget | null } = { current: null };
 
 /** 用户是否贴在底部。滚动位置是瞬态的，不进 React state。初值与 pinStick 一致。 */
-export const chatScrollRef = { stickToBottom: pinStick().stickToBottom };
+export const chatScrollRef = { stickToBottom: pinStick().stickToBottom, suppressStick: false };
 
 type Updater<T> = T | ((prev: T) => T);
 

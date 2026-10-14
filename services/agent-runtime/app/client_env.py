@@ -286,6 +286,7 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "load_skill": "正在准备…",
     "memory_write": "写入记忆",
     "memory_recall": "回忆",
+    "read_upload": "查阅上传的文件",
     "send_to_agent": "发送给助手",
     "ask_agent": "正在询问同事",
     "request_secret": "请求密钥",

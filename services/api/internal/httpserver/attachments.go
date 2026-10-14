@@ -383,15 +383,16 @@ func resolveAttachmentPath(uid, convID string, ref AttachmentRef) (string, error
 	return abs, nil
 }
 
-func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef, parseTimeout time.Duration) (string, error) {
+func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef, parseTimeout time.Duration) (string, []attachmentExtract, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	text = strings.TrimSpace(text)
 	if len(refs) == 0 {
-		return text, nil
+		return text, nil, nil
 	}
 	var b strings.Builder
+	var extracts []attachmentExtract
 	if text != "" {
 		b.WriteString(text)
 		b.WriteString("\n\n")
@@ -400,7 +401,7 @@ func buildUserContentWithAttachments(ctx context.Context, text string, uid, conv
 	for _, ref := range refs {
 		abs, err := resolveAttachmentPath(uid, convID, ref)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		name := ref.Name
 		if name == "" {
@@ -415,45 +416,53 @@ func buildUserContentWithAttachments(ctx context.Context, text string, uid, conv
 		}
 		b.WriteString(fmt.Sprintf("- %s (%s, %s)\n", name, mimeType, formatSize(size)))
 
+		var markdown string
 		if isOfficeAttachment(mimeType, name) {
-			appendOfficeDocument(ctx, &b, abs, name, mimeType, parseTimeout)
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(mimeType), "image/") {
+			markdown = appendOfficeDocument(ctx, &b, abs, name, mimeType, parseTimeout)
+		} else if strings.HasPrefix(strings.ToLower(mimeType), "image/") {
 			b.WriteString("  （图片已存储；一期未传视觉多模态，仅文本提及）\n")
-			continue
+		} else if !isTextLikeAttachment(mimeType, name) {
+			// binary without a text extract
+		} else {
+			raw, err := os.ReadFile(abs)
+			if err != nil {
+				b.WriteString("  （无法读取文件内容）\n")
+			} else {
+				truncated := false
+				if len(raw) > maxInlineTextBytes {
+					raw = raw[:maxInlineTextBytes]
+					truncated = true
+				}
+				body := string(raw)
+				if !utf8.ValidString(body) {
+					body = strings.ToValidUTF8(body, "�")
+				}
+				markdown = body
+				lang := fenceLangFor(name, mimeType)
+				b.WriteString("```")
+				b.WriteString(lang)
+				b.WriteByte('\n')
+				b.WriteString(body)
+				if !strings.HasSuffix(body, "\n") {
+					b.WriteByte('\n')
+				}
+				b.WriteString("```\n")
+				if truncated {
+					b.WriteString("  （内容已截断）\n")
+				}
+			}
 		}
-		if !isTextLikeAttachment(mimeType, name) {
-			continue
-		}
-		raw, err := os.ReadFile(abs)
-		if err != nil {
-			b.WriteString("  （无法读取文件内容）\n")
-			continue
-		}
-		truncated := false
-		if len(raw) > maxInlineTextBytes {
-			raw = raw[:maxInlineTextBytes]
-			truncated = true
-		}
-		body := string(raw)
-		if !utf8.ValidString(body) {
-			body = strings.ToValidUTF8(body, "�")
-		}
-		lang := fenceLangFor(name, mimeType)
-		b.WriteString("```")
-		b.WriteString(lang)
-		b.WriteByte('\n')
-		b.WriteString(body)
-		if !strings.HasSuffix(body, "\n") {
-			b.WriteByte('\n')
-		}
-		b.WriteString("```\n")
-		if truncated {
-			b.WriteString("  （内容已截断）\n")
+		if strings.TrimSpace(markdown) != "" && strings.TrimSpace(ref.ID) != "" {
+			extracts = append(extracts, attachmentExtract{ID: ref.ID, Name: name, Markdown: markdown})
 		}
 	}
-	return strings.TrimRight(b.String(), "\n"), nil
+	return strings.TrimRight(b.String(), "\n"), extracts, nil
+}
+
+type attachmentExtract struct {
+	ID       string
+	Name     string
+	Markdown string
 }
 
 // ensureAttachmentRows upserts DB rows for refs that exist on disk but were uploaded

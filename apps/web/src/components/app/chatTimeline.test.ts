@@ -20,7 +20,7 @@ function msg(partial: Partial<UiMessage>): UiMessage {
 describe("speakerNameForMessage", () => {
   it("labels another bot in a DM", () => {
     expect(speakerNameForMessage(msg({ agent_id: "bot2" }), undefined, names, "bot1")).toBe(
-      "来自 码农助手",
+      "来自于 码农助手 的消息",
     );
   });
 

@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestLikeContainsEscapesWildcards(t *testing.T) {
+	t.Parallel()
+	if got := likeContains(` 100%_done `); got != `%100\%\_done%` {
+		t.Fatalf("got %q", got)
+	}
+	if likeContains("  ") != "" {
+		t.Fatal("blank query should list recent extracts")
+	}
+}
+
 func TestAttachmentURL(t *testing.T) {
 	t.Parallel()
 	got := AttachmentURL("conv-1", "att-2")
@@ -26,6 +36,7 @@ func TestMigrateMessageAttachmentsSQLShape(t *testing.T) {
 		"REFERENCES messages(id) ON DELETE SET NULL",
 		"idx_message_attachments_conv",
 		"idx_message_attachments_msg",
+		"extract_md",
 	} {
 		if !strings.Contains(src, needle) {
 			t.Fatalf("migrate SQL missing %q", needle)
@@ -51,4 +62,5 @@ CREATE INDEX IF NOT EXISTS idx_message_attachments_conv
   ON message_attachments(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_message_attachments_msg
   ON message_attachments(message_id) WHERE message_id IS NOT NULL;
+ALTER TABLE message_attachments ADD COLUMN IF NOT EXISTS extract_md TEXT NOT NULL DEFAULT '';
 `

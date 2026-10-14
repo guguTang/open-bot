@@ -372,6 +372,24 @@ AGENT_TOOL_NAMES = frozenset(
 )
 
 
+def read_uploads(
+    user_id: str,
+    *,
+    query: str = "",
+    attachment_id: str = "",
+    timeout: float = 20.0,
+) -> dict[str, Any]:
+    return _post(
+        "/internal/uploads/read",
+        {
+            "user_id": user_id,
+            "query": query,
+            "attachment_id": attachment_id,
+        },
+        timeout=timeout,
+    )
+
+
 def record_memory_recall(payload: dict[str, Any], timeout: float = 10.0) -> dict[str, Any]:
     """Persist one run's recall payload via Go internal API (optional / fallback)."""
     return _post("/internal/memory-recalls", payload, timeout=timeout)

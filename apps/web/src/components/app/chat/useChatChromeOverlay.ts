@@ -17,7 +17,11 @@ export function useChatChromeOverlay(
       main.style.setProperty("--chat-top-overlay", `${topbar.offsetHeight}px`);
       main.style.setProperty("--chat-composer-overlay", `${composer.offsetHeight}px`);
       const el = messagesRef.current;
-      if (el && chatScrollRef.stickToBottom) el.scrollTop = el.scrollHeight;
+      if (el && chatScrollRef.stickToBottom) {
+        chatScrollRef.suppressStick = true;
+        el.scrollTop = 0;
+        chatScrollRef.suppressStick = false;
+      }
     };
 
     apply();

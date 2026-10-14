@@ -32,7 +32,7 @@ type Props = {
   /** Fallback selected bot when message.agent_id is missing. */
   agentId?: string;
   /**
-   * Group: member name. DM: 「来自 {名字}」 when the bubble is another bot.
+   * Group: member name. DM: 「来自于 {名字} 的消息」 when the bubble is another bot.
    * Omit when this conversation's own bot is speaking.
    */
   speakerName?: string;
@@ -146,6 +146,15 @@ function ChatMessageInner({
           alwaysAllowEnabled={alwaysAllowEnabled}
         />
         {timeEl}
+      </div>
+    );
+  }
+
+  if (message.role === "ask_notice") {
+    const label = (message.content || "").trim() || "消息通知了同事";
+    return (
+      <div className="chat-ask-notice" data-msg-id={message.id}>
+        {label}
       </div>
     );
   }

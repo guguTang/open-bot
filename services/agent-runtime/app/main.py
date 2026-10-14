@@ -497,6 +497,31 @@ async def create_memory(body: MemoryCreate) -> dict:
 
 
 
+class MemoryUpsert(BaseModel):
+    user_id: str | None = None
+    content: str = Field(..., min_length=1)
+    tag: str = Field(..., min_length=1)
+    tier: str = Field(default="note")
+    scope: str = Field(default="user")
+
+
+@app.post("/v1/memories/upsert")
+async def upsert_memory(body: MemoryUpsert) -> dict:
+    store = get_store(body.user_id)
+    try:
+        item = store.upsert_tagged(
+            body.content,
+            body.tag,
+            tier=body.tier,
+            scope=body.scope,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    out = store.to_public(item)
+    out["backend"] = store.backend_kind
+    return out
+
+
 class MemoryPurge(BaseModel):
     user_id: str
 
@@ -1042,6 +1067,20 @@ async def openai_path(
                 return json.dumps(mem.to_public(item), ensure_ascii=False)
             except ValueError as e:
                 return json.dumps({"error": str(e)})
+        if name == "read_upload":
+            from .openbot_api import read_uploads
+
+            if not user_id:
+                return json.dumps({"error": "no user"}, ensure_ascii=False)
+            try:
+                found = read_uploads(
+                    str(user_id).strip(),
+                    query=str(args.get("query") or ""),
+                    attachment_id=str(args.get("attachment_id") or ""),
+                )
+            except Exception as e:
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+            return json.dumps(found, ensure_ascii=False)
         if name == "memory_recall":
             query = str(args.get("query") or "")
             buckets = mem.recall_buckets(

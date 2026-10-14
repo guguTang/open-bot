@@ -321,7 +321,7 @@ func writeInlinedDocument(b *strings.Builder, markdown string, charCount int, si
 	}
 }
 
-func appendOfficeDocument(ctx context.Context, b *strings.Builder, abs, name, mimeType string, timeout time.Duration) {
+func appendOfficeDocument(ctx context.Context, b *strings.Builder, abs, name, mimeType string, timeout time.Duration) string {
 	label := officeKindLabel(mimeType, name)
 	filename := officeUploadName(name, mimeType)
 	markdown, charCount, truncated, kind := fetchDocumentMarkdown(ctx, abs, filename, mimeType, timeout)
@@ -330,7 +330,12 @@ func appendOfficeDocument(ctx context.Context, b *strings.Builder, abs, name, mi
 			log.Printf("doc parse %s file=%s: %s", label, name, kind)
 		}
 		b.WriteString(officeParseNote(label, kind))
-		return
+		return ""
 	}
 	writeInlinedDocument(b, markdown, charCount, truncated)
+	body, _ := truncateUTF8Bytes(markdown, maxInlineDocBytes)
+	if !utf8.ValidString(body) {
+		body = strings.ToValidUTF8(body, "�")
+	}
+	return body
 }

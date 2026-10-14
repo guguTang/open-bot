@@ -58,6 +58,8 @@ export type MessageBubbleProps = {
   avatarColor?: string | null;
   /** 群聊才需要逐条标注发言者；单聊里助手名每条都一样，是纯噪音 */
   showAgentName?: boolean;
+  /** 单聊所属助手。别的助手插进来的气泡标成「来自于」 */
+  ownerAgentId?: string;
   /** `sandbox:` 链接点击回调；不传则用系统浏览器打开 */
   onSandboxLink?: (path: string) => void;
   /** 被这条消息引用的原消息，用于渲染引用块 */
@@ -129,6 +131,7 @@ export function MessageBubble({
   avatarShape,
   avatarColor,
   showAgentName,
+  ownerAgentId,
   onSandboxLink,
   quoted,
   threadCount = 0,
@@ -163,6 +166,17 @@ export function MessageBubble({
   );
   const canInteract = !readonly && !message.streaming && !message.id.startsWith("local-");
 
+  if (message.role === "ask_notice") {
+    const label = (message.content || "").trim() || "消息通知了同事";
+    return (
+      <View className="items-center">
+        <Typography.Paragraph className="rounded-full border border-border bg-surface px-3 py-1 text-[12px] text-muted">
+          {label}
+        </Typography.Paragraph>
+      </View>
+    );
+  }
+
   if (isUser) {
     return (
       <View className="flex-row justify-end">
@@ -195,9 +209,19 @@ export function MessageBubble({
   }
 
   const agentId = message.agent_id || fallbackAgentId;
-  const agentName = showAgentName
-    ? message.agent_name || fallbackAgentName
-    : message.agent_name || undefined;
+  const fromOtherBot =
+    !showAgentName &&
+    Boolean(ownerAgentId) &&
+    Boolean(message.agent_id) &&
+    message.agent_id !== ownerAgentId;
+  const otherName = (message.agent_name || fallbackAgentName || "").trim();
+  const agentName = fromOtherBot
+    ? otherName
+      ? `来自于 ${otherName} 的消息`
+      : "来自于同事的消息"
+    : showAgentName
+      ? message.agent_name || fallbackAgentName
+      : message.agent_name || undefined;
 
   return (
     <View className="flex-row items-start gap-2.5">

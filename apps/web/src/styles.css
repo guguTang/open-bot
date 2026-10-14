@@ -333,6 +333,8 @@ body,
   height: 100%;
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
+  scroll-behavior: auto;
   overscroll-behavior: contain; /* wheel does not chain to page/sidebar */
   box-sizing: border-box;
   background: transparent;
@@ -342,8 +344,18 @@ body,
   padding-bottom: calc(var(--chat-composer-overlay, 96px) + 16px);
   padding-left: 24px;
   display: flex;
+  /* 0 就是底部。新会话一挂上就停在最后一条，不用再滚过去。 */
+  flex-direction: column-reverse;
+  gap: 0;
+}
+
+.messages-column {
+  display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1 0 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .empty {
@@ -490,7 +502,7 @@ body,
 }
 
 
-/* Group: member name. DM: 「来自」 when another bot spoke in this thread. */
+/* Group: member name. DM: 「来自于」 when another bot spoke in this thread. */
 .msg-speaker-name {
   display: flex;
   align-items: center;
@@ -508,6 +520,19 @@ body,
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.chat-ask-notice {
+  align-self: center;
+  max-width: 100%;
+  margin: 2px auto;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .mention-kind-badge {

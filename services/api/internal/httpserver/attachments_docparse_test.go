@@ -100,7 +100,7 @@ func TestBuildUserContentDocxConverted(t *testing.T) {
 	timeout := useDocParseClient(t, 2*time.Second)
 
 	uid, conv, ref := putUpload(t, "notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", payload)
-	out, err := buildUserContentWithAttachments(context.Background(), "请总结", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "请总结", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestBuildUserContentDocxConverted(t *testing.T) {
 func TestBuildUserContentPDFUnconfigured(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", "")
 	uid, conv, ref := putUpload(t, "scan.pdf", "application/octet-stream", []byte("%PDF-1.4"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, 0)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestBuildUserContentConvertFailureDoesNotInvent(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", srv.URL)
 	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "notes.docx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestBuildUserContentConvertUnavailable(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", srv.URL)
 	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "sheet.xlsx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestBuildUserContentConvertTimeout(t *testing.T) {
 	timeout := useDocParseClient(t, 200*time.Millisecond)
 	uid, conv, ref := putUpload(t, "deck.pptx", "application/octet-stream", []byte("PK"))
 	start := time.Now()
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestBuildUserContentEmptyPDF(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", srv.URL)
 	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "scan.pdf", "application/pdf", []byte("%PDF"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestBuildUserContentTruncatesMarkdown(t *testing.T) {
 	t.Setenv("DOC_PARSE_URL", srv.URL)
 	timeout := useDocParseClient(t, 2*time.Second)
 	uid, conv, ref := putUpload(t, "a.docx", "application/octet-stream", []byte("PK"))
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,9 +277,12 @@ func TestBuildUserContentTextAndImageSkipParser(t *testing.T) {
 		write("11111111-1111-1111-1111-111111111111", "a.txt", "text/plain", []byte("hello text")),
 		write("22222222-2222-2222-2222-222222222222", "a.png", "image/png", []byte("png")),
 	}
-	out, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, refs, timeout)
+	out, extracts, err := buildUserContentWithAttachments(context.Background(), "", uid, conv, refs, timeout)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(extracts) != 1 || extracts[0].ID != refs[0].ID || !strings.Contains(extracts[0].Markdown, "hello text") {
+		t.Fatalf("extracts %+v", extracts)
 	}
 	if !strings.Contains(out, "hello text") {
 		t.Fatalf("text not inlined: %s", out)
@@ -336,7 +339,7 @@ func TestBuildUserContentXlsConverted(t *testing.T) {
 	timeout := useDocParseClient(t, 2*time.Second)
 
 	uid, conv, ref := putUpload(t, "legacy.xls", "application/vnd.ms-excel", []byte("fake-xls"))
-	out, err := buildUserContentWithAttachments(context.Background(), "总结表格", uid, conv, []AttachmentRef{ref}, timeout)
+	out, _, err := buildUserContentWithAttachments(context.Background(), "总结表格", uid, conv, []AttachmentRef{ref}, timeout)
 	if err != nil {
 		t.Fatal(err)
 	}

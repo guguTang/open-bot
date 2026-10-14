@@ -848,6 +848,39 @@ func (d *DB) FindAssistantByRequestID(conversationID, requestID string) (*Messag
 	return &m, nil
 }
 
+// FindMessageByRequestID returns the newest message with this request id in one conversation.
+func (d *DB) FindMessageByRequestID(conversationID, requestID string) (*Message, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	requestID = strings.TrimSpace(requestID)
+	if conversationID == "" || requestID == "" {
+		return nil, ErrNotFound
+	}
+	row := d.SQL.QueryRow(
+		`SELECT id, conversation_id, role, content, COALESCE(agent_id,''),
+		        COALESCE(reply_to_id,''), COALESCE(thread_root_id,''), created_at,
+		        COALESCE(agent_message_id, ''), COALESCE(request_id, ''),
+		        COALESCE(sources_json, '[]')
+		 FROM messages
+		 WHERE conversation_id = $1 AND request_id = $2
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		conversationID, requestID,
+	)
+	var m Message
+	var sourcesRaw string
+	if err := row.Scan(
+		&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.AgentID, &m.ReplyToID, &m.ThreadRootID,
+		&m.CreatedAt, &m.AgentMessageID, &m.RequestID, &sourcesRaw,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	m.Sources = DecodeMessageSources(sourcesRaw)
+	return &m, nil
+}
+
 // FindUserMessageByRequestID returns the newest message with this request_id
 // in any conversation owned by the user. Used to make ask_agent idempotent.
 func (d *DB) FindUserMessageByRequestID(userID, requestID string) (*Message, error) {
