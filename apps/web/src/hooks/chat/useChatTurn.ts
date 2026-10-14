@@ -16,7 +16,11 @@ import type { SendMessageDeps } from "./sendMessageDeps";
 import { sendUserTextImpl } from "./sendUserTextImpl";
 import { useConversationRuns } from "./useConversationRuns";
 
-export type SendUserTextFn = (rawContent: string, filesToSend?: PendingFile[]) => Promise<void>;
+export type SendUserTextFn = (
+  rawContent: string,
+  filesToSend?: PendingFile[],
+  opts?: { onboarding?: boolean },
+) => Promise<void>;
 
 export type ChatTurnRunsParams = {
   conversationRef: RefObject<Conversation | null>;
@@ -144,7 +148,7 @@ export function useChatTurnSend(p: ChatTurnSendParams): SendUserTextFn {
     depsRef.current = deps;
   });
 
-  return useCallback<SendUserTextFn>(async (rawContent, filesToSend = []) => {
-    await sendUserTextImpl(depsRef.current, rawContent, filesToSend);
+  return useCallback<SendUserTextFn>(async (rawContent, filesToSend = [], opts) => {
+    await sendUserTextImpl(depsRef.current, rawContent, filesToSend, opts);
   }, []);
 }

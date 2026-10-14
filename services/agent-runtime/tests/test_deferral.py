@@ -9,7 +9,7 @@ def test_chat_without_a_file_is_finished():
     assert turn_unfinished([], messages) is False
 
 
-def test_file_thread_without_a_tool_is_still_running():
+def test_older_file_does_not_reopen_the_turn():
     messages = [
         {"role": "assistant", "content": "打开 [文件](sandbox:/workspace/bots/x/web_rpg.html)"},
         {"role": "user", "content": "做完了么"},
@@ -17,6 +17,14 @@ def test_file_thread_without_a_tool_is_still_running():
             "role": "assistant",
             "content": "还没完全做完，确认后我再把更新版发给你。",
         },
+    ]
+    assert turn_unfinished([], messages) is False
+
+
+def test_this_turn_file_link_without_a_tool_is_still_running():
+    messages = [
+        {"role": "user", "content": "把这一版页面交出来"},
+        {"role": "assistant", "content": "打开 [文件](sandbox:/workspace/bots/x/web_rpg.html)"},
     ]
     assert turn_unfinished([], messages) is True
 
@@ -26,6 +34,32 @@ def test_delivery_tool_finishes_the_turn():
         {"role": "assistant", "content": "sandbox:/workspace/bots/x/web_rpg.html"},
     ]
     assert turn_unfinished(["sandbox_write"], messages) is False
+
+
+def test_colleague_link_does_not_keep_the_turn_open():
+    messages = [
+        {"role": "user", "content": "总结下这个文档"},
+        {
+            "role": "user",
+            "content": "【代码】已整理成可浏览的摘要页面：[打开文档摘要](sandbox:/workspace/shared/pdf-summary.html)",
+        },
+        {"role": "assistant", "content": "这份编制说明主要论证了总体架构。"},
+        {
+            "role": "user",
+            "content": "总结下这个文档\n\n（用户上传了 1 个附件）\n- scan.pdf\n  （PDF 未提取到正文；若是扫描件，当前不支持 OCR）",
+        },
+        {"role": "assistant", "content": "目前没有提取到这份 PDF 的正文，所以我还无法可靠总结。"},
+    ]
+    assert turn_unfinished([], messages) is False
+
+
+def test_later_question_does_not_reopen_a_delivered_file():
+    messages = [
+        {"role": "assistant", "content": "打开 [摘要](sandbox:/workspace/shared/pdf-summary.html)"},
+        {"role": "user", "content": "任职过哪几家公司"},
+        {"role": "assistant", "content": "北京格灵深瞳、北京灵汐、北京数码大方。"},
+    ]
+    assert turn_unfinished([], messages) is False
 
 
 def test_onboarding_without_a_file_is_finished():

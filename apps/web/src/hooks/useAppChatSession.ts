@@ -191,7 +191,7 @@ export function useAppChatSession(p: UseAppChatSessionParams) {
           toast.error(err instanceof Error ? err.message : String(err));
         }
         const send = getSendUserTextRef.current();
-        if (send) void send(opt.prompt, []);
+        if (send) void send(opt.prompt, [], { onboarding: true });
       })();
     },
     [agentId, refreshAgents],
@@ -213,7 +213,7 @@ export function useAppChatSession(p: UseAppChatSessionParams) {
           toast.error(err instanceof Error ? err.message : String(err));
         }
         const send = getSendUserTextRef.current();
-        if (send) void send(customText, []);
+        if (send) void send(customText, [], { onboarding: true });
       })();
     },
     [agentId, refreshAgents],

@@ -1,8 +1,9 @@
 """Whether this agent turn is still running.
 
 Completion is the run itself, not the wording of the reply. A delivery tool
-means the work has been done. A text answer in a thread that already has a
-file, with no delivery tool this turn, means the agent stopped too early.
+means the work has been done. A sandbox link from an earlier turn does not
+reopen this one. The turn stays open only when this turn's own reply names a
+file and no delivery tool has written it.
 """
 
 from __future__ import annotations
@@ -50,22 +51,50 @@ _DELETE_CONTEXT = re.compile(r"(删|删除|delete|拒绝|允许|确认卡|mp4)",
 
 def history_has_artifact(messages: list[dict] | None) -> bool:
     for message in messages or []:
-        content = message.get("content") if isinstance(message, dict) else ""
-        if isinstance(content, str) and "sandbox:" in content:
-            return True
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or "sandbox:" not in content:
+            continue
+        # A colleague's earlier reply is already in the thread. Their link is
+        # not an open file this bot still has to deliver.
+        if message.get("role") == "user" and _colleague_note(content):
+            continue
+        return True
     return False
+
+
+def _colleague_note(content: str) -> bool:
+    text = content.lstrip()
+    if not text.startswith("【"):
+        return False
+    end = text.find("】")
+    return 0 < end <= 40
+
+
+def _messages_after_last_user(messages: list[dict] | None) -> list[dict]:
+    last = -1
+    for i, message in enumerate(messages or []):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = str(message.get("content") or "").strip()
+        if not content or content in _CONTINUE_MARKERS:
+            continue
+        last = i
+    if last < 0:
+        return list(messages or [])
+    return list(messages or [])[last + 1 :]
 
 
 def turn_unfinished(tools_used: list[str] | None, messages: list[dict] | None) -> bool:
     """True when the agent has not finished and should keep running.
 
-    Wording is ignored. Delivery tools finish the turn. With no file in the
-    thread yet, a text reply is the result (chat). A file already in the
-    thread, and no delivery tool this turn, means the job is still open.
+    A delivery tool finishes the turn. Only a sandbox link written after the
+    latest user message counts; older links are already delivered.
     """
     if any(name in DELIVERY_TOOLS for name in (tools_used or [])):
         return False
-    return history_has_artifact(messages)
+    return history_has_artifact(_messages_after_last_user(messages))
 
 
 def last_real_user_text(messages: list[dict] | None) -> str:

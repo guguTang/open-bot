@@ -1299,6 +1299,9 @@ type sendBody struct {
 	// WhenBusy: follow_up (default) | steer | reject | replace — used when a durable run is already active.
 	// replace = new-message supersede: abort old durable thread and start a fresh after_interrupt turn.
 	WhenBusy string `json:"when_busy"`
+	// Onboarding is the job card (or a custom answer on it). This turn stays
+	// with the current bot and does not ask a colleague.
+	Onboarding bool `json:"onboarding"`
 }
 
 type runtimeMsg struct {
@@ -1747,6 +1750,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		if afterInterrupt {
 			payloadMap["after_interrupt"] = true
 		}
+		if body.Onboarding {
+			payloadMap["onboarding"] = true
+		}
 		if replyToID != "" {
 			payloadMap["reply_to_id"] = replyToID
 		}
@@ -1975,6 +1981,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 					}
 					if afterInterrupt {
 						payloadMap["after_interrupt"] = true
+					}
+					if body.Onboarding {
+						payloadMap["onboarding"] = true
 					}
 					if replyToID != "" {
 						payloadMap["reply_to_id"] = replyToID

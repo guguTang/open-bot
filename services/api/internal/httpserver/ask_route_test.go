@@ -38,6 +38,9 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if _, hasNone := criteria["none"]; !hasNone {
 		t.Fatal("missing none")
 	}
+	if !strings.Contains(criteria["none"], "两边都能干") {
+		t.Fatalf("none should keep overlapping work: %s", criteria["none"])
+	}
 	if criteria["c0"] == "" || !strings.Contains(criteria["c0"], "代码") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
 	}
@@ -78,6 +81,38 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	}
 	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c9"}}, keys); got != "" {
 		t.Fatalf("unknown -> %q", got)
+	}
+}
+
+func TestAskRouteUtteranceDropsFileBody(t *testing.T) {
+	raw := "总结下这个文档\n\n（用户上传了 1 个附件）\n- spec.pdf (application/pdf, 281.3 KB)\n  以下为用户文件正文\n```markdown\n智能体互联 总体架构\n```"
+	got := askRouteUtterance(raw)
+	if strings.Contains(got, "总体架构") || strings.Contains(got, "以下为用户文件正文") {
+		t.Fatalf("file body leaked: %s", got)
+	}
+	if !strings.Contains(got, "总结下这个文档") || !strings.Contains(got, "spec.pdf") {
+		t.Fatalf("ask or filename missing: %s", got)
+	}
+	self := &db.Agent{ID: "writer", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{{ID: "coder", Name: "代码", Description: "负责写代码与排障"}}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: raw}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	if strings.Contains(pack.State, "总体架构") || strings.Contains(pack.Question, "总体架构") {
+		t.Fatalf("decision saw the file body:\nstate=%s\nquestion=%s", pack.State, pack.Question)
+	}
+}
+
+func TestPayloadOnboarding(t *testing.T) {
+	if !payloadOnboarding(map[string]any{"onboarding": true}) {
+		t.Fatal("job card turn should skip colleague routing")
+	}
+	if payloadOnboarding(map[string]any{"content": "我想先用你来做：查资料与总结"}) {
+		t.Fatal("wording alone is not an onboarding turn")
+	}
+	if payloadOnboarding(nil) {
+		t.Fatal("nil payload is not onboarding")
 	}
 }
 

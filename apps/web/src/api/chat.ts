@@ -411,6 +411,8 @@ export async function sendMessageStream(
   threadRootId?: string,
   /** follow_up | steer | reject | replace — replace = interrupt supersede. */
   whenBusy?: string,
+  /** Job card (or a custom answer on it). This turn stays with the current bot. */
+  onboarding?: boolean,
 ): Promise<void> {
   const body: Record<string, unknown> = { content };
   if (attachments && attachments.length > 0) {
@@ -433,6 +435,9 @@ export async function sendMessageStream(
   }
   if (whenBusy) {
     body.when_busy = whenBusy;
+  }
+  if (onboarding) {
+    body.onboarding = true;
   }
   const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/messages`, {
     method: "POST",

@@ -40,7 +40,7 @@ func peerRosterBlock(selfID string, agents []*db.Agent) (string, bool) {
 	if len(lines) == 0 {
 		return "", false
 	}
-	return "同事名单（同一账户里的其他助手，不必在同一个群。只在用户点名某位，或问题落在对方岗位描述里而你的岗位盖不住时，调用 ask_agent 问其中一位。一次只问一个。自己能做、闲聊、名单里没有对口的人，不要问。同事的回复已经出现在当前会话里，不要把那段话再写一遍。若回复带 needs_user，或是在追问只有用户知道的细节：问题已经展示给用户，停下来等用户回答，不要替用户选定，不要复述问题，也不要用猜的内容再调用 ask_agent）：\n" + strings.Join(lines, "\n"), true
+	return "同事名单（同一账户里的其他助手，不必在同一个群。只在用户点名某位，或问题落在对方岗位描述里而你的岗位盖不住时，调用 ask_agent 问其中一位。一次只问一个。你能做、两边都能做、闲聊、名单里没有对口的人，不要问。同事的回复已经出现在当前会话里，不要把那段话再写一遍。若回复带 needs_user，或是在追问只有用户知道的细节：问题已经展示给用户，停下来等用户回答，不要替用户选定，不要复述问题，也不要用猜的内容再调用 ask_agent）：\n" + strings.Join(lines, "\n"), true
 }
 
 // peerRosterSystem appends the roster when this turn may ask a colleague.

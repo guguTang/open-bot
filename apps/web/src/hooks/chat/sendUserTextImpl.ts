@@ -45,6 +45,7 @@ export async function sendUserTextImpl(
   d: SendMessageDeps,
   rawContent: string,
   filesToSend: PendingFile[] = [],
+  opts?: { onboarding?: boolean },
 ) {
     const content = rawContent.trim();
     if ((!content && filesToSend.length === 0) || !d.authed) return;
@@ -607,6 +608,7 @@ export async function sendUserTextImpl(
         activeReply?.id,
         sendThreadRootId || undefined,
         supersededBusy ? "replace" : undefined,
+        opts?.onboarding,
       );
       if (!sendHadError && sendSelection) {
         d.saveLastActiveSelection(sendSelection);

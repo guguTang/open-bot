@@ -88,7 +88,7 @@ async def test_continue_work_nudge_sets_needs_continue(monkeypatch: pytest.Monke
                 {
                     "message": {
                         "role": "assistant",
-                        "content": "还没做完，稍后发给你。",
+                        "content": "页面在 sandbox:/workspace/bots/x/a.html",
                     }
                 }
             ]
@@ -101,8 +101,7 @@ async def test_continue_work_nudge_sets_needs_continue(monkeypatch: pytest.Monke
 
     st = initial_state(
         messages=[
-            {"role": "assistant", "content": "打开 [文件](sandbox:/workspace/bots/x/a.html)"},
-            {"role": "user", "content": "做完了么"},
+            {"role": "user", "content": "把这一版页面交出来"},
         ]
     )
     st["tools_used"] = []  # no delivery this turn
@@ -610,7 +609,7 @@ def test_continue_nudge_skips_when_colleague_already_delivered() -> None:
         },
     ]
     assert continue_nudge([], messages, already_continued=False, ask_routed=True) is None
-    assert continue_nudge([], messages, already_continued=False) is not None
+    assert continue_nudge([], messages, already_continued=False) is None
 
 
 def test_continue_nudge_after_interrupt_skips_when_already_continued() -> None:

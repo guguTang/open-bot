@@ -55,7 +55,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	}
 	keyToID := map[string]string{}
 	criteria := map[string]string{
-		"none": "不问同事。自己的岗位盖得住、闲聊，或名单里没有对口的人。",
+		"none": "不问同事。你的岗位盖得住就留在自己这里，两边都能干也留在自己这里。闲聊，或名单里没有只有对方能做的人，同样不问。",
 	}
 	var roster []string
 	for i, peer := range candidates {
@@ -90,8 +90,8 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 			"ask": map[string]any{
 				"type": "choice",
 				"instructions": "选择这一回合是否要请一位同事来做。用户点名某位就选那位。" +
-					"问题落在对方岗位描述里、而你的岗位盖不住时，只选对应的一位。" +
-					"自己能做、闲聊、没有对口的人，选 none。只选一个。",
+					"只有这件事落在对方岗位描述里、而你的岗位盖不住时，才选对应的一位。" +
+					"你能做、两边都能做、闲聊、没有对口的人，选 none。只选一个。",
 				"criteria": criteria,
 			},
 		},
@@ -176,7 +176,7 @@ func askContextBlock(summary string, recent []runtimeMsg) string {
 		if text == "" {
 			continue
 		}
-		lines = append(lines, askRoleLabel(m.Role)+"："+clipRunes(oneLine(text), askRouteMsgRunes))
+		lines = append(lines, askRoleLabel(m.Role)+"："+clipRunes(oneLine(askRouteUtterance(text)), askRouteMsgRunes))
 	}
 	if len(lines) == 0 {
 		return "（没有更早的对话）"
@@ -188,7 +188,7 @@ func askColleagueQuestion(summary string, recent []runtimeMsg) string {
 	lastUser := ""
 	for _, m := range recent {
 		if m.Role == "user" {
-			lastUser = strings.TrimSpace(m.Content)
+			lastUser = askRouteUtterance(strings.TrimSpace(m.Content))
 		}
 	}
 	block := askContextBlock(summary, recent)
@@ -196,6 +196,16 @@ func askColleagueQuestion(summary string, recent []runtimeMsg) string {
 		return clipRunes(block, askRouteQuestionMax)
 	}
 	return clipRunes("会话上下文：\n"+block+"\n\n请处理用户刚说的："+lastUser, askRouteQuestionMax)
+}
+
+// askRouteUtterance drops inlined file bodies. Colleague choice follows the
+// user's ask and the filename, not the document text.
+func askRouteUtterance(text string) string {
+	const marker = "以下为用户文件正文"
+	if i := strings.Index(text, marker); i >= 0 {
+		return strings.TrimSpace(text[:i])
+	}
+	return text
 }
 
 func askRoleLabel(role string) string {
@@ -247,6 +257,17 @@ func payloadString(payload map[string]any, key string) string {
 	return strings.TrimSpace(s)
 }
 
+// payloadOnboarding is set by the client when this turn is the job card
+// (or a custom answer on that card). The user is telling this bot what to
+// focus on, so the turn stays with it.
+func payloadOnboarding(payload map[string]any) bool {
+	if payload == nil {
+		return false
+	}
+	on, _ := payload["onboarding"].(bool)
+	return on
+}
+
 // applyAskRouteResult shows the colleague reply in the parent model history
 // and stops this turn from asking again or redoing the work.
 func applyAskRouteResult(payload map[string]any, colleagueName, reply string, needsUser bool) {
@@ -278,6 +299,10 @@ func applyAskRouteResult(payload map[string]any, colleagueName, reply string, ne
 // payload unchanged so the parent model can still call ask_agent itself.
 func (s *Server) routeAskColleague(ctx context.Context, payload map[string]any) {
 	if s == nil || s.db == nil || payload == nil {
+		return
+	}
+	if payloadOnboarding(payload) {
+		payload["allow_ask_agent"] = false
 		return
 	}
 	channelID := payloadString(payload, "channel_id")

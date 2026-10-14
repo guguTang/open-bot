@@ -500,7 +500,7 @@ export default function ChatScreen(): JSX.Element {
   }, []);
 
   const send = useCallback(
-    async (overrideText?: string): Promise<void> => {
+    async (overrideText?: string, opts?: { onboarding?: boolean }): Promise<void> => {
       const content = (overrideText ?? draft).trim();
       if (sending || uploading || !conversationId) return;
 
@@ -578,6 +578,7 @@ export default function ChatScreen(): JSX.Element {
             ...(replyTo ? { replyToId: replyTo.id } : {}),
             // 在线程里回复时沿用根消息，否则这条会掉回主时间线
             ...(threadRootId ? { threadRootId } : {}),
+            ...(opts?.onboarding ? { onboarding: true } : {}),
           }
         );
       } catch (err) {
@@ -649,7 +650,7 @@ export default function ChatScreen(): JSX.Element {
             setError(err instanceof Error ? err.message : "初始化助手失败");
           }
         }
-        await send(opt.prompt);
+        await send(opt.prompt, { onboarding: true });
       })();
     },
     [primaryAgent, refreshAgentsAfterOnboarding, send]
@@ -671,7 +672,7 @@ export default function ChatScreen(): JSX.Element {
             setError(err instanceof Error ? err.message : "初始化助手失败");
           }
         }
-        await send(text);
+        await send(text, { onboarding: true });
       })();
     },
     [primaryAgent, refreshAgentsAfterOnboarding, send]

@@ -288,6 +288,8 @@ export type SendMessageExtras = {
   threadRootId?: string;
   /** DM 内 @其他 Bot 的转交上下文 */
   handoffContext?: unknown;
+  /** 岗位引导卡（含自定义回答）。这一回合留在当前助手，不请同事。 */
+  onboarding?: boolean;
 };
 
 /**
@@ -310,6 +312,7 @@ export async function sendMessageStream(
   if (extras?.replyToId) body.reply_to_id = extras.replyToId;
   if (extras?.threadRootId) body.thread_root_id = extras.threadRootId;
   if (extras?.handoffContext) body.handoff_context = extras.handoffContext;
+  if (extras?.onboarding) body.onboarding = true;
   // 客户端环境信封：让助手知道「我的手机」而不是笼统的 web 客户端
   body.client = detectClientContext();
 
