@@ -14,18 +14,23 @@ import (
 const (
 	askRouteRecentMax   = 8
 	askRouteMsgRunes    = 400
-	askRouteJobRunes    = 200
 	askRouteQuestionMax = 4000
 	// Laya rejects the decide call once state + questions pass ~1100 runes.
 	askRouteDecisionRunes = 640
 	askRouteLatestRunes   = 180
+	// Colleague criteria are one-line triggers, not full job posts.
+	askCriteriaTriggerRunes = 60
+	// Optional self-job tail after the none routing default.
+	askNoneJobRunes = 48
 	// Below this, a colleague choice stays with the current bot.
 	askHandoffConfidenceFloor = 0.5
 )
 
-const askRoutedNote = "本回合已请同事完成这件事，回复已经出现在当前会话里。不要再用自己的工具把同一件事做一遍，也不要复述同事的话。若没有新的信息，用不超过十五个字收尾。"
+const askNoneCriteriaLead = "本职可答；或与下列同事职责重叠；或闲聊/模糊/未点名。默认。"
 
-const askRoutedNeedUserNote = "同事已经在向用户追问，问题已经出现在当前会话里。停下来等用户回答。不要替用户做主，不要复述问题，不要自己把事情做掉。"
+const askRoutedNote = "本回合已请同事完成这件事，回复已经出现在当前会话里。不要再用自己的工具把同一件事做一遍，也不要整段复述同事的回复。只需短接一句；没有新信息就用不超过十五个字收尾。"
+
+const askRoutedNeedUserNote = "同事已经在向用户追问，问题已经出现在当前会话里。停下来等用户回答，不要立刻再问。不要替用户做主，不要复述问题，不要自己把事情做掉。"
 
 // askRouteShouldCall is the gate before a decision call or askAgent.
 // Channels stay on AutoPick. Child asks, empty rosters, and a decision
@@ -58,19 +63,18 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 	if len(candidates) == 0 {
 		return askDecisionPack{}, false
 	}
-	selfJob := askSelfJob(self)
 	keyToID := map[string]string{}
-	// none is scored like a colleague: the text is this bot's own job, not a rule.
+	// none leads with the stay-here default. A short self job may follow.
+	// Colleague keys are triggers only: no display names.
 	criteria := map[string]string{
-		"none": selfJob,
+		"none": askNoneCriteria(self),
 	}
 	var choices []askChoiceLine
 	for i, peer := range candidates {
 		key := fmt.Sprintf("c%d", i)
-		desc := oneLine(peer.Description)
 		keyToID[key] = peer.ID
-		criteria[key] = desc
-		choices = append(choices, askChoiceLine{key: key, desc: desc})
+		criteria[key] = askPeerCriteria(peer.Description)
+		choices = append(choices, askChoiceLine{key: key})
 	}
 	summary, recent := splitAskContext(history)
 	state := askDecisionState(askLatestUser(recent), askConversationBlock(summary, recent))
@@ -93,8 +97,7 @@ func buildAskDecision(self *db.Agent, peers []*db.Agent, history []runtimeMsg) (
 }
 
 type askChoiceLine struct {
-	key  string
-	desc string
+	key string
 }
 
 func askLatestUser(recent []runtimeMsg) string {
@@ -111,22 +114,35 @@ func askLatestUser(recent []runtimeMsg) string {
 
 func askDecisionState(latest, convo string) string {
 	latest = clipRunes(oneLine(latest), askRouteLatestRunes)
-	header := "当前：" + latest + "\n会话：\n"
+	header := "当前：" + latest + "\n（以下仅助解指代，勿作指派依据）\n会话：\n"
 	return fitAskState(header, convo, askRouteDecisionRunes)
+}
+
+func askNoneCriteria(agent *db.Agent) string {
+	job := askSelfJobText(agent)
+	if job == "" {
+		return askNoneCriteriaLead
+	}
+	// Routing defaults lead. The job is only a clipped tail.
+	return askNoneCriteriaLead + clipRunes(job, askNoneJobRunes)
+}
+
+func askPeerCriteria(desc string) string {
+	trigger := clipRunes(oneLine(desc), askCriteriaTriggerRunes)
+	return "仅当最新句明确需要：" + trigger + "。本职能做或未点名则勿选。勿因历史曾转而选。"
 }
 
 func askDecisionRules(choices []askChoiceLine) string {
 	var b strings.Builder
-	b.WriteString("只判断当前最新一条用户消息。历史只用来理解指代，不当作当前任务。")
-	b.WriteString("当前请求点名某同事才选该同事；只提及同事或引用旧回复不算当前指派。")
-	b.WriteString("自己的岗位盖得住，或两边都能做，或闲聊、没有明确对口的人，选 none。")
-	b.WriteString("只有同事职责明确匹配且自己盖不住时才选该同事。")
-	b.WriteString("不得因为历史中曾经调用过某位同事就再选。超出本职也不自动转交。")
+	b.WriteString("只判断「当前：」后最新用户句。历史仅解指代，不当作任务，不得因曾转某同事再选。")
+	b.WriteString("优先级：1) 本轮明确点名/@某同事→选对应 cN；仅提及、引用旧回复、闲聊不算指派。")
+	b.WriteString("2) 同事职责明确匹配且本职盖不住→该 cN。")
+	b.WriteString("3) 本职能做、两边都能做、闲聊、模糊、超出本职也无明确对口→none。不确定选 none。")
 	b.WriteString("选项：")
 	for _, c := range choices {
 		b.WriteString(c.key + " ")
 	}
-	b.WriteString("none。只输出选项。")
+	b.WriteString("none。只输出选项，无解释。")
 	return b.String()
 }
 
@@ -202,21 +218,17 @@ func askPeerCandidates(selfID string, agents []*db.Agent) []*db.Agent {
 	return out
 }
 
-func askSelfJob(agent *db.Agent) string {
+func askSelfJobText(agent *db.Agent) string {
 	if agent == nil {
-		return "未填写"
+		return ""
 	}
 	if desc := strings.TrimSpace(agent.Description); desc != "" {
-		return clipRunes(oneLine(desc), askRouteJobRunes)
+		return oneLine(desc)
 	}
 	if prompt := strings.TrimSpace(agent.SystemPrompt); prompt != "" {
-		return clipRunes(oneLine(prompt), askRouteJobRunes)
+		return oneLine(prompt)
 	}
-	name := strings.TrimSpace(agent.Name)
-	if name == "" {
-		return "未填写"
-	}
-	return name
+	return ""
 }
 
 func splitAskContext(history []runtimeMsg) (summary string, recent []runtimeMsg) {
@@ -259,7 +271,7 @@ func askConversationBlock(summary string, recent []runtimeMsg) string {
 	return strings.Join(lines, "\n")
 }
 
-// fitAskState keeps the job header and the newest conversation lines when the
+// fitAskState keeps the header and the newest conversation lines when the
 // choice text is over the cap. Clipping the tail would drop the user's latest ask.
 func fitAskState(header, convo string, limit int) string {
 	header = strings.TrimRight(header, "\n") + "\n"

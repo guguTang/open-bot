@@ -38,20 +38,32 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if _, hasNone := criteria["none"]; !hasNone {
 		t.Fatal("missing none")
 	}
-	if criteria["none"] != "写作与改稿" {
-		t.Fatalf("none should be the current job, got %s", criteria["none"])
+	if !strings.HasPrefix(criteria["none"], askNoneCriteriaLead) || !strings.Contains(criteria["none"], "写作与改稿") {
+		t.Fatalf("none should lead with the routing default, got %s", criteria["none"])
+	}
+	if strings.HasPrefix(criteria["none"], "写作与改稿") {
+		t.Fatal("routing default should lead none")
 	}
 	if strings.Contains(pack.State, "# 角色") || strings.Contains(pack.State, "决策原则") {
 		t.Fatalf("rules should stay in instructions, not the state:\n%s", pack.State)
 	}
-	if !strings.HasPrefix(pack.State, "当前：帮我写个html页面，简单的计算器") {
+	if !strings.HasPrefix(pack.State, "当前：帮我写个html页面，简单的计算器\n（以下仅助解指代，勿作指派依据）\n会话：") {
 		t.Fatalf("latest ask should lead the state:\n%s", pack.State)
 	}
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state too long for Laya: %d", runeLen(pack.State))
 	}
-	if criteria["c0"] == "" || !strings.Contains(criteria["c0"], "代码") {
+	if !strings.HasPrefix(criteria["c0"], "仅当最新句明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
+	}
+	if strings.HasPrefix(criteria["c0"], "代码") || strings.Contains(criteria["c0"], "代码 —") {
+		t.Fatalf("c0 should not lead with the display name: %#v", criteria["c0"])
+	}
+	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
+	for _, needle := range []string{"优先级", "不确定选 none", "不算指派", "不得因曾转某同事再选", "c0 ", "c1 ", "none。只输出选项，无解释。"} {
+		if !strings.Contains(inst, needle) {
+			t.Fatalf("instructions missing %q: %s", needle, inst)
+		}
 	}
 	if pack.KeyToID["c0"] != "coder" {
 		t.Fatalf("c0 id = %s", pack.KeyToID["c0"])
@@ -159,8 +171,11 @@ func TestAskContextLabelsColleagueReply(t *testing.T) {
 	}
 	ask, _ := pack.Questions["ask"].(map[string]any)
 	inst, _ := ask["instructions"].(string)
-	if !strings.Contains(inst, "不算当前指派") || !strings.Contains(inst, "不得因为历史中曾经调用过某位同事") {
+	if !strings.Contains(inst, "不算指派") || !strings.Contains(inst, "不得因曾转某同事再选") || !strings.Contains(inst, "不确定选 none") {
 		t.Fatalf("instructions: %s", inst)
+	}
+	if !strings.Contains(pack.State, "勿作指派依据") {
+		t.Fatalf("history should not be assignment evidence:\n%s", pack.State)
 	}
 }
 
@@ -212,15 +227,33 @@ func TestAskDecisionStateStaysInsideLayaWindow(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a pack")
 	}
-	if !strings.HasPrefix(pack.State, "当前：帮我写个小游戏，贪吃蛇") {
+	if !strings.HasPrefix(pack.State, "当前：帮我写个小游戏，贪吃蛇\n（以下仅助解指代，勿作指派依据）\n会话：") {
 		t.Fatalf("latest ask dropped:\n%s", pack.State)
 	}
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state %d exceeds %d", runeLen(pack.State), askRouteDecisionRunes)
 	}
-	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
+	ask := pack.Questions["ask"].(map[string]any)
+	inst := ask["instructions"].(string)
 	if runeLen(inst) > 220 {
 		t.Fatalf("instructions too long: %d %s", runeLen(inst), inst)
+	}
+	criteria := ask["criteria"].(map[string]string)
+	if !strings.HasPrefix(criteria["none"], askNoneCriteriaLead) {
+		t.Fatalf("none = %s", criteria["none"])
+	}
+	if runeLen(criteria["none"]) > runeLen(askNoneCriteriaLead)+askNoneJobRunes+1 {
+		t.Fatalf("none criteria too long: %d %s", runeLen(criteria["none"]), criteria["none"])
+	}
+	if !strings.Contains(criteria["c0"], "勿选") || strings.Contains(criteria["c0"], "host-ssh") {
+		t.Fatalf("c0 should be a clipped trigger, not the full job: %s", criteria["c0"])
+	}
+	qRunes := runeLen(inst)
+	for _, text := range criteria {
+		qRunes += runeLen(text)
+	}
+	if runeLen(pack.State)+qRunes > 1100 {
+		t.Fatalf("state+questions %d exceeds the Laya window", runeLen(pack.State)+qRunes)
 	}
 }
 
@@ -284,7 +317,7 @@ func TestApplyAskRouteResultDisablesRedo(t *testing.T) {
 		t.Fatal("parent run should know a colleague already delivered")
 	}
 	system, _ := payload["system_prompt"].(string)
-	if !strings.Contains(system, "不要再用自己的工具") {
+	if !strings.Contains(system, "不要再用自己的工具") || !strings.Contains(system, "不要整段复述") || !strings.Contains(system, "短接") {
 		t.Fatalf("note missing: %s", system)
 	}
 	history, _ := payload["messages"].([]runtimeMsg)
@@ -293,7 +326,7 @@ func TestApplyAskRouteResultDisablesRedo(t *testing.T) {
 	}
 	applyAskRouteResult(payload, "代码", "要哪个配色？", true)
 	system, _ = payload["system_prompt"].(string)
-	if !strings.Contains(system, "停下来等用户") {
+	if !strings.Contains(system, "停下来等用户") || !strings.Contains(system, "不要立刻再问") {
 		t.Fatalf("needs_user note missing: %s", system)
 	}
 }
