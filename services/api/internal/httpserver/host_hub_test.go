@@ -108,6 +108,25 @@ func TestHistoryForRuntimeIncludesHostConfirm(t *testing.T) {
 	}
 }
 
+func TestHistoryForRuntimeHostConfirmNonDeleteOmitsDeleteRetry(t *testing.T) {
+	msgs := []db.Message{
+		{Role: "user", Content: "发这封邮件"},
+		{Role: "host_confirm", Content: `{"req_id":"2","op":"email_send","path":"","status":"denied"}`},
+		{Role: "assistant", Content: "发信被拒绝了"},
+		{Role: "user", Content: "再试一次"},
+	}
+	out := historyForRuntime(msgs, "", nil)
+	if len(out) != 4 {
+		t.Fatalf("len=%d %#v", len(out), out)
+	}
+	if out[1].Role != "system" || !strings.Contains(out[1].Content, "已拒绝") {
+		t.Fatalf("missing confirm note: %#v", out[1])
+	}
+	if strings.Contains(out[1].Content, "host_delete") {
+		t.Fatalf("non-delete confirm must not nudge host_delete: %#v", out[1])
+	}
+}
+
 func TestHostCallNotConnected(t *testing.T) {
 	h := newHostHub()
 	_, err := h.Call(context.Background(), "user", "machine", hostExecRequest{Op: "ls", Path: "Downloads"})

@@ -2446,8 +2446,12 @@ func hostConfirmRuntimeNote(content string) string {
 	case "":
 		status = "未知"
 	}
-	return "[本机操作确认] op=" + op + " path=" + path + " 结果=" + status +
-		"。这是系统记录。禁止编造与此相反的批准/拒绝；用户要重试删除时必须再次调用 host_delete（或 host_ssh_delete）。"
+	note := "[本机操作确认] op=" + op + " path=" + path + " 结果=" + status +
+		"。这是系统记录。禁止编造与此相反的批准/拒绝。"
+	if isDeleteConfirmOp(op) {
+		note += "用户要重试删除时必须再次调用 host_delete（或 host_ssh_delete）。"
+	}
+	return note
 }
 
 // mergeHandoffContext inserts prior-thread turns before the latest user message

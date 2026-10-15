@@ -39,7 +39,7 @@ _LIST_INTENT = re.compile(
     r"(最大|最新|排前|前三|下载|Downloads|目录里|文件夹.*(文件|啥|什么))",
     re.IGNORECASE,
 )
-_DELETE_CONTEXT = re.compile(r"(删|删除|delete|拒绝|允许|确认卡|mp4)", re.IGNORECASE)
+_DELETE_CONTEXT = re.compile(r"(删|删除|\bdelete\b|确认卡)", re.IGNORECASE)
 _OWN_ASK_MARKER = "请处理用户刚说的："
 _MD_LINK = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
