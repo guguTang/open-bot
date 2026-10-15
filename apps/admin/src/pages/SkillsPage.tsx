@@ -254,7 +254,13 @@ export default function SkillsPage() {
               ],
             }}
           >
-            <Button type="primary" icon={<PlusOutlined />} loading={importing}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              loading={importing}
+              className="openbot-toolbar-new-btn"
+              style={{ minWidth: 88, paddingInline: 14 }}
+            >
               新建
             </Button>
           </Dropdown>,

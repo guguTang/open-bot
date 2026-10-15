@@ -54,7 +54,7 @@ export function ChatTranscriptBanner({
         <p style={{ marginTop: 12 }}>
           <button
             type="button"
-            className="primary"
+            className="primary min-w-fit whitespace-nowrap px-4"
             onClick={() => {
               const overlay = overlaySessionActions();
               overlay.setNewChatInitialMode("bot");

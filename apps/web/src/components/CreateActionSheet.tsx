@@ -26,7 +26,7 @@ export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }:
         <div className="action-sheet-handle" aria-hidden />
         <button
           type="button"
-          className="action-sheet-row action-sheet-row-icon"
+          className="action-sheet-row action-sheet-row-icon whitespace-nowrap"
           onClick={() => {
             onClose();
             onCreateBot();
@@ -39,7 +39,7 @@ export function CreateActionSheet({ open, onClose, onCreateBot, onCreateGroup }:
         </button>
         <button
           type="button"
-          className="action-sheet-row action-sheet-row-icon"
+          className="action-sheet-row action-sheet-row-icon whitespace-nowrap"
           onClick={() => {
             onClose();
             onCreateGroup();

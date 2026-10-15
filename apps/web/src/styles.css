@@ -1140,6 +1140,9 @@ button.primary {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  min-width: max-content;
+  overflow: visible;
+  white-space: nowrap;
 }
 button.ghost {
   background: transparent !important;
@@ -3313,6 +3316,9 @@ html.capacitor-native {
   padding-left: 16px;
   gap: 12px;
   font-weight: 500;
+  overflow: visible;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .action-sheet-row-leading {

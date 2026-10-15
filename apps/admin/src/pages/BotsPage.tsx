@@ -205,7 +205,7 @@ export default function BotsPage() {
           <ModalForm
             key="create"
             title="创建 Bot"
-            trigger={<Button type="primary">新建 Bot</Button>}
+            trigger={<Button type="primary" style={{ minWidth: "max-content", paddingInline: 14 }}>新建 Bot</Button>}
             modalProps={{ destroyOnClose: true }}
             initialValues={{ computer_mode: "team" }}
             onOpenChange={(open) => {

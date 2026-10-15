@@ -236,14 +236,16 @@ function AppSidebarInner() {
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 ref={actions.newChatBtnRef}
-                size="icon-xs"
+                size="xs"
                 title="新建聊天"
                 aria-label="新建聊天"
                 aria-haspopup="dialog"
                 aria-expanded={showNewChat}
+                className="shrink-0 min-w-fit whitespace-nowrap px-2"
                 onClick={() => sessionActions().onOpenNewChatList()}
               >
                 <Plus aria-hidden />
+                新建
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>

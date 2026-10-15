@@ -14,3 +14,13 @@ body {
 .ant-pro-layout {
   min-height: 100%;
 }
+
+/* Toolbar primary CTAs (e.g. 「新建」): never flex-shrink or clip CJK labels */
+.ant-pro-table-list-toolbar-right .ant-btn,
+.ant-pro-table-list-toolbar-container .ant-btn {
+  flex-shrink: 0;
+  overflow: visible;
+  white-space: nowrap;
+  min-width: max-content;
+  padding-inline: 14px;
+}
