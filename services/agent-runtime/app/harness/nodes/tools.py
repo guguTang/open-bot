@@ -10,7 +10,8 @@ from langgraph.types import interrupt
 
 from ...client_env import tool_display_label
 from ...citation_sources import extract_from_tool, merge_sources
-from ...llm import guide_tool_result, truncate_tool_result_for_context
+from ...host_vision import tool_result_message
+from ...llm import observe_tool_result, truncate_tool_result_for_context
 from ..config import require_approval_tools
 from ..registry import get_registry
 from ..replay import interrupted_result, policy_for
@@ -120,14 +121,7 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
 
         if tc_id and tc_id in replay_results:
             content = truncate_tool_result_for_context(replay_results[tc_id])
-            msgs.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "name": name,
-                    "content": content,
-                }
-            )
+            msgs.append(tool_result_message(tc_id, content, name=name))
             if name:
                 used.append(name)
                 sources = merge_sources(sources, extract_from_tool(name, args, content))
@@ -168,22 +162,13 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
             else:
                 content = json.dumps({"error": str(exc)}, ensure_ascii=False)
 
+        content, vision = observe_tool_result(name, content)
         await registry.run_hooks(
             "afterTool", name=name, args=args, content=content, tool_call_id=tc_id
         )
-
-        content = guide_tool_result(name, content)
-        content = truncate_tool_result_for_context(content)
         if tc_id:
             replay_results[tc_id] = content
-        msgs.append(
-            {
-                "role": "tool",
-                "tool_call_id": tc_id,
-                "name": name,
-                "content": content,
-            }
-        )
+        msgs.append(tool_result_message(tc_id, content, name=name, vision=vision))
         if name:
             used.append(name)
             sources = merge_sources(sources, extract_from_tool(name, args, content))

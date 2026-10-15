@@ -76,7 +76,7 @@ description: 一句话说清能力 + 触发场景。Use when the user asks for X
 | 能力 | 工具 |
 |------|------|
 | 用户电脑执行命令 | `host_shell`（先 `list_machines`；用法见 `host-shell`） |
-| 用户电脑读写 / 移动 / 删除 / 打开 App | `host_read` / `host_write` / `host_move` / `host_delete` / `host_open` / `host_ls` |
+| 用户电脑读写 / 移动 / 删除 / 打开 App / 截屏 | `host_read` / `host_write` / `host_move` / `host_delete` / `host_open` / `host_ls` / `host_screenshot` |
 | 远程服务器 | `host_ssh_*`（见 `host-ssh`） |
 | 内部执行环境 | `sandbox_ensure` / `sandbox_shell` / `sandbox_read` / `sandbox_write` / `sandbox_ls`（产物放 `/workspace/out/` 会显示为附件；对用户不提内部环境） |
 | 联网读取 | `http_fetch`；带密钥：`request_secret` + `secret_http` |

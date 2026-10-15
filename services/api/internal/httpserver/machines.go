@@ -228,8 +228,17 @@ func (s *Server) handleHostExecWS(w http.ResponseWriter, r *http.Request) {
 
 func supportedHostOp(op string) bool {
 	switch op {
-	case "ls", "read", "write", "delete", "move", "open", "shell",
+	case "ls", "read", "write", "delete", "move", "open", "shell", "screenshot",
 		"ssh_ls", "ssh_read", "ssh_write", "ssh_delete", "ssh_exec":
+		return true
+	default:
+		return false
+	}
+}
+
+func hostExecAllowsEmptyPath(op string) bool {
+	switch op {
+	case "ls", "ssh_ls", "screenshot":
 		return true
 	default:
 		return false
@@ -251,6 +260,8 @@ func hostActivityLabel(label, op, path, dest string) string {
 		action = "移动文件"
 	case "open":
 		action = "打开软件"
+	case "screenshot":
+		action = "截取屏幕"
 	case "shell":
 		action = "运行命令"
 	case "ssh_ls":
@@ -265,6 +276,21 @@ func hostActivityLabel(label, op, path, dest string) string {
 		action = "在远程主机上运行命令"
 	}
 	msg := "正在" + label + "上" + action
+	if op == "screenshot" {
+		what := "主屏幕"
+		switch strings.TrimSpace(path) {
+		case "all":
+			what = "全部屏幕"
+		case "", "main":
+			what = "主屏幕"
+		default:
+			what = path
+		}
+		if strings.TrimSpace(dest) != "" {
+			what = "显示器 " + strings.TrimSpace(dest)
+		}
+		return msg + "：" + what
+	}
 	if path == "" {
 		return msg
 	}
@@ -325,7 +351,7 @@ func (s *Server) handleInternalHostExec(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if op != "ls" && op != "ssh_ls" && strings.TrimSpace(body.Path) == "" {
+	if !hostExecAllowsEmptyPath(op) && strings.TrimSpace(body.Path) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return
 	}

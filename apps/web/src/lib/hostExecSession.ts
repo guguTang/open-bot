@@ -46,6 +46,15 @@ async function runOp(req: HostExecRequest): Promise<Record<string, unknown>> {
     return (await invoke("host_move", { path, dest: req.dest || "" })) as Record<string, unknown>;
   }
   if (req.op === "open") return (await invoke("host_open", { name: path })) as Record<string, unknown>;
+  if (req.op === "screenshot") {
+    const scope = path === "all" ? "all" : "main";
+    const args: Record<string, unknown> = { scope };
+    const display = Number(req.dest);
+    if (req.dest && Number.isInteger(display) && display >= 1 && display <= 16) {
+      args.display = display;
+    }
+    return (await invoke("host_screenshot", args)) as Record<string, unknown>;
+  }
   if (req.op === "shell") {
     return (await invoke("host_shell", {
       command: path,

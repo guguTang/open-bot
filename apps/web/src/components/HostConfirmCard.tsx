@@ -27,6 +27,11 @@ function commandSnippet(item: HostConfirmPayload): string {
   if (item.op === "move") {
     return item.dest ? `${item.path} → ${item.dest}` : item.path;
   }
+  if (item.op === "screenshot") {
+    if (item.dest) return `显示器 ${item.dest}`;
+    if (item.path === "all") return "全部屏幕";
+    return "主屏幕";
+  }
   if (item.op === "ssh_write" || item.op === "ssh_delete") {
     return item.dest ? `${item.dest} ${item.path}` : item.path;
   }
@@ -70,6 +75,9 @@ function actionCopy(item: HostConfirmPayload): { detail: string; danger: boolean
       detail: item.dest ? `${item.path} → ${item.dest}` : item.path,
       danger: true,
     };
+  }
+  if (item.op === "screenshot") {
+    return { detail: "", danger: false };
   }
   if (item.op === "email_send") {
     const attachLine = (item.preview || "")

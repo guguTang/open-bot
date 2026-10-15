@@ -109,7 +109,7 @@ func HostOpToolIdentity(op string) (tool, toolGroup string) {
 		return "host_ssh_delete", "file_delete"
 	case "move":
 		return "host_move", "file_move"
-	case "ls", "read", "open":
+	case "ls", "read", "open", "screenshot":
 		return "host_" + op, "host_read"
 	case "email_send":
 		return "gmail_send", "email"

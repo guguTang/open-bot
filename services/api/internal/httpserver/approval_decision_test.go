@@ -82,6 +82,10 @@ func TestHostOpToolIdentity(t *testing.T) {
 	if tool != "host_delete" || group != "file_delete" {
 		t.Fatalf("delete: %s/%s", tool, group)
 	}
+	tool, group = HostOpToolIdentity("screenshot")
+	if tool != "host_screenshot" || group != "host_read" {
+		t.Fatalf("screenshot: %s/%s", tool, group)
+	}
 }
 
 func TestShouldAutoApproveFromAllowlist(t *testing.T) {

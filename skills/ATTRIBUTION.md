@@ -20,7 +20,7 @@ code-review (no parallel sub-agents), Chinese brief notes where helpful.
 
 **新增技能（改编）：**
 
-- 苹果生态（macOS，`host_shell`）：`apple-notes`、`apple-reminders`、`findmy`、`imessage`、`computer-use`（f-trycua 原作，改写为 osascript / System Events + screencapture）
+- 苹果生态（macOS，`host_shell`）：`apple-notes`、`apple-reminders`、`findmy`、`imessage`、`computer-use`（f-trycua 原作，改写为 osascript / System Events + `host_screenshot`）
 - 编码代理与开发：`claude-code`、`codex`、`opencode`、`github`（benbarclay）、`codebase-inspection`、`dogfood`（新增 `scripts/qa_probe.py` Playwright 探针）、`cdp-dom-inspect`（原 inspecting-hermes-desktop-dom，新增 `scripts/cdp_eval.mjs`）、`node-inspect-debugger`、`python-debugpy`、`simplify-code`（灵感来自 Claude Code /simplify）、`spike`（源自 gsd-build/get-shit-done）、`skill-authoring`（原 hermes-agent-skill-authoring，重写为 open-bot 技能编写指南）
 - 创作与设计：`architecture-diagram`（Cocoon AI）、`ascii-video` / `manim-video` / `p5js`（SHL0MS）、`baoyu-infographic`（宝玉 JimLiu，[baoyu-skills](https://github.com/JimLiu/baoyu-skills)）、`claude-design`（BadTechBandit）、`design-md`、`humanizer`（Siqi Chen，[blader/humanizer](https://github.com/blader/humanizer)，MIT，见包内 LICENSE）、`popular-web-designs`（设计系统来自 VoltAgent/awesome-design-md）、`songwriting-and-ai-music`
 - 邮件 / 消息 / 社交：`email-inbox-triage`（benbarclay）、`himalaya`、`xurl`（xdevplatform + openclaw）

@@ -14,6 +14,16 @@ func TestHostSSHOps(t *testing.T) {
 	if !supportedHostOp("ssh_exec") || supportedHostOp("ssh") {
 		t.Fatal("ssh ops")
 	}
+	if !supportedHostOp("screenshot") || !hostExecAllowsEmptyPath("screenshot") {
+		t.Fatal("screenshot op")
+	}
+	if hostExecAllowsEmptyPath("open") {
+		t.Fatal("open still needs a name")
+	}
+	shot := hostActivityLabel("Mac", "screenshot", "main", "")
+	if shot != "正在Mac上截取屏幕：主屏幕" {
+		t.Fatal(shot)
+	}
 	if !hostOpNeedsConfirm("ssh_write") || hostOpNeedsConfirm("ssh_ls") {
 		t.Fatal("ssh confirm")
 	}

@@ -1,6 +1,6 @@
 ---
 name: findmy
-description: Locate Apple devices / AirTags through FindMy.app on a connected Mac (host_open + host_shell, screen capture/OCR). Use for 查找设备 / AirTag 在哪.
+description: Locate Apple devices / AirTags through FindMy.app on a connected Mac (host_open + host_screenshot). Use for 查找设备 / AirTag 在哪.
 ---
 
 # Find My (Apple)
@@ -22,7 +22,7 @@ screen capture to read device locations.
 
 - **macOS** with Find My app and iCloud signed in
 - Devices/AirTags already registered in Find My
-- Screen Recording permission for terminal (System Settings → Privacy → Screen Recording)
+- Screen Recording permission for **Open Bot** (系统设置 → 隐私与安全性 → 屏幕录制). If `host_screenshot` returns `screen_recording_denied`, ask the user to grant it and stop retrying.
 - **Optional but recommended**: Install `peekaboo` for better UI automation:
   `brew install steipete/tap/peekaboo`
 
@@ -44,14 +44,11 @@ osascript -e 'tell application "FindMy" to activate'
 # Wait for it to load
 sleep 3
 
-# Take a screenshot of the Find My window
-screencapture -w -o /tmp/open-bot-scratch/findmy.png
+# Then call host_screenshot (the image is attached to the tool result; read it directly).
+# Do not use screencapture — that only writes a file the model cannot see.
 ```
 
-Then use 看图检查（open-bot 无看图工具：改用 OCR / 文本化检查，或把图片路径给用户确认） to read the screenshot:
-```
-看图检查(image_url="/tmp/open-bot-scratch/findmy.png", question="What devices/items are shown and what are their locations?")
-```
+然后调用 `host_screenshot`，根据附上的画面读出设备名和位置。不要说自己看不到图。
 
 ### Switch Between Tabs
 
@@ -92,10 +89,7 @@ peekaboo click --on B3 --app "FindMy"
 peekaboo image --app "FindMy" --path /tmp/open-bot-scratch/findmy-detail.png
 ```
 
-Then analyze with vision:
-```
-看图检查(image_url="/tmp/open-bot-scratch/findmy-detail.png", question="What is the location shown for this device/item? Include address and coordinates if visible.")
-```
+然后调用 `host_screenshot` 阅读详情页上的地址和坐标。`peekaboo image` 只是存文件，不能代替 `host_screenshot`。
 
 ## Workflow: Track AirTag Location Over Time
 
@@ -108,14 +102,11 @@ sleep 3
 
 # 2. Click on the AirTag item (stay on page — AirTag only updates when page is open)
 
-# 3. Periodically capture location
-while true; do
-    screencapture -w -o /tmp/open-bot-scratch/findmy-$(date +%H%M%S).png
-    sleep 300  # Every 5 minutes
-done
+# 3. Periodically call host_screenshot and note the location from the attached image.
+# Do not loop screencapture into /tmp.
 ```
 
-Analyze each screenshot with vision to extract coordinates, then compile a route.
+每次 `host_screenshot` 后从画面里记下坐标，再汇总路线。
 
 ## Limitations
 
@@ -128,6 +119,6 @@ Analyze each screenshot with vision to extract coordinates, then compile a route
 ## Rules
 
 1. Keep FindMy app in the foreground when tracking AirTags (updates stop when minimized)
-2. Use 看图检查（open-bot 无看图工具：改用 OCR / 文本化检查，或把图片路径给用户确认） to read screenshot content — don't try to parse pixels
+2. Use `host_screenshot` to read the screen — the image is attached to the tool result. Do not pretend a `/tmp` PNG was visible.
 3. For ongoing tracking, propose an open-bot routine (`create_routine`) that periodically captures and logs locations — only with the user's explicit consent, and only while the Mac is connected
 4. Respect privacy — only track devices/items the user owns

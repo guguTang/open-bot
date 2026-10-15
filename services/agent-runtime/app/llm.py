@@ -22,6 +22,15 @@ from .client_env import (
     format_tools_routing_block,
     tool_display_label,
 )
+from .host_vision import (
+    HOST_IMAGE_KEY,
+    drop_host_images_for_text_model,
+    is_vision_input_reject,
+    messages_include_images,
+    promote_host_images_for_model,
+    split_host_image,
+    tool_result_message,
+)
 from .model_compat import (
     adapt_chat_payload,
     is_prompt_cache_reject,
@@ -79,6 +88,16 @@ _TOOL_QUOTE_SKIP = {
     "label",
     "exit_code",
     "denied",
+    "image_base64",
+    "image_attached",
+    "mime",
+    "bytes",
+    "note",
+    "width",
+    "height",
+    "scope",
+    "display",
+    "code",
 }
 
 
@@ -189,6 +208,13 @@ MAX_TOOL_ROUNDS = 48
 DEFER_ON_EXHAUST_REPLY = "还在做，好了发这里。"
 
 
+def observe_tool_result(name: str, result: str) -> tuple[str, dict[str, str] | None]:
+    """Guide, detach screenshot pixels, then truncate the text observation."""
+    guided = guide_tool_result(name, result if isinstance(result, str) else str(result or ""))
+    text, vision = split_host_image(guided)
+    return truncate_tool_result_for_context(text), vision
+
+
 def truncate_tool_result_for_context(
     text: str,
     *,
@@ -238,8 +264,14 @@ def fold_tool_results_in_messages(
             out.append(m)
             continue
         content = m.get("content")
+        drop_vision = isinstance(m.get(HOST_IMAGE_KEY), dict) and i not in recent
         if not isinstance(content, str):
-            out.append(m)
+            if drop_vision:
+                nm = dict(m)
+                nm.pop(HOST_IMAGE_KEY, None)
+                out.append(nm)
+            else:
+                out.append(m)
             continue
         if i in recent:
             folded = truncate_tool_result_for_context(
@@ -249,11 +281,13 @@ def fold_tool_results_in_messages(
             folded = truncate_tool_result_for_context(
                 content, limit=tight_limit, head=tight_head, tail=tight_tail
             )
-        if folded == content:
+        if folded == content and not drop_vision:
             out.append(m)
         else:
             nm = dict(m)
             nm["content"] = folded
+            if drop_vision:
+                nm.pop(HOST_IMAGE_KEY, None)
             out.append(nm)
     return out
 
@@ -289,6 +323,8 @@ _NO_RETRY_HINT = (
     "需要主机名",
     "需要文件路径",
     "端口无效",
+    "屏幕录制",
+    "暂不支持截屏",
 )
 
 _ERRORISH_OUTPUT = re.compile(
@@ -1075,6 +1111,38 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "host_screenshot",
+            "description": (
+                "Capture the screen of a connected desktop (macOS) and attach the image to this tool result "
+                "so you can see it. Prefer this over host_shell screencapture. "
+                "scope main (default) is the main display; all captures every display; "
+                "display is a 1-based index and overrides scope. "
+                "Describe what is on screen from the attached image. "
+                "If the result says screen recording was denied, tell the user to allow Open Bot under "
+                "系统设置 → 隐私与安全性 → 屏幕录制 (and 辅助功能 when driving the GUI). Do not retry until they grant it. "
+                "Phones and the browser cannot capture the desktop."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "scope": {
+                        "type": "string",
+                        "enum": ["main", "all"],
+                        "description": "main (default) or all displays",
+                    },
+                    "display": {
+                        "type": "integer",
+                        "description": "1-based display index. Overrides scope.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "host_shell",
             "description": (
                 "Run one local command on a connected computer. "
@@ -1687,14 +1755,26 @@ def _strip_prompt_cache_from_messages(messages: list[dict[str, Any]]) -> list[di
     for m in messages:
         content = m.get("content")
         if isinstance(content, list):
-            texts: list[str] = []
+            has_image = any(
+                isinstance(part, dict) and part.get("type") == "image_url" for part in content
+            )
+            parts: list[Any] = []
             for part in content:
-                if isinstance(part, dict):
-                    texts.append(str(part.get("text") or ""))
+                if isinstance(part, dict) and "cache_control" in part:
+                    parts.append({k: v for k, v in part.items() if k != "cache_control"})
                 else:
-                    texts.append(str(part))
+                    parts.append(part)
             nm = dict(m)
-            nm["content"] = "\n\n".join(t for t in texts if t)
+            if has_image:
+                nm["content"] = parts
+            else:
+                texts: list[str] = []
+                for part in parts:
+                    if isinstance(part, dict):
+                        texts.append(str(part.get("text") or ""))
+                    else:
+                        texts.append(str(part))
+                nm["content"] = "\n\n".join(t for t in texts if t)
             out.append(nm)
         else:
             out.append(m)
@@ -1740,8 +1820,10 @@ async def chat_completion(
     cache_mode = resolve_prompt_cache_mode(model, base, profile=profile)
     work_messages = list(messages)
     # If caller already attached cache_control blocks, keep them unless mode is off.
+    # Promote screenshots after that strip so image parts are not flattened away.
     if cache_mode == "off":
         work_messages = _strip_prompt_cache_from_messages(work_messages)
+    work_messages = promote_host_images_for_model(work_messages)
     payload: dict[str, Any] = {
         "model": model,
         "stream": False,
@@ -1766,6 +1848,7 @@ async def chat_completion(
     max_attempts = _llm_max_attempts()
     last_err: BaseException | None = None
     cache_stripped = False
+    vision_stripped = False
     for attempt in range(1, max_attempts + 1):
         try:
             data = await _chat_completion_once(
@@ -1810,6 +1893,21 @@ async def chat_completion(
                 headers = {k: v for k, v in headers.items() if k.lower() != "x-prompt-cache"}
                 logger.info(
                     "LLM prompt-cache unsupported; retrying without cache fields model=%s",
+                    model,
+                )
+                continue
+            if (
+                not vision_stripped
+                and is_vision_input_reject(err_s)
+                and messages_include_images(payload.get("messages") or [])
+            ):
+                vision_stripped = True
+                payload = dict(payload)
+                payload["messages"] = drop_host_images_for_text_model(
+                    list(payload.get("messages") or [])
+                )
+                logger.info(
+                    "LLM rejected image input; retrying screenshot as text metadata model=%s",
                     model,
                 )
                 continue
@@ -2095,8 +2193,7 @@ async def run_tool_loop(
                         {"ok": False, "error": str(exc)},
                         ensure_ascii=False,
                     )
-                result = guide_tool_result(name, result)
-                result = truncate_tool_result_for_context(result)
+                result, vision = observe_tool_result(name, result)
                 if sources_out is not None:
                     merged = merge_sources(
                         sources_out, extract_from_tool(name, args, result)
@@ -2111,11 +2208,11 @@ async def run_tool_loop(
                         }
                     )
                 msgs.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.get("id"),
-                        "content": result,
-                    }
+                    tool_result_message(
+                        str(tc.get("id") or ""),
+                        result,
+                        vision=vision,
+                    )
                 )
             continue
         # Text with no tool call. If this thread already has a file and this
