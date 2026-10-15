@@ -110,14 +110,15 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.8}}, keys); got != "coder" {
 		t.Fatalf("confident c0 -> %s", got)
 	}
-	// 0.72 vs 0.28 clears both the floor and the 0.15 lead.
+	// Entropy confidence 0.1457 is under the floor. A peaked option probability
+	// does not revive that Decide result.
 	snake := map[string]any{"ask": map[string]any{
 		"choice":        "c0",
 		"confidence":    "0.1457",
 		"probabilities": map[string]any{"c0": "0.7209", "none": "0.2791"},
 	}}
-	if got := askTargetFromAnswers(snake, keys); got != "coder" {
-		t.Fatalf("choice probability should hand off: %q", got)
+	if got := askTargetFromAnswers(snake, keys); got != "" {
+		t.Fatalf("low entropy confidence should stay: %q", got)
 	}
 	weak := map[string]any{"ask": map[string]any{
 		"choice":        "c0",
@@ -153,8 +154,27 @@ func TestAskTargetFromAnswers(t *testing.T) {
 		"confidence":    "0.1457",
 		"probabilities": map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"},
 	}}
-	if got := askTargetFromAnswers(lead, keys); got != "coder" {
-		t.Fatalf("clear lead should hand off: %q", got)
+	if got := askTargetFromAnswers(lead, keys); got != "" {
+		t.Fatalf("low entropy confidence should stay despite a lead: %q", got)
+	}
+	// Trusted confidence plus a lead still hands off. 0.78 − 0.16 = 0.62.
+	trusted := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    0.82,
+		"probabilities": map[string]any{"c0": "0.78", "c1": "0.06", "none": "0.16"},
+	}}
+	if got := askTargetFromAnswers(trusted, keys); got != "coder" {
+		t.Fatalf("high confidence with a lead should hand off: %q", got)
+	}
+	// Langfuse: 「帮我写个五子棋的小游戏」chose none. p(none) is over the floor
+	// and leads c0, but entropy confidence is 0.059. That is not a stay lock.
+	gomoku := map[string]any{"ask": map[string]any{
+		"choice":        "none",
+		"confidence":    0.059,
+		"probabilities": map[string]any{"none": 0.6421, "c0": 0.3579},
+	}}
+	if got := askTargetFromAnswers(gomoku, keys); got != "" {
+		t.Fatalf("low-confidence none should not hand off: %q", got)
 	}
 }
 
@@ -456,7 +476,7 @@ func TestAskBareNameVetoStays(t *testing.T) {
 		called++
 		return map[string]any{"ask": map[string]any{
 			"choice":        "c0",
-			"confidence":    "0.2",
+			"confidence":    "0.82",
 			"probabilities": map[string]any{"c0": "0.80", "c1": "0.10", "none": "0.10"},
 		}}, nil
 	}
@@ -503,5 +523,107 @@ func TestAskKeywordShortCircuitSkipsDecide(t *testing.T) {
 	}
 	if id := askKeywordPeer(latest, self, both); id != "" {
 		t.Fatalf("two code peers should fall through, got %s", id)
+	}
+}
+
+func TestAskLowConfidenceNoneDoesNotHandoff(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "帮我写个五子棋的小游戏"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":        "none",
+			"confidence":    0.059,
+			"probabilities": map[string]any{"none": 0.6421, "c0": 0.3579},
+		}}, nil
+	}
+	got, err := resolveAskRoute(context.Background(), "帮我写个五子棋的小游戏", self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || called != 1 {
+		t.Fatalf("low-confidence none target=%q calls=%d", got, called)
+	}
+	// A peaked peer probability does not override entropy confidence under the floor.
+	decide = func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":        "c0",
+			"confidence":    "0.1457",
+			"probabilities": map[string]any{"c0": "0.7209", "none": "0.2791"},
+		}}, nil
+	}
+	got, err = resolveAskRoute(context.Background(), "帮我写个五子棋的小游戏", self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || called != 2 {
+		t.Fatalf("low-confidence peer target=%q calls=%d", got, called)
+	}
+}
+
+func TestAskHighConfidencePeerMarginHandoff(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写东西与改稿以外的事"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "帮我写个五子棋的小游戏"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":        "c0",
+			"confidence":    "0.82",
+			"probabilities": map[string]any{"c0": "0.78", "none": "0.22"},
+		}}, nil
+	}
+	latest := "帮我写个五子棋的小游戏"
+	got, err := resolveAskRoute(context.Background(), latest, self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "coder" || called != 1 {
+		t.Fatalf("high-confidence peer target=%q calls=%d", got, called)
+	}
+}
+
+func TestAskNamedAndKeywordSkipDecide(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":     "none",
+			"confidence": 0.059,
+		}}, nil
+	}
+	named, err := resolveAskRoute(context.Background(), "@码农 修空指针", self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyword, err := resolveAskRoute(context.Background(), "登录接口空指针，帮我改代码修掉", self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named != "coder" || keyword != "coder" || called != 0 {
+		t.Fatalf("named=%q keyword=%q calls=%d", named, keyword, called)
 	}
 }

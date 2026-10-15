@@ -54,14 +54,18 @@ func TestAskHandoffRoutingEval(t *testing.T) {
 		evalPromptCase(t, self, peers, "模糊请求", "留下", "帮我弄一下",
 			[]runtimeMsg{{Role: "user", Content: "帮我弄一下"}},
 			"", ""),
-		evalLayaProbability(t, self, peers, "Laya 高选项概率、低 entropy confidence", "交接 coder", "c0", "0.1457",
-			map[string]any{"c0": "0.7209", "none": "0.2791"}, "coder"),
+		evalLayaProbability(t, self, peers, "Laya 高选项概率、低 entropy confidence", "留下", "c0", "0.1457",
+			map[string]any{"c0": "0.7209", "none": "0.2791"}, ""),
 		evalLayaProbability(t, self, peers, "Laya 低选项概率", "留下", "c0", "0.1457",
 			map[string]any{"c0": "0.40", "none": "0.60"}, ""),
 		evalLayaProbability(t, self, peers, "Laya 选项概率领先不足", "留下", "c1", "0.9",
 			map[string]any{"c0": "0.41", "c1": "0.55", "none": "0.04"}, ""),
-		evalLayaProbability(t, self, peers, "Laya 选项概率明显领先", "交接 coder", "c0", "0.1457",
-			map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"}, "coder"),
+		evalLayaProbability(t, self, peers, "Laya 低 entropy confidence、选项概率明显领先", "留下", "c0", "0.1457",
+			map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"}, ""),
+		evalLayaProbability(t, self, peers, "Laya 高置信且概率明显领先", "交接 coder", "c0", "0.82",
+			map[string]any{"c0": "0.78", "none": "0.22"}, "coder"),
+		evalLayaProbability(t, self, peers, "Laya 低置信选 none", "留下", "none", "0.059",
+			map[string]any{"none": "0.6421", "c0": "0.3579"}, ""),
 	}
 	var b strings.Builder
 	b.WriteString("\n| 用例 | 期望 | 实测 |\n|---|---|---|\n")
@@ -287,7 +291,7 @@ func askEvalActual(pack askDecisionPack, ok bool, wantKey, mapped string) string
 func layaChoice(choice, probability string) map[string]any {
 	return map[string]any{"ask": map[string]any{
 		"choice":        choice,
-		"confidence":    "0.1457",
+		"confidence":    "0.82",
 		"probabilities": map[string]any{choice: probability, "none": "0.2791"},
 	}}
 }
