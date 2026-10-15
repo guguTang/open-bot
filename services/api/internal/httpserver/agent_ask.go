@@ -112,9 +112,9 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 		fromName = fromID
 	}
 	notice := fmt.Sprintf(
-		"你正在回答同事「%s」的求助。请根据问题直接作答，回复会交回对方。不要再调用 ask_agent，也不要向其他助手继续提问。"+
-			"材料够就直接作答。若缺的是只有用户才知道的细节，不要替用户做主，也不要让同事猜。"+
-			"这时回复第一行只写 NEED_USER，空一行，再用口语列出要问用户的问题。",
+		"你正在回答同事「%s」转来的问题。问题已自包含，请直接作答并交回对方。不要调用 ask_agent，也不要再转交其他同事。"+
+			"材料够就直接作答。不要复述岗位，不要寒暄。"+
+			"若缺的是只有用户才知道的细节，第一行只写 NEED_USER，换行后再列问题，不要替用户做主。",
 		fromName,
 	)
 	systemPrompt := strings.TrimSpace(to.SystemPrompt)
@@ -296,7 +296,7 @@ func askOK(fromID, toID, reply, conversationID string, needsUser bool) map[strin
 	}
 	if needsUser {
 		out["needs_user"] = true
-		out["instruction"] = "同事的追问已经显示在当前会话里。不要复述 reply，不要替用户做选择，不要再调用 ask_agent。若没有新的信息，用不超过十五个字收尾，不要粘贴追问原文。"
+		out["instruction"] = "同事的追问已经显示在当前会话里。停下来等用户，不要立刻再问。不要复述 reply，不要替用户做选择，不要再调用 ask_agent。没有新信息就用不超过十五个字收尾。"
 	}
 	return out
 }

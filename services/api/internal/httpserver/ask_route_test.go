@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -38,20 +39,32 @@ func TestBuildAskDecisionUsesSummaryAndRecent(t *testing.T) {
 	if _, hasNone := criteria["none"]; !hasNone {
 		t.Fatal("missing none")
 	}
-	if criteria["none"] != "写作与改稿" {
-		t.Fatalf("none should be the current job, got %s", criteria["none"])
+	if !strings.HasPrefix(criteria["none"], askNoneCriteriaLead) || !strings.Contains(criteria["none"], "写作与改稿") {
+		t.Fatalf("none should lead with the routing default, got %s", criteria["none"])
+	}
+	if strings.HasPrefix(criteria["none"], "写作与改稿") {
+		t.Fatal("routing default should lead none")
 	}
 	if strings.Contains(pack.State, "# 角色") || strings.Contains(pack.State, "决策原则") {
 		t.Fatalf("rules should stay in instructions, not the state:\n%s", pack.State)
 	}
-	if !strings.HasPrefix(pack.State, "当前：帮我写个html页面，简单的计算器") {
+	if !strings.HasPrefix(pack.State, "当前：帮我写个html页面，简单的计算器\n（以下仅助解指代，勿作指派依据）\n会话：") {
 		t.Fatalf("latest ask should lead the state:\n%s", pack.State)
 	}
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state too long for Laya: %d", runeLen(pack.State))
 	}
-	if criteria["c0"] == "" || !strings.Contains(criteria["c0"], "代码") {
+	if !strings.HasPrefix(criteria["c0"], "仅当最新句明确需要：负责写代码与排障") || !strings.Contains(criteria["c0"], "勿因历史曾转而选") {
 		t.Fatalf("c0 = %#v", criteria["c0"])
+	}
+	if strings.Contains(criteria["c0"], "点名/") || strings.HasPrefix(criteria["c0"], "代码") || strings.Contains(criteria["c0"], "代码 —") {
+		t.Fatalf("c0 should be the job trigger only, got %#v", criteria["c0"])
+	}
+	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
+	for _, needle := range []string{"优先级", "不确定选 none", "不算指派", "不得因曾转某同事再选", "c0 ", "c1 ", "none。只输出选项，无解释。"} {
+		if !strings.Contains(inst, needle) {
+			t.Fatalf("instructions missing %q: %s", needle, inst)
+		}
 	}
 	if pack.KeyToID["c0"] != "coder" {
 		t.Fatalf("c0 id = %s", pack.KeyToID["c0"])
@@ -97,7 +110,7 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.8}}, keys); got != "coder" {
 		t.Fatalf("confident c0 -> %s", got)
 	}
-	// Laya confidence is 1-entropy. 0.72 vs 0.28 yields ~0.15, but the choice probability clears the floor.
+	// 0.72 vs 0.28 clears both the floor and the 0.15 lead.
 	snake := map[string]any{"ask": map[string]any{
 		"choice":        "c0",
 		"confidence":    "0.1457",
@@ -113,6 +126,35 @@ func TestAskTargetFromAnswers(t *testing.T) {
 	}}
 	if got := askTargetFromAnswers(weak, keys); got != "" {
 		t.Fatalf("low choice probability should stay: %q", got)
+	}
+	// 0.504 used to clear 0.5. The floor is 0.55, so it stays even with a wide lead.
+	justOver := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.9",
+		"probabilities": map[string]any{"c0": "0.504", "none": "0.10"},
+	}}
+	if got := askTargetFromAnswers(justOver, keys); got != "" {
+		t.Fatalf("0.504 should stay: %q", got)
+	}
+	if got := askTargetFromAnswers(map[string]any{"ask": map[string]any{"choice": "c0", "confidence": 0.52}}, keys); got != "" {
+		t.Fatalf("0.52 confidence should stay: %q", got)
+	}
+	// A peak that clears 0.55 but does not lead the next option stays.
+	narrow := map[string]any{"ask": map[string]any{
+		"choice":        "c1",
+		"confidence":    0.9,
+		"probabilities": map[string]any{"c0": "0.41", "c1": "0.55", "none": "0.04"},
+	}}
+	if got := askTargetFromAnswers(narrow, keys); got != "" {
+		t.Fatalf("narrow lead should stay: %q", got)
+	}
+	lead := map[string]any{"ask": map[string]any{
+		"choice":        "c0",
+		"confidence":    "0.1457",
+		"probabilities": map[string]any{"c0": "0.70", "c1": "0.20", "none": "0.10"},
+	}}
+	if got := askTargetFromAnswers(lead, keys); got != "coder" {
+		t.Fatalf("clear lead should hand off: %q", got)
 	}
 }
 
@@ -159,8 +201,11 @@ func TestAskContextLabelsColleagueReply(t *testing.T) {
 	}
 	ask, _ := pack.Questions["ask"].(map[string]any)
 	inst, _ := ask["instructions"].(string)
-	if !strings.Contains(inst, "不算当前指派") || !strings.Contains(inst, "不得因为历史中曾经调用过某位同事") {
+	if !strings.Contains(inst, "不算指派") || !strings.Contains(inst, "不得因曾转某同事再选") || !strings.Contains(inst, "不确定选 none") {
 		t.Fatalf("instructions: %s", inst)
+	}
+	if !strings.Contains(pack.State, "勿作指派依据") {
+		t.Fatalf("history should not be assignment evidence:\n%s", pack.State)
 	}
 }
 
@@ -212,15 +257,33 @@ func TestAskDecisionStateStaysInsideLayaWindow(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a pack")
 	}
-	if !strings.HasPrefix(pack.State, "当前：帮我写个小游戏，贪吃蛇") {
+	if !strings.HasPrefix(pack.State, "当前：帮我写个小游戏，贪吃蛇\n（以下仅助解指代，勿作指派依据）\n会话：") {
 		t.Fatalf("latest ask dropped:\n%s", pack.State)
 	}
 	if runeLen(pack.State) > askRouteDecisionRunes {
 		t.Fatalf("state %d exceeds %d", runeLen(pack.State), askRouteDecisionRunes)
 	}
-	inst := pack.Questions["ask"].(map[string]any)["instructions"].(string)
+	ask := pack.Questions["ask"].(map[string]any)
+	inst := ask["instructions"].(string)
 	if runeLen(inst) > 220 {
 		t.Fatalf("instructions too long: %d %s", runeLen(inst), inst)
+	}
+	criteria := ask["criteria"].(map[string]string)
+	if !strings.HasPrefix(criteria["none"], askNoneCriteriaLead) {
+		t.Fatalf("none = %s", criteria["none"])
+	}
+	if runeLen(criteria["none"]) > runeLen(askNoneCriteriaLead)+askNoneJobRunes+1 {
+		t.Fatalf("none criteria too long: %d %s", runeLen(criteria["none"]), criteria["none"])
+	}
+	if !strings.Contains(criteria["c0"], "勿选") || strings.Contains(criteria["c0"], "host-ssh") {
+		t.Fatalf("c0 should be a clipped trigger, not the full job: %s", criteria["c0"])
+	}
+	qRunes := runeLen(inst)
+	for _, text := range criteria {
+		qRunes += runeLen(text)
+	}
+	if runeLen(pack.State)+qRunes > 1100 {
+		t.Fatalf("state+questions %d exceeds the Laya window", runeLen(pack.State)+qRunes)
 	}
 }
 
@@ -284,7 +347,7 @@ func TestApplyAskRouteResultDisablesRedo(t *testing.T) {
 		t.Fatal("parent run should know a colleague already delivered")
 	}
 	system, _ := payload["system_prompt"].(string)
-	if !strings.Contains(system, "不要再用自己的工具") {
+	if !strings.Contains(system, "不要再用自己的工具") || !strings.Contains(system, "不要整段复述") || !strings.Contains(system, "短接") {
 		t.Fatalf("note missing: %s", system)
 	}
 	history, _ := payload["messages"].([]runtimeMsg)
@@ -293,7 +356,152 @@ func TestApplyAskRouteResultDisablesRedo(t *testing.T) {
 	}
 	applyAskRouteResult(payload, "代码", "要哪个配色？", true)
 	system, _ = payload["system_prompt"].(string)
-	if !strings.Contains(system, "停下来等用户") {
+	if !strings.Contains(system, "停下来等用户") || !strings.Contains(system, "不要立刻再问") {
 		t.Fatalf("needs_user note missing: %s", system)
+	}
+}
+
+func TestAskPeerCandidatesDropSameJob(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障：改项目、查 bug"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+		{ID: "editor", Name: "润色", Description: "负责写东西与改稿：邮件、文档、文案"},
+		{ID: "coder2", Name: "码农二号", Description: "负责写代码与排障：改项目、查 bug"},
+		{ID: "blank", Name: "空", Description: "  "},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "你好"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	got := map[string]bool{}
+	for _, id := range pack.KeyToID {
+		got[id] = true
+	}
+	if !got["coder"] || !got["design"] || got["editor"] || got["coder2"] || got["writer"] {
+		t.Fatalf("KeyToID = %#v", pack.KeyToID)
+	}
+	if len(pack.KeyToID) != 2 {
+		t.Fatalf("want coder and design only, got %#v", pack.KeyToID)
+	}
+}
+
+func TestAskPeerCriteriaDescriptionOnly(t *testing.T) {
+	got := askPeerCriteria("负责界面设计，不改仓库")
+	if !strings.HasPrefix(got, "仅当最新句明确需要：负责界面设计，不改仓库") || strings.Contains(got, "点名/") || strings.Contains(got, "画板") {
+		t.Fatalf("criteria = %s", got)
+	}
+}
+
+func TestAskNameShortCircuitSkipsDecide(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+		{ID: "editor", Name: "润色", Description: "负责写东西与改稿：邮件、文档、文案"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	candidates := askPeerCandidates(self, peers)
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{"choice": "none", "confidence": "0.9"}}, nil
+	}
+	check := func(latest, want string, wantCall int) {
+		t.Helper()
+		called = 0
+		got, err := resolveAskRoute(context.Background(), latest, self, candidates, pack, decide)
+		if err != nil {
+			t.Fatalf("%s: %v", latest, err)
+		}
+		if got != want || called != wantCall {
+			t.Fatalf("%s: target=%q calls=%d, want %q calls=%d", latest, got, called, want, wantCall)
+		}
+	}
+	check("@码农 修空指针", "coder", 0)
+	check("登录接口空指针，帮我改代码修掉", "coder", 0)
+	check("点名画板做登录页", "design", 0)
+	check("点名 画板做登录页", "design", 0)
+	check("@CODER 修一下", "", 1)
+	coder := candidates[0]
+	coder.Name = "Coder"
+	check("@coder 修一下", "coder", 0)
+	coder.Name = "码农"
+	check("码农上次那句先别改，你帮我把开场改顺", "", 1)
+	history := []runtimeMsg{
+		{Role: "user", Content: "@码农 帮我写个计算器"},
+		{Role: "user", Content: "【码农】计算器页面已写好。"},
+		{Role: "user", Content: "今天晚饭吃什么"},
+	}
+	_, recent := splitAskContext(history)
+	check(askLatestUser(recent), "", 1)
+	check("@码农 @画板 你们一起看", "", 1)
+}
+
+func TestAskBareNameVetoStays(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{
+			"choice":        "c0",
+			"confidence":    "0.2",
+			"probabilities": map[string]any{"c0": "0.80", "c1": "0.10", "none": "0.10"},
+		}}, nil
+	}
+	latest := "码农上次那句先别改，你帮我把开场改顺"
+	got, err := resolveAskRoute(context.Background(), latest, self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || called != 1 {
+		t.Fatalf("bare mention target=%q calls=%d", got, called)
+	}
+}
+
+func TestAskKeywordShortCircuitSkipsDecide(t *testing.T) {
+	self := &db.Agent{ID: "writer", Name: "写手", Description: "负责写东西与改稿：邮件、文档、文案"}
+	peers := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "design", Name: "画板", Description: "负责界面设计，不改仓库"},
+	}
+	pack, ok := buildAskDecision(self, peers, []runtimeMsg{{Role: "user", Content: "在吗"}})
+	if !ok {
+		t.Fatal("expected a pack")
+	}
+	called := 0
+	decide := func(context.Context, any, map[string]any) (map[string]any, error) {
+		called++
+		return map[string]any{"ask": map[string]any{"choice": "none", "confidence": "0.9"}}, nil
+	}
+	latest := "登录接口空指针，帮我改代码修掉"
+	got, err := resolveAskRoute(context.Background(), latest, self, peers, pack, decide)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "coder" || called != 0 {
+		t.Fatalf("keyword target=%q calls=%d", got, called)
+	}
+	codingSelf := &db.Agent{ID: "writer", Name: "写手", Description: "负责写代码与改稿"}
+	if id := askKeywordPeer(latest, codingSelf, peers); id != "" {
+		t.Fatalf("self covering code should not short-circuit, got %s", id)
+	}
+	both := []*db.Agent{
+		{ID: "coder", Name: "码农", Description: "负责写代码与排障"},
+		{ID: "coder2", Name: "另一个", Description: "负责改 bug 和空指针"},
+	}
+	if id := askKeywordPeer(latest, self, both); id != "" {
+		t.Fatalf("two code peers should fall through, got %s", id)
 	}
 }
