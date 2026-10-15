@@ -1094,15 +1094,21 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_open",
             "description": (
-                "Open an application on a connected computer, such as 微信, Safari, or Visual Studio Code. "
-                "Pass the app name the user said. Runs immediately on that computer. "
+                "Check whether a named desktop app is installed, and open it, on a connected computer. "
+                "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code). "
+                "On Mac this resolves the .app by name under ~/Applications, /Applications, and "
+                "/System/Applications, then opens it; a result that includes app is the bundle that was found. "
+                "Use this — not host_shell or mdfind — for “is X installed?” and “open X”. "
                 "Pass machine_id when the user named a computer; otherwise omit it to use the current session computer."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "machine_id": {"type": "string"},
-                    "name": {"type": "string", "description": "Application name, for example 微信 or Terminal"},
+                    "name": {
+                        "type": "string",
+                        "description": "Application name the user said, for example 微信, VLC, or Terminal",
+                    },
                 },
                 "required": ["name"],
             },
@@ -1148,6 +1154,10 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "Run one local command on a connected computer. "
                 "For how to use it, load_skill host-shell "
                 "(file summaries: host-file-query; remote SSH: host-ssh). "
+                "To see if a desktop app is installed or to open it by name, call host_open first. "
+                "Do not search apps with mdfind and kMDItemKind == \"Application\": "
+                "Spotlight Kind is localized (on zh_CN it is 「应用程序」), "
+                "so an empty mdfind result does not mean the app is not installed. "
                 "If the result is waiting, it has not run; if denied, the user refused. "
                 "Do not claim otherwise. Stdout is truncated."
             ),

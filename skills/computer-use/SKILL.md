@@ -1,6 +1,6 @@
 ---
 name: computer-use
-description: Drive desktop GUI apps on a connected Mac via host_open, host_screenshot, and host_shell (osascript / System Events). Use when a task needs seeing or clicking in an app without an API/CLI.
+description: Drive desktop GUI apps on a connected Mac via host_open, host_screenshot, and host_shell (osascript / System Events). Use when a task needs seeing or clicking in an app without an API/CLI. Check-if-installed and open-by-name use host_open (resolves .app); do not mdfind by English kMDItemKind.
 ---
 
 # Computer Use（本机 GUI 自动化）
@@ -11,12 +11,14 @@ description: Drive desktop GUI apps on a connected Mac via host_open, host_scree
 
 | 任务 | 优先用 |
 |------|--------|
-| 打开 App | `host_open` |
+| 打开 App / 是否已安装 | `host_open`（按名字解析 `.app`） |
 | 看屏幕 | `host_screenshot`（图像附在工具结果里，直接根据画面回答） |
 | 改文件 | `host_read` / `host_write`（不要在编辑器窗口里打字） |
 | 跑命令 | `host_shell`（不要往 Terminal.app 里打字） |
 | 网页内容 | `http_fetch`；需要登录/交互时用 Playwright 脚本（见 `dogfood`） |
 | 备忘录 / 提醒事项 / 短信 | `apple-notes` / `apple-reminders` / `imessage` |
+
+查或打开 App 用 `host_open`，不要 `mdfind 'kMDItemKind == "Application"'`（Kind 随语言本地化，简体中文是「应用程序」；空结果不等于没安装）。
 
 只有原生 App 没有别的接口（设置面板、某些客户端按钮、原生对话框）时才用本 skill。
 
