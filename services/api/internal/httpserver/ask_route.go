@@ -159,15 +159,23 @@ func askDecisionRules(choices []askChoiceLine) string {
 }
 
 // askTargetFromAnswers maps a decision choice onto one colleague id.
-// none and unknown keys stay. With a probability map, the chosen option must
-// clear the floor and lead the next option. Without one, confidence is the floor.
+// none and unknown keys stay with the current bot. Entropy confidence below
+// the handoff floor is not a decision: the choice is ignored, including a
+// high p(none), so the session model can still hand off. On a trusted answer,
+// a probability map requires the chosen peer to clear the floor and lead the
+// next option. Without one, confidence is the floor.
 func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) string {
-	raw, _ := answers["ask"].(map[string]any)
+	raw := askAnswerRaw(answers)
 	if raw == nil {
 		return ""
 	}
 	choice := strings.TrimSpace(fmt.Sprint(raw["choice"]))
 	if choice == "" || choice == "<nil>" || strings.EqualFold(choice, "none") {
+		return ""
+	}
+	// Below-floor entropy confidence is not a Laya decision. Do not hand off
+	// on the option probability alone.
+	if askEntropyBelowFloor(raw) {
 		return ""
 	}
 	if !askChoiceClearsFloor(raw, choice) {
@@ -176,6 +184,36 @@ func askTargetFromAnswers(answers map[string]any, keyToID map[string]string) str
 	return strings.TrimSpace(keyToID[choice])
 }
 
+// askAnswerRaw is the "ask" choice object inside a Decide answers map.
+func askAnswerRaw(answers map[string]any) map[string]any {
+	if answers == nil {
+		return nil
+	}
+	raw, _ := answers["ask"].(map[string]any)
+	return raw
+}
+
+// askEntropyBelowFloor is true when Decide reported an entropy confidence
+// (1 − normalized entropy) under the handoff floor. A missing field is not
+// below the floor; older payloads still use the probability gate.
+// This reads the entropy field only, never max(confidence, p(choice)).
+func askEntropyBelowFloor(raw map[string]any) bool {
+	if raw == nil {
+		return false
+	}
+	score, ok := answerConfidence(raw["confidence"])
+	return ok && score < askHandoffConfidenceFloor
+}
+
+// askChoiceClearsFloor authorizes a handoff to the chosen peer after entropy
+// confidence has been accepted (absent, or at least the floor). When a
+// probability map is present, the chosen option must clear the floor and lead
+// the next option by the margin. That is the peer gate for a trusted answer,
+// including when confidence is high enough to keep the decision. A high
+// confidence does not override a narrow lead. p(choice) is never combined
+// with confidence via max(), so a moderately likely none cannot look like a
+// committed stay. Without a probability map, confidence itself is the floor.
+// A missing confidence does not block.
 func askChoiceClearsFloor(raw map[string]any, choice string) bool {
 	if chosen, second, ok := choiceProbabilityLead(raw["probabilities"], choice); ok {
 		return chosen+1e-9 >= askHandoffConfidenceFloor && chosen-second+1e-9 >= askHandoffProbabilityMargin
@@ -326,8 +364,9 @@ func askAssignsName(latestLower, nameLower string) bool {
 }
 
 // resolveAskRoute picks a colleague in order: explicit @/点名, one exclusive
-// specialty keyword, then the decision model. A bare name with no @/点名
-// cancels whatever the model picked.
+// specialty keyword, then the decision model. Entropy confidence below the
+// floor drops that Decide result: no peer handoff, and none is not a locked
+// stay. A bare name with no @/点名 cancels a trusted model pick.
 func resolveAskRoute(ctx context.Context, latest string, self *db.Agent, peers []*db.Agent, pack askDecisionPack, decide func(context.Context, any, map[string]any) (map[string]any, error)) (string, error) {
 	if id := askNamedPeer(latest, peers); id != "" {
 		return id, nil
@@ -344,6 +383,14 @@ func resolveAskRoute(ctx context.Context, latest string, self *db.Agent, peers [
 	answers, err := decide(ctx, pack.State, pack.Questions)
 	if err != nil {
 		return "", err
+	}
+	// Low entropy confidence is not a Laya/Unsloth decision. Ignore the
+	// choice, including none: do not hand off, and do not treat a high
+	// p(none) as a stay the session model must obey. The caller leaves the
+	// payload unchanged, so the main turn still has the job text, the peer
+	// brief, and ask_agent.
+	if askEntropyBelowFloor(askAnswerRaw(answers)) {
+		return "", nil
 	}
 	target := askTargetFromAnswers(answers, pack.KeyToID)
 	if target != "" && askBareNameVeto(latest, peers) {
@@ -685,8 +732,9 @@ func applyAskRouteResult(payload map[string]any, colleagueName, reply string, ne
 }
 
 // routeAskColleague decides once, before the parent run, whether this DM turn
-// should ask one colleague. Provider off, timeout, or no match leaves the
-// payload unchanged so the parent model can still call ask_agent itself.
+// should ask one colleague. Provider off, timeout, no match, choice none, or
+// a below-floor Decide confidence leaves the payload unchanged so the parent
+// model can still call ask_agent itself.
 func (s *Server) routeAskColleague(ctx context.Context, payload map[string]any) {
 	if s == nil || s.db == nil || payload == nil {
 		return
