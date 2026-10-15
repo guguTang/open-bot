@@ -1255,6 +1255,9 @@ func (s *Server) handleDeleteConversation(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if err := s.sandboxMgr().DeleteStored(r.Context(), uid, id, ""); err != nil {
+		log.Printf("sandbox delete conversation %s: %v", id, err)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

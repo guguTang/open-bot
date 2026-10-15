@@ -56,6 +56,7 @@ def ensure(
     agent_id: str | None = None,
     mode: str | None = None,
     desktop: bool = False,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"user_id": user_id}
     if agent_id:
@@ -64,6 +65,8 @@ def ensure(
         payload["mode"] = mode
     if desktop:
         payload["desktop"] = True
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     return _post("/internal/sandbox/ensure", payload)
 
 
@@ -74,6 +77,7 @@ def shell(
     workdir: str | None = None,
     timeout_sec: int | None = None,
     agent_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"user_id": user_id, "cmd": cmd}
     if workdir:
@@ -82,6 +86,8 @@ def shell(
         payload["timeout_sec"] = int(timeout_sec)
     if agent_id:
         payload["agent_id"] = agent_id
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     return _post("/internal/sandbox/exec", payload, timeout=float((timeout_sec or 30) + 15))
 
 
@@ -91,12 +97,15 @@ def read_file(
     *,
     agent_id: str | None = None,
     mode: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"user_id": user_id, "path": path}
     if agent_id:
         payload["agent_id"] = agent_id
     if mode:
         payload["mode"] = mode
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     return _post("/internal/sandbox/read", payload)
 
 
@@ -107,6 +116,7 @@ def write_file(
     *,
     agent_id: str | None = None,
     mode: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "user_id": user_id,
@@ -117,6 +127,8 @@ def write_file(
         payload["agent_id"] = agent_id
     if mode:
         payload["mode"] = mode
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     return _post("/internal/sandbox/write", payload)
 
 
@@ -126,12 +138,15 @@ def list_dir(
     *,
     agent_id: str | None = None,
     mode: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"user_id": user_id, "path": path or "/workspace"}
     if agent_id:
         payload["agent_id"] = agent_id
     if mode:
         payload["mode"] = mode
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     return _post("/internal/sandbox/ls", payload)
 
 

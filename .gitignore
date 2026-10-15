@@ -40,8 +40,10 @@ apps/mobile/android/app/src/main/assets/capacitor.config.json
 apps/mobile/android/app/src/main/assets/capacitor.plugins.json
 apps/mobile/android/capacitor-cordova-android-plugins/
 apps/mobile/ios/capacitor-cordova-ios-plugins/
-# Sandbox computer host volumes
+# Sandbox computer host volumes (hot working dir; durable copy is MinIO)
 data/sandboxes/
+# API cwd when OPEN_BOT_ROOT is unset (go run from services/api)
+services/api/data/
 
 # chat attachment uploads
 data/uploads/

@@ -1156,6 +1156,7 @@ async def openai_path(
                     sbx.ensure(
                         str(user_id or ""),
                         agent_id=str(agent_id or "") or None,
+                        conversation_id=str(conversation_id or "") or None,
                     ),
                     ensure_ascii=False,
                 )
@@ -1172,6 +1173,7 @@ async def openai_path(
                         workdir=(str(args["workdir"]) if args.get("workdir") else None),
                         timeout_sec=(int(args["timeout_sec"]) if args.get("timeout_sec") is not None else None),
                         agent_id=str(agent_id or "") or None,
+                        conversation_id=str(conversation_id or "") or None,
                     ),
                     ensure_ascii=False,
                 )
@@ -1186,6 +1188,7 @@ async def openai_path(
                         str(user_id or ""),
                         str(args.get("path") or ""),
                         agent_id=str(agent_id or "") or None,
+                        conversation_id=str(conversation_id or "") or None,
                     ),
                     ensure_ascii=False,
                 )
@@ -1201,6 +1204,7 @@ async def openai_path(
                         str(args.get("path") or ""),
                         str(args.get("content") or ""),
                         agent_id=str(agent_id or "") or None,
+                        conversation_id=str(conversation_id or "") or None,
                     ),
                     ensure_ascii=False,
                 )
@@ -1215,6 +1219,7 @@ async def openai_path(
                         str(user_id or ""),
                         str(args.get("path") or "/workspace"),
                         agent_id=str(agent_id or "") or None,
+                        conversation_id=str(conversation_id or "") or None,
                     ),
                     ensure_ascii=False,
                 )

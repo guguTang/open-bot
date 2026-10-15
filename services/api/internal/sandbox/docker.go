@@ -42,6 +42,7 @@ type Config struct {
 	CPUs         float64
 	NetworkMode  string // "" = default bridge; "none" for lockdown demos
 	DockerBin    string
+	ObjectStore  ObjectConfig
 }
 
 func LoadConfig() Config {
@@ -104,16 +105,23 @@ func LoadConfig() Config {
 		CPUs:         cpus,
 		NetworkMode:  net,
 		DockerBin:    bin,
+		ObjectStore:  loadObjectConfig(),
 	}
 }
 
 // Manager is the Docker CLI implementation of Provider.
+// objects is the durable MinIO store. Nil means local disk only.
 type Manager struct {
-	Cfg Config
+	Cfg     Config
+	objects ObjectStore
 }
 
 func NewManager(cfg Config) *Manager {
-	return &Manager{Cfg: cfg}
+	m := &Manager{Cfg: cfg}
+	if cfg.ObjectStore.Enabled() {
+		m.objects = NewMinIOStore(cfg.ObjectStore)
+	}
+	return m
 }
 
 func SanitizeUserID(userID string) string {
@@ -199,7 +207,7 @@ func (m *Manager) inspect(ctx context.Context, nameOrID string) (*containerInspe
 
 // Ensure brings up the per-user container with team/private layout.
 // Soft-fails docker unavailability via ErrDockerUnavailable.
-// If workspace is empty and a checkpoint exists, Restore runs first.
+// If the hot dir is empty, hydrate the latest MinIO copy first, then a local checkpoint.
 // When req.Desktop is true, starts/reuses a desktop image with noVNC published on localhost
 // and fills Instance.DesktopPort / DesktopToken. Explicit desktop requests do not silently
 // fall back to the CLI image (callers get a clear error instead).
@@ -214,6 +222,14 @@ func (m *Manager) Ensure(ctx context.Context, req EnsureRequest) (*Instance, err
 	mountRoot, err := m.EnsureLayout(userID, agentID, mode)
 	if err != nil {
 		return nil, err
+	}
+
+	// Durable copy lives in MinIO. Pull it onto the hot dir before the local
+	// checkpoint restore so a wiped disk still comes back.
+	if !hasLiveData(m.UserHomeHost(userID)) {
+		if herr := m.HydrateLatest(ctx, userID); herr != nil {
+			logHydrateErr(userID, herr)
+		}
 	}
 
 	restored := ""
@@ -463,10 +479,14 @@ func (m *Manager) PurgeUserHome(ctx context.Context, userID string) error {
 	if home == "" || home == m.Cfg.DataRoot || home == "/" {
 		return fmt.Errorf("refusing to remove unsafe home path")
 	}
-	if err := os.RemoveAll(home); err != nil {
-		return err
+	var errs []error
+	if err := m.DeleteStored(ctx, userID, "", ""); err != nil {
+		errs = append(errs, err)
 	}
-	return nil
+	if err := os.RemoveAll(home); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // Destroy stops and removes the container but keeps host data (and takes a checkpoint).
@@ -713,9 +733,14 @@ func (m *Manager) resolveReadHost(op FileOp) (string, error) {
 		return "", err
 	}
 
+	tryErr := error(nil)
 	tryWP := func(workspacePath string) (string, bool) {
 		h, e := m.HostPathForMount(mount, workspacePath)
 		if e != nil {
+			return "", false
+		}
+		if err := m.materializeFile(op.ctx(), op, h); err != nil && !isNotFound(err) {
+			tryErr = err
 			return "", false
 		}
 		return hostExists(h)
@@ -737,6 +762,18 @@ func (m *Manager) resolveReadHost(op FileOp) (string, error) {
 		if h, ok := m.findBareInBots(mount, filepath.Base(wp), op.AgentID); ok {
 			return h, nil
 		}
+		// findBareInBots only sees local files. Materialize a direct bots/{agent} candidate.
+		if aid := SanitizeUserID(op.AgentID); aid != "" && aid != "unknown" {
+			cand := filepath.Join(mount, "bots", aid, filepath.Base(wp))
+			if err := m.materializeFile(op.ctx(), op, cand); err != nil && !isNotFound(err) {
+				tryErr = err
+			} else if h, ok := hostExists(cand); ok {
+				return h, nil
+			}
+		}
+	}
+	if tryErr != nil {
+		return "", tryErr
 	}
 
 	// Fall back to original host path so callers get a normal NotExist error.
@@ -836,7 +873,11 @@ func (m *Manager) WriteFile(op FileOp, content string) error {
 	if err := os.MkdirAll(filepath.Dir(host), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(host, []byte(content), 0o644)
+	body := []byte(content)
+	if err := os.WriteFile(host, body, 0o644); err != nil {
+		return err
+	}
+	return m.publishBytes(op.ctx(), op, host, body)
 }
 
 type DirEntry struct {
@@ -852,7 +893,15 @@ func (m *Manager) ListDir(op FileOp) ([]DirEntry, error) {
 	}
 	entries, err := os.ReadDir(host)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return m.listStoredDir(op.ctx(), op, host)
+		}
 		return nil, err
+	}
+	if len(entries) == 0 {
+		if stored, e := m.listStoredDir(op.ctx(), op, host); e == nil && len(stored) > 0 {
+			return stored, nil
+		}
 	}
 	out := make([]DirEntry, 0, len(entries))
 	for _, e := range entries {

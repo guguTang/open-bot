@@ -934,7 +934,7 @@ func (s *Server) loadGmailAttachments(userID, agentID string, specs []gmailAttac
 		if err != nil {
 			return nil, nil, fmt.Errorf("附件路径无效 %q: %v", p, err)
 		}
-		op := s.fileOpFrom(userID, agentID, "", wp)
+		op := s.fileOpFrom(context.Background(), userID, agentID, "", wp, "")
 		f, st, err := s.sandboxMgr().OpenWorkspaceFile(op)
 		if err != nil {
 			return nil, nil, fmt.Errorf("无法读取附件 %s: %v", wp, err)

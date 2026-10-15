@@ -53,11 +53,14 @@ type Instance struct {
 }
 
 // FileOp carries optional agent context so team-mode writes land under bots/{agent_id}/.
+// ConversationID keys the durable object copy; empty publishes only the latest copy.
 type FileOp struct {
-	UserID  string
-	AgentID string
-	Mode    ComputerMode
-	Path    string
+	UserID         string
+	AgentID        string
+	ConversationID string
+	Mode           ComputerMode
+	Path           string
+	Ctx            context.Context
 }
 
 // Provider is the sandbox backend contract. Docker remains the first implementation;

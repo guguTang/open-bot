@@ -55,6 +55,9 @@ func (m *Manager) Checkpoint(ctx context.Context, userID string) (string, error)
 	if err := os.WriteFile(marker, []byte(ts+"\n"), 0o644); err != nil {
 		return "", err
 	}
+	if err := m.PublishLive(ctx, userID, ""); err != nil {
+		return dst, err
+	}
 	return dst, nil
 }
 
