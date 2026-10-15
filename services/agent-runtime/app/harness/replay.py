@@ -18,6 +18,7 @@ _SAFE_DEFAULT = frozenset(
         "sandbox_read",
         "host_ls",
         "host_read",
+        "host_screenshot",
         "host_ssh_ls",
         "host_ssh_read",
         "time_now",

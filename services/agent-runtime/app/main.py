@@ -1242,6 +1242,7 @@ async def openai_path(
             "host_delete",
             "host_move",
             "host_open",
+            "host_screenshot",
             "host_shell",
             "host_ssh_ls",
             "host_ssh_read",
@@ -1294,6 +1295,30 @@ async def openai_path(
                 if name == "host_delete":
                     path = _host_delete_paths(args)
                     dest = str(args.get("dest") or "")
+                elif name == "host_screenshot":
+                    scope = str(args.get("scope") or "main").strip().lower() or "main"
+                    if scope not in ("main", "all"):
+                        return json.dumps(
+                            {"ok": False, "error": "scope 只能是 main 或 all"},
+                            ensure_ascii=False,
+                        )
+                    path = scope
+                    dest = ""
+                    raw_display = args.get("display")
+                    if raw_display is not None and str(raw_display).strip() != "":
+                        try:
+                            display = int(raw_display)
+                        except (TypeError, ValueError):
+                            return json.dumps(
+                                {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                ensure_ascii=False,
+                            )
+                        if display < 1 or display > 16:
+                            return json.dumps(
+                                {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                ensure_ascii=False,
+                            )
+                        dest = str(display)
                 else:
                     path = str(args.get("path") or args.get("name") or args.get("command") or "")
                     dest = str(args.get("dest") or "")

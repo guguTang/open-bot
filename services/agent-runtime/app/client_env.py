@@ -274,6 +274,7 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "host_delete": "删除本机文件",
     "host_move": "移动本机文件",
     "host_open": "打开软件",
+    "host_screenshot": "截取屏幕",
     "host_shell": "在本机运行命令",
     "host_ssh_ls": "列出远程目录",
     "host_ssh_read": "读取远程文件",

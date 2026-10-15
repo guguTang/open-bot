@@ -119,6 +119,8 @@ export function toolLabelForHostOp(op: string, path = ""): string {
       return "host_read";
     case "open":
       return "host_open";
+    case "screenshot":
+      return "host_screenshot";
     case "email_send":
       return "gmail_send";
     default:

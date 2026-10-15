@@ -34,6 +34,16 @@ description = "Enables the host_open command."
 commands.allow = ["host_open"]
 
 [[permission]]
+identifier = "allow-host-screenshot"
+description = "Enables the host_screenshot command."
+commands.allow = ["host_screenshot"]
+
+[[permission]]
+identifier = "allow-host-open-privacy"
+description = "Enables opening the macOS Privacy pane from desktop settings."
+commands.allow = ["host_open_privacy"]
+
+[[permission]]
 identifier = "allow-host-shell"
 description = "Enables the host_shell command."
 commands.allow = ["host_shell"]

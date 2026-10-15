@@ -128,6 +128,8 @@ func classifyHostExecReview(op, path, dest string) hostExecReview {
 	switch op {
 	case "ls", "read", "ssh_ls", "ssh_read", "open":
 		return hostExecReview{Tier: hostExecReviewAuto, Reason: "只读/可逆操作，Auto-review 自动放行", Code: "readonly_op"}
+	case "screenshot":
+		return hostExecReview{Tier: hostExecReviewAuto, Reason: "截取屏幕是只读操作，Auto-review 自动放行", Code: "screenshot"}
 	case "write":
 		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "写入本机文件，需你确认", Code: "write"}
 	case "delete":
@@ -789,6 +791,8 @@ func hostOpChineseLabel(op string) string {
 	switch strings.TrimSpace(op) {
 	case "ls", "read", "open":
 		return "本机只读 打开文件 列表"
+	case "screenshot":
+		return "截取屏幕 屏幕录制"
 	case "write":
 		return "写入本机文件"
 	case "delete":
@@ -894,4 +898,3 @@ func classifyHostExecReviewForMachine(op, path, dest string, settings db.UserSet
 		Code:   "exec_policy_allow",
 	}
 }
-

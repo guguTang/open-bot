@@ -88,6 +88,14 @@ function actionCopy(item: HostConfirmPayload): ActionCopy {
       danger: true,
     };
   }
+  if (item.op === "screenshot") {
+    const where = item.dest
+      ? `显示器 ${item.dest}`
+      : item.path === "all"
+        ? "全部屏幕"
+        : "主屏幕";
+    return { title: "截取屏幕？", detail: where, danger: false };
+  }
   if (item.op === "email_send") {
     const attachLine = (item.preview || "")
       .split("\n")

@@ -581,6 +581,7 @@ function buildAutoReviewHaystack(op: string, path: string, dest: string, reason:
     ls: "本机只读 打开文件 列表",
     read: "本机只读 打开文件 列表",
     open: "本机只读 打开文件 列表",
+    screenshot: "截取屏幕 屏幕录制",
     write: "写入本机文件",
     delete: "删除本机文件",
     move: "移动重命名",
@@ -697,6 +698,8 @@ export function classifyHostExecReview(op: string, path = "", dest = ""): HostEx
     case "ssh_read":
     case "open":
       return { tier: "auto", reason: "只读/可逆操作，Auto-review 自动放行", code: "readonly_op" };
+    case "screenshot":
+      return { tier: "auto", reason: "截取屏幕是只读操作，Auto-review 自动放行", code: "screenshot" };
     case "write":
       return { tier: "confirm", reason: "写入本机文件，需你确认", code: "write" };
     case "delete":

@@ -137,6 +137,8 @@ func TestClassifyHostExecReview_Tiers(t *testing.T) {
 		{"read", "~/a", "", hostExecReviewAuto, "readonly_op"},
 		{"ssh_ls", "/tmp", "", hostExecReviewAuto, "readonly_op"},
 		{"open", "Safari", "", hostExecReviewAuto, "readonly_op"},
+		{"screenshot", "main", "", hostExecReviewAuto, "screenshot"},
+		{"screenshot", "", "2", hostExecReviewAuto, "screenshot"},
 		{"shell", "ls -la", "", hostExecReviewAuto, "shell_auto"},
 		{"shell", "cd ~/Downloads", "", hostExecReviewAuto, "shell_auto"},
 		{"shell", "pwd", "", hostExecReviewAuto, "shell_auto"},

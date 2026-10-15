@@ -1,5 +1,6 @@
-import type { KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import type { Machine } from "../../api";
+import { openDesktopPrivacyPane, shouldShowDesktopCapturePermissions } from "../../lib/desktopPrivacy";
 import {
   type ClientContext,
   isLoginOnlyMachine,
@@ -70,6 +71,50 @@ type CurrentMachineSectionProps = Pick<
   | "onSaveCurrentMachineName"
   | "onHostExecPolicyChange"
 >;
+
+function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  if (!shouldShowDesktopCapturePermissions(clientEnv)) return null;
+
+  const open = (pane: "screen" | "accessibility") => {
+    setBusy(true);
+    setMsg("");
+    void openDesktopPrivacyPane(pane)
+      .catch((err: unknown) => {
+        setMsg(err instanceof Error ? err.message : "无法打开系统设置");
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <SettingsSection title="屏幕录制与辅助功能">
+      <SettingsCard padded>
+        <FieldGroup>
+          <FieldDescription>
+            助手要看到这台 Mac 的画面，需要在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Open Bot。
+            通过辅助功能点按钮、读控件时，还要允许「辅助功能」。授权后回到对话里再试一次。手机和浏览器不能截这台电脑的屏幕。
+          </FieldDescription>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => open("screen")}>
+              打开「屏幕录制」
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => open("accessibility")}
+            >
+              打开「辅助功能」
+            </Button>
+          </div>
+          {msg ? <FieldDescription>{msg}</FieldDescription> : null}
+        </FieldGroup>
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
 
 function CurrentMachineSection({
   clientEnv,
@@ -266,6 +311,8 @@ export function MachinesSettingsTab({
         onSaveCurrentMachineName={onSaveCurrentMachineName}
         onHostExecPolicyChange={onHostExecPolicyChange}
       />
+
+      <DesktopCapturePermissions clientEnv={clientEnv} />
 
       <SettingsSection
         title="已注册"

@@ -14,6 +14,8 @@ pub fn run() {
             host_fs::host_delete,
             host_fs::host_move,
             host_cmd::host_open,
+            host_cmd::host_screenshot,
+            host_cmd::host_open_privacy,
             host_cmd::host_shell,
             host_cmd::host_device_name,
             host_cmd::host_machine_id,
