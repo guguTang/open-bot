@@ -106,7 +106,7 @@ make sandbox-image   # 构建 openbot-sandbox:dev
 # 设置 → 沙箱电脑；或 curl JWT /v1/sandbox/ensure + /exec
 ```
 
-详见 [docs/沙箱电脑.md](docs/沙箱电脑.md)。环境变量：`SANDBOX_ENABLED` / `SANDBOX_IMAGE` / `SANDBOX_DATA_ROOT` / `SANDBOX_MEMORY_MB` / `SANDBOX_CPUS`。
+详见 [docs/沙箱电脑.md](docs/沙箱电脑.md)。环境变量：`SANDBOX_ENABLED` / `SANDBOX_IMAGE` / `SANDBOX_DATA_ROOT` / `SANDBOX_S3_ENDPOINT`（MinIO，不设则只用本地盘）/ `SANDBOX_MEMORY_MB` / `SANDBOX_CPUS`。
 
 ### 环境变量要点
 

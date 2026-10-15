@@ -99,10 +99,11 @@ export async function execSandbox(body: {
 
 export async function downloadSandboxFile(
   path: string,
-  opts?: { agent_id?: string },
+  opts?: { agent_id?: string; conversation_id?: string },
 ): Promise<void> {
   const q = new URLSearchParams({ path });
   if (opts?.agent_id) q.set("agent_id", opts.agent_id);
+  if (opts?.conversation_id) q.set("conversation_id", opts.conversation_id);
   const res = await fetch(`${API_BASE}/v1/sandbox/files/download?${q.toString()}`, {
     headers: authHeaders(),
   });
@@ -115,10 +116,11 @@ export async function downloadSandboxFile(
 
 export async function readSandboxFile(
   path: string,
-  opts?: { agent_id?: string },
+  opts?: { agent_id?: string; conversation_id?: string },
 ): Promise<{ path: string; content: string }> {
   const q = new URLSearchParams({ path });
   if (opts?.agent_id) q.set("agent_id", opts.agent_id);
+  if (opts?.conversation_id) q.set("conversation_id", opts.conversation_id);
   const res = await fetch(`${API_BASE}/v1/sandbox/files?${q.toString()}`, {
     headers: authHeaders(),
   });
@@ -126,21 +128,36 @@ export async function readSandboxFile(
   return res.json();
 }
 
-export async function writeSandboxFile(path: string, content: string): Promise<{ ok: boolean; path: string }> {
+export async function writeSandboxFile(
+  path: string,
+  content: string,
+  opts?: { agent_id?: string; conversation_id?: string },
+): Promise<{ ok: boolean; path: string }> {
   const res = await fetch(`${API_BASE}/v1/sandbox/files`, {
     method: "PUT",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ path, content }),
+    body: JSON.stringify({
+      path,
+      content,
+      agent_id: opts?.agent_id,
+      conversation_id: opts?.conversation_id,
+    }),
   });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
 }
 
-export async function listSandbox(path = "/workspace"): Promise<{
+export async function listSandbox(
+  path = "/workspace",
+  opts?: { agent_id?: string; conversation_id?: string },
+): Promise<{
   path: string;
   entries: SandboxDirEntry[];
 }> {
-  const res = await fetch(`${API_BASE}/v1/sandbox/ls?path=${encodeURIComponent(path)}`, {
+  const q = new URLSearchParams({ path });
+  if (opts?.agent_id) q.set("agent_id", opts.agent_id);
+  if (opts?.conversation_id) q.set("conversation_id", opts.conversation_id);
+  const res = await fetch(`${API_BASE}/v1/sandbox/ls?${q.toString()}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(await readError(res));

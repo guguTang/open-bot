@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"net/http/httputil"
@@ -304,10 +305,11 @@ func (s *Server) handleCheckpointSandbox(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleExecSandbox(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	var body struct {
-		Cmd        string `json:"cmd"`
-		Workdir    string `json:"workdir"`
-		TimeoutSec int    `json:"timeout_sec"`
-		AgentID    string `json:"agent_id"`
+		Cmd            string `json:"cmd"`
+		Workdir        string `json:"workdir"`
+		TimeoutSec     int    `json:"timeout_sec"`
+		AgentID        string `json:"agent_id"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -321,22 +323,27 @@ func (s *Server) handleExecSandbox(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	if perr := s.sandboxMgr().PublishLive(r.Context(), uid, body.ConversationID); perr != nil {
+		log.Printf("sandbox publish user %s conv %s: %v", uid, body.ConversationID, perr)
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (s *Server) fileOpFrom(uid, agentID, mode, path string) sandbox.FileOp {
+func (s *Server) fileOpFrom(ctx context.Context, uid, agentID, mode, path, conversationID string) sandbox.FileOp {
 	return sandbox.FileOp{
-		UserID:  uid,
-		AgentID: agentID,
-		Mode:    s.resolveComputerMode(uid, agentID, mode),
-		Path:    path,
+		UserID:         uid,
+		AgentID:        agentID,
+		ConversationID: conversationID,
+		Mode:           s.resolveComputerMode(uid, agentID, mode),
+		Path:           path,
+		Ctx:            ctx,
 	}
 }
 
 func (s *Server) handleReadSandboxFile(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	path := r.URL.Query().Get("path")
-	op := s.fileOpFrom(uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path)
+	op := s.fileOpFrom(r.Context(), uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path, r.URL.Query().Get("conversation_id"))
 	content, err := s.sandboxMgr().ReadFile(op, sandbox.MaxExecOutputBytes)
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
@@ -351,7 +358,7 @@ func (s *Server) handleReadSandboxFile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDownloadSandboxFile(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	path := r.URL.Query().Get("path")
-	op := s.fileOpFrom(uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path)
+	op := s.fileOpFrom(r.Context(), uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path, r.URL.Query().Get("conversation_id"))
 	f, st, err := s.sandboxMgr().OpenWorkspaceFile(op)
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
@@ -410,10 +417,11 @@ func contentDispositionAttachment(name string) string {
 func (s *Server) handleWriteSandboxFile(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	var body struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-		AgentID string `json:"agent_id"`
-		Mode    string `json:"mode"`
+		Path           string `json:"path"`
+		Content        string `json:"content"`
+		AgentID        string `json:"agent_id"`
+		Mode           string `json:"mode"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -423,7 +431,7 @@ func (s *Server) handleWriteSandboxFile(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path required"})
 		return
 	}
-	op := s.fileOpFrom(uid, body.AgentID, body.Mode, body.Path)
+	op := s.fileOpFrom(r.Context(), uid, body.AgentID, body.Mode, body.Path, body.ConversationID)
 	if err := s.sandboxMgr().WriteFile(op, body.Content); err != nil {
 		if writeSandboxDockerErr(w, err) {
 			return
@@ -444,7 +452,7 @@ func (s *Server) handleListSandbox(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/workspace"
 	}
-	op := s.fileOpFrom(uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path)
+	op := s.fileOpFrom(r.Context(), uid, r.URL.Query().Get("agent_id"), r.URL.Query().Get("mode"), path, r.URL.Query().Get("conversation_id"))
 	entries, err := s.sandboxMgr().ListDir(op)
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
@@ -567,11 +575,12 @@ func (s *Server) handleInternalSandboxEnsure(w http.ResponseWriter, r *http.Requ
 
 func (s *Server) handleInternalSandboxExec(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID     string `json:"user_id"`
-		Cmd        string `json:"cmd"`
-		Workdir    string `json:"workdir"`
-		TimeoutSec int    `json:"timeout_sec"`
-		AgentID    string `json:"agent_id"`
+		UserID         string `json:"user_id"`
+		Cmd            string `json:"cmd"`
+		Workdir        string `json:"workdir"`
+		TimeoutSec     int    `json:"timeout_sec"`
+		AgentID        string `json:"agent_id"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -583,6 +592,11 @@ func (s *Server) handleInternalSandboxExec(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	res, err := s.sandboxMgr().Exec(r.Context(), uid, body.Cmd, body.Workdir, body.TimeoutSec)
+	if err == nil {
+		if perr := s.sandboxMgr().PublishLive(r.Context(), uid, body.ConversationID); perr != nil {
+			log.Printf("sandbox publish user %s conv %s: %v", uid, body.ConversationID, perr)
+		}
+	}
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
 			return
@@ -595,10 +609,11 @@ func (s *Server) handleInternalSandboxExec(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleInternalSandboxRead(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID  string `json:"user_id"`
-		Path    string `json:"path"`
-		AgentID string `json:"agent_id"`
-		Mode    string `json:"mode"`
+		UserID         string `json:"user_id"`
+		Path           string `json:"path"`
+		AgentID        string `json:"agent_id"`
+		Mode           string `json:"mode"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -609,7 +624,7 @@ func (s *Server) handleInternalSandboxRead(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id required"})
 		return
 	}
-	op := s.fileOpFrom(uid, body.AgentID, body.Mode, body.Path)
+	op := s.fileOpFrom(r.Context(), uid, body.AgentID, body.Mode, body.Path, body.ConversationID)
 	content, err := s.sandboxMgr().ReadFile(op, sandbox.MaxExecOutputBytes)
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
@@ -623,11 +638,12 @@ func (s *Server) handleInternalSandboxRead(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleInternalSandboxWrite(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID  string `json:"user_id"`
-		Path    string `json:"path"`
-		Content string `json:"content"`
-		AgentID string `json:"agent_id"`
-		Mode    string `json:"mode"`
+		UserID         string `json:"user_id"`
+		Path           string `json:"path"`
+		Content        string `json:"content"`
+		AgentID        string `json:"agent_id"`
+		Mode           string `json:"mode"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -638,7 +654,7 @@ func (s *Server) handleInternalSandboxWrite(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and path required"})
 		return
 	}
-	op := s.fileOpFrom(uid, body.AgentID, body.Mode, body.Path)
+	op := s.fileOpFrom(r.Context(), uid, body.AgentID, body.Mode, body.Path, body.ConversationID)
 	if err := s.sandboxMgr().WriteFile(op, body.Content); err != nil {
 		if writeSandboxDockerErr(w, err) {
 			return
@@ -655,10 +671,11 @@ func (s *Server) handleInternalSandboxWrite(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleInternalSandboxLS(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID  string `json:"user_id"`
-		Path    string `json:"path"`
-		AgentID string `json:"agent_id"`
-		Mode    string `json:"mode"`
+		UserID         string `json:"user_id"`
+		Path           string `json:"path"`
+		AgentID        string `json:"agent_id"`
+		Mode           string `json:"mode"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -673,7 +690,7 @@ func (s *Server) handleInternalSandboxLS(w http.ResponseWriter, r *http.Request)
 	if path == "" {
 		path = "/workspace"
 	}
-	op := s.fileOpFrom(uid, body.AgentID, body.Mode, path)
+	op := s.fileOpFrom(r.Context(), uid, body.AgentID, body.Mode, path, body.ConversationID)
 	entries, err := s.sandboxMgr().ListDir(op)
 	if err != nil {
 		if writeSandboxDockerErr(w, err) {
