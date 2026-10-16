@@ -107,8 +107,13 @@ export function NewChatPopover({
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
+      const safeTop =
+        Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue("--safe-top"),
+        ) || 0;
+      const panelH = Math.min(520, window.innerHeight - 24 - safeTop);
       const left = Math.min(r.right + 12, window.innerWidth - 380);
-      const top = Math.max(12, Math.min(r.top - 4, window.innerHeight - 520));
+      const top = Math.max(12 + safeTop, Math.min(r.top - 4, window.innerHeight - panelH));
       setPos({ top, left: Math.max(12, left) });
     };
     place();
@@ -209,10 +214,13 @@ export function NewChatPopover({
       className={cn(
         "border-none p-0 text-inherit",
         sheetForm
-          ? "action-sheet-root pointer-events-auto z-60 flex max-h-none max-w-none flex-col justify-end bg-transparent"
-          : "pointer-events-auto fixed z-40 m-0 flex max-h-[min(640px,calc(100vh-24px))] w-[min(360px,calc(100vw-24px))] max-w-none flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-(--bg-elevated) p-2.5 shadow-(--shadow-lg)",
-        sheetForm &&
-          "relative top-auto! right-auto! left-auto! m-0 max-h-[min(90dvh,90vh)] w-full! max-w-full! gap-0 rounded-t-2xl rounded-b-none px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
+          ? // Full-bleed root (CSS): fixed inset-0 h-full. Do not add relative/max-h on
+            // <dialog> — UA height:fit-content + flex-1 min-h-0 collapses the sheet.
+            "action-sheet-root"
+          : // Explicit h overrides native <dialog> UA height:fit-content so flex-1
+            // min-h-0 children get a definite height (same trap as diagram FS lightbox).
+            // Reserve --safe-top for desktop/macOS titlebar / safe-area inset.
+            "pointer-events-auto fixed z-40 m-0 flex h-[min(520px,calc(100vh-24px-var(--safe-top,0px)))] max-h-[min(640px,calc(100vh-24px-var(--safe-top,0px)))] w-[min(360px,calc(100vw-24px))] max-w-none flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-(--bg-elevated) p-2.5 shadow-(--shadow-lg)",
       )}
       style={panelStyle}
       aria-label="选择助手"
@@ -222,7 +230,9 @@ export function NewChatPopover({
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-hidden",
           sheetForm &&
-            "relative z-1 max-h-[min(90dvh,90vh)] w-full gap-0 bg-(--bg-elevated)",
+            // Sheet panel sits in action-sheet-root (justify-end); max-h keeps it usable
+            // above safe-area / titlebar without collapsing the dialog root.
+            "relative z-1 max-h-[min(90dvh,90vh)] w-full gap-0 rounded-t-2xl bg-(--bg-elevated) px-3 pb-[calc(10px+var(--safe-bottom,0px))] pt-0",
         )}
       >
         {sheetForm ? (
