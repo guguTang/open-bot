@@ -48,6 +48,9 @@ class AgentState(TypedDict):
     reset_seq: int  # model context starts after this journal seq (0 = none)
     compaction_retries: int
     extension_names: list[str]
+    # Markdown image snippets to auto-append to the final assistant reply
+    # (e.g. ![](/v1/conversations/{id}/attachments/{aid})).
+    present_images: list[str]
 
 
 def initial_state(
@@ -89,6 +92,7 @@ def initial_state(
         "reset_seq": 0,
         "compaction_retries": 0,
         "extension_names": [],
+        "present_images": [],
     }
 
 

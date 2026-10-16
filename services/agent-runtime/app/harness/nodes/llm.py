@@ -29,6 +29,7 @@ from ...tool_markup import (
 from ..long_task import continue_nudge, early_ack_visible, should_project_tool_partial, try_auto_defer
 from ..state import AgentState
 from .. import tracing
+from ...present_image import append_present_markdown
 
 
 
@@ -161,6 +162,7 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
             raw = str((choices[0].get("message") or {}).get("content") or "")
             final = postprocess_text(strip_think(strip_tool_markup(raw)), profile)
             final = sanitize_fake_tool_narration(final)
+            final = append_present_markdown(final, state.get("present_images"))
             lf.update_obs(gen_obs, output=lf.truncate(final))
             if journal is not None and final:
                 await journal.commit_assistant(final, project=not _is_group_pass(final))
@@ -342,7 +344,8 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
                 "needs_finalize": False,
             }
 
-        msgs.append({"role": "assistant", "content": content})
+        final = append_present_markdown(final, state.get("present_images"))
+        msgs.append({"role": "assistant", "content": final or content})
         lf.update_obs(gen_obs, output=lf.truncate(final))
         if journal is not None and final:
             await journal.commit_assistant(final, project=not _is_group_pass(final))

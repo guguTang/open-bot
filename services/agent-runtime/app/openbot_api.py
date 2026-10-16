@@ -394,3 +394,26 @@ def record_memory_recall(payload: dict[str, Any], timeout: float = 10.0) -> dict
     """Persist one run's recall payload via Go internal API (optional / fallback)."""
     return _post("/internal/memory-recalls", payload, timeout=timeout)
 
+
+def upload_conversation_attachment(
+    user_id: str,
+    conversation_id: str,
+    *,
+    content_base64: str,
+    filename: str = "image.jpg",
+    mime: str = "image/jpeg",
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """Persist bytes as a conversation attachment (internal). Returns AttachmentRef JSON."""
+    return _post(
+        "/internal/conversations/attachments",
+        {
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "filename": filename or "image.jpg",
+            "mime": mime or "image/jpeg",
+            "content_base64": content_base64,
+        },
+        timeout=timeout,
+    )
+

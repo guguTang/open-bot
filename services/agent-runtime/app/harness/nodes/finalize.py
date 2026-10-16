@@ -20,6 +20,7 @@ from ...tool_markup import strip_tool_markup
 from .. import tracing
 from ..long_task import try_auto_defer
 from ..state import AgentState
+from ...present_image import append_present_markdown
 from .llm import _is_group_pass
 
 # Nudge the model to answer from history. Do NOT mention round limits to the user.
@@ -48,6 +49,7 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     usage_acc = state.get("usage")
     existing = str(state.get("final_text") or "").strip()
     if existing:
+        existing = append_present_markdown(existing, state.get("present_images"))
         return {
             "final_text": existing,
             "pending_tool_calls": [],
@@ -69,6 +71,7 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict[str, 
     if deferred:
         if "defer_work" not in used:
             used.append("defer_work")
+        deferred = append_present_markdown(deferred, state.get("present_images"))
         out_msgs = list(msgs)
         out_msgs.append({"role": "assistant", "content": deferred})
         if journal is not None:
@@ -139,6 +142,7 @@ async def finalize_node(state: AgentState, config: RunnableConfig) -> dict[str, 
         detail = str(last_err or "未能生成最终回复")[:300]
         raise RuntimeError(detail)
 
+    final = append_present_markdown(final, state.get("present_images"))
     out_msgs = list(msgs)
     out_msgs.append({"role": "assistant", "content": final})
     if journal is not None:

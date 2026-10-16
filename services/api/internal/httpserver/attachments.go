@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -186,6 +188,140 @@ func formatSize(n int64) string {
 		return fmt.Sprintf("%.1f KB", float64(n)/1024)
 	}
 	return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+}
+
+// saveAttachmentBytes writes file bytes under the conversation upload prefix and
+// inserts a message_attachments row (message_id NULL until linked). Shared by
+// user multipart upload and the internal present-image path.
+func (s *Server) saveAttachmentBytes(uid, convID, name, mimeType string, data []byte) (AttachmentRef, error) {
+	uid = strings.TrimSpace(uid)
+	convID = strings.TrimSpace(convID)
+	if uid == "" || convID == "" {
+		return AttachmentRef{}, fmt.Errorf("user_id and conversation_id required")
+	}
+	if len(data) == 0 {
+		return AttachmentRef{}, fmt.Errorf("empty file")
+	}
+	if int64(len(data)) > maxAttachmentBytes {
+		return AttachmentRef{}, fmt.Errorf("file exceeds 20MB limit")
+	}
+	name = sanitizeUploadName(name)
+	mimeType = strings.TrimSpace(mimeType)
+	if mimeType == "" {
+		mimeType = mime.TypeByExtension(filepath.Ext(name))
+	}
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	if !attachmentAllowed(mimeType, name) {
+		return AttachmentRef{}, fmt.Errorf("unsupported file type")
+	}
+	if _, err := s.db.GetConversation(uid, convID); err != nil {
+		return AttachmentRef{}, err
+	}
+	id := uuid.NewString()
+	relDir := filepath.Join(db.SanitizeUserSegment(uid), db.SanitizeUserSegment(convID))
+	absDir := filepath.Join(uploadsRoot(), relDir)
+	if err := os.MkdirAll(absDir, 0o755); err != nil {
+		return AttachmentRef{}, err
+	}
+	storedName := id + "_" + name
+	absPath := filepath.Join(absDir, storedName)
+	if err := os.WriteFile(absPath, data, 0o644); err != nil {
+		return AttachmentRef{}, err
+	}
+	relPath := filepath.ToSlash(filepath.Join(relDir, storedName))
+	row, err := s.db.CreateMessageAttachment(db.MessageAttachment{
+		ID:             id,
+		ConversationID: convID,
+		UserID:         uid,
+		Name:           name,
+		Mime:           mimeType,
+		Size:           int64(len(data)),
+		Path:           relPath,
+	})
+	if err != nil {
+		_ = os.Remove(absPath)
+		return AttachmentRef{}, err
+	}
+	return AttachmentRef{
+		ID:   row.ID,
+		Name: row.Name,
+		Mime: row.Mime,
+		Size: row.Size,
+		Path: row.Path,
+		URL:  row.URL,
+	}, nil
+}
+
+// handleInternalUploadAttachment stores an image (or other allowed file) for a
+// conversation so the assistant can embed ![](/v1/conversations/{id}/attachments/{aid}).
+// POST /internal/conversations/attachments  JSON:
+//
+//	user_id, conversation_id, filename?, mime?, content_base64
+func (s *Server) handleInternalUploadAttachment(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID         string `json:"user_id"`
+		ConversationID string `json:"conversation_id"`
+		Filename       string `json:"filename"`
+		Mime           string `json:"mime"`
+		ContentBase64  string `json:"content_base64"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	uid := strings.TrimSpace(body.UserID)
+	cid := strings.TrimSpace(body.ConversationID)
+	b64 := strings.ReplaceAll(strings.TrimSpace(body.ContentBase64), "\n", "")
+	b64 = strings.ReplaceAll(b64, "\r", "")
+	b64 = strings.ReplaceAll(b64, " ", "")
+	if uid == "" || cid == "" || b64 == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id, conversation_id, content_base64 required"})
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		// Some callers may send URL-safe base64.
+		data, err = base64.RawStdEncoding.DecodeString(b64)
+	}
+	if err != nil {
+		data, err = base64.URLEncoding.DecodeString(b64)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid content_base64"})
+		return
+	}
+	name := strings.TrimSpace(body.Filename)
+	if name == "" {
+		name = "image.jpg"
+		mt := strings.ToLower(strings.TrimSpace(body.Mime))
+		switch {
+		case strings.Contains(mt, "png"):
+			name = "image.png"
+		case strings.Contains(mt, "webp"):
+			name = "image.webp"
+		case strings.Contains(mt, "gif"):
+			name = "image.gif"
+		}
+	}
+	ref, err := s.saveAttachmentBytes(uid, cid, name, body.Mime, data)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "conversation not found"})
+			return
+		}
+		msg := err.Error()
+		code := http.StatusBadRequest
+		if strings.Contains(msg, "20MB") || strings.Contains(msg, "unsupported") || strings.Contains(msg, "empty") {
+			code = http.StatusBadRequest
+		} else if !strings.Contains(msg, "required") {
+			code = http.StatusInternalServerError
+		}
+		writeJSON(w, code, map[string]string{"error": msg})
+		return
+	}
+	writeJSON(w, http.StatusCreated, ref)
 }
 
 func (s *Server) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {

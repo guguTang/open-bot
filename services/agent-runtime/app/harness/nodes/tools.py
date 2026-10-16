@@ -12,6 +12,7 @@ from ...client_env import tool_display_label
 from ...citation_sources import extract_from_tool, merge_sources
 from ...host_vision import tool_result_message
 from ...llm import observe_tool_result, truncate_tool_result_for_context
+from ...present_image import present_vision_for_chat
 from ..config import require_approval_tools
 from ..registry import get_registry
 from ..replay import interrupted_result, policy_for
@@ -45,6 +46,9 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
     used = list(state.get("tools_used") or [])
     sources = list(state.get("sources") or [])
     replay_results = dict(state.get("replay_results") or {})
+    present = list(state.get("present_images") or [])
+    user_id = str(cfg.get("user_id") or "").strip()
+    conversation_id = str(cfg.get("conversation_id") or "").strip()
     approval_needed = require_approval_tools()
     registry = get_registry()
     if state.get("extension_names"):
@@ -163,6 +167,21 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
                 content = json.dumps({"error": str(exc)}, ensure_ascii=False)
 
         content, vision = observe_tool_result(name, content)
+        # Generic path: any tool image (host_screenshot, …) → conversation
+        # attachment + markdown so the user sees it in chat (model still gets
+        # _host_image / image_url for CU coordinates).
+        if vision and user_id and conversation_id:
+            fname = "screenshot.jpg" if name == "host_screenshot" else ""
+            alt = "屏幕截图" if name == "host_screenshot" else ""
+            md = present_vision_for_chat(
+                vision,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                filename=fname,
+                alt=alt,
+            )
+            if md:
+                present.append(md)
         await registry.run_hooks(
             "afterTool", name=name, args=args, content=content, tool_call_id=tc_id
         )
@@ -191,6 +210,7 @@ async def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any
         "pending_tool_calls": [],
         "approval_pending": [],
         "replay_results": replay_results,
+        "present_images": present,
         "status": "running",
         "interrupted_reason": "",
     }

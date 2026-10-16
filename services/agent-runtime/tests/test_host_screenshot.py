@@ -37,6 +37,7 @@ def test_tool_def_and_label() -> None:
     desc = str((shot.get("function") or {}).get("description") or "")
     props = ((shot.get("function") or {}).get("parameters") or {}).get("properties") or {}
     _ok("host_screenshot" in desc or "see it" in desc, "description says the model can see the image")
+    _ok("shown to the user" in desc or "user in chat" in desc, "description says image is shown in chat")
     _ok("screencapture" in desc, "description tells the model not to use blind screencapture")
     _ok("scope" in props and "display" in props, "optional scope and display")
     _ok(tool_display_label("host_screenshot") == "截取屏幕", "status label")

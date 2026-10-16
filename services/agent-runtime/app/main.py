@@ -1689,6 +1689,8 @@ async def openai_path(
                     sources_out=sources_acc,
                     allow_ask_agent=allow_ask_agent,
                     ask_routed=bool(getattr(turn, "ask_routed", False)),
+                    user_id=str(user_id or ""),
+                    conversation_id=str(conversation_id or ""),
                 )
             )
             try:
