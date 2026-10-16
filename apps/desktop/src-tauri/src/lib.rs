@@ -3,6 +3,9 @@ mod host_fs;
 mod host_input;
 mod host_ssh;
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+mod host_raster;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

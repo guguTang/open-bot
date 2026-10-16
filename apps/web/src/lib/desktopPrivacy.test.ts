@@ -28,8 +28,10 @@ describe("desktop capture permissions", () => {
     expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("事件发布");
   });
 
-  it("shows Screen Recording guidance only on the macOS desktop app", () => {
+  it("shows capture guidance on macOS, Windows, and Linux desktop apps", () => {
     expect(shouldShowDesktopCapturePermissions(client({ platform: "macos", app: "tauri" }))).toBe(true);
+    expect(shouldShowDesktopCapturePermissions(client({ platform: "windows", app: "tauri" }))).toBe(true);
+    expect(shouldShowDesktopCapturePermissions(client({ platform: "linux", app: "tauri" }))).toBe(true);
     expect(
       shouldShowDesktopCapturePermissions(
         client({
@@ -39,7 +41,6 @@ describe("desktop capture permissions", () => {
         }),
       ),
     ).toBe(false);
-    expect(shouldShowDesktopCapturePermissions(client({ platform: "windows", app: "tauri" }))).toBe(false);
     expect(shouldShowDesktopCapturePermissions(client({ platform: "ios", app: "capacitor" }))).toBe(false);
   });
 

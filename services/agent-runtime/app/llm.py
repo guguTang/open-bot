@@ -1124,8 +1124,10 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_screenshot",
             "description": (
-                "Capture the screen of a connected desktop (macOS) and attach the image to this tool result "
-                "so you can see it. Prefer this over host_shell screencapture. "
+                "Capture the screen of a connected desktop (macOS, Windows, or Linux) and attach the image "
+                "to this tool result so you can see it. Prefer this over host_shell screencapture, grim, or xdotool. "
+                "macOS uses screencapture; Windows uses GDI on the interactive desktop; Linux uses X11 GetImage "
+                "(XWayland counts). Wayland without XWayland cannot capture. "
                 "scope main (default) is the main display; all captures every display; "
                 "display is a 1-based index and overrides scope. "
                 "The result includes frame_id, width, height, and scale. "
@@ -1133,9 +1135,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "(top-left is 0,0) plus the same frame_id. Do not multiply by scale and do not add origin. "
                 "scope=all is not clickable; screenshot one display first. Frames expire after a few minutes. "
                 "Describe what is on screen from the attached image. "
-                "If the result says screen recording was denied, tell the user to allow Open Bot under "
-                "系统设置 → 隐私与安全性 → 屏幕录制 (and 辅助功能 / 发送事件 when driving the GUI). "
-                "Do not retry until they grant it. "
+                "If screen recording was denied: macOS 系统设置 → 隐私与安全性 → 屏幕录制; "
+                "Windows has no separate toggle (Open Bot must be on the unlocked interactive desktop); "
+                "Linux needs DISPLAY. Do not retry until that is fixed. "
                 "Phones and the browser cannot capture the desktop."
             ),
             "parameters": {
@@ -1161,9 +1163,11 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_tcc_status",
             "description": (
-                "Read this Mac desktop app's privacy grants: screen_recording, accessibility, and event_posting. "
-                "Read-only. If a later desktop action is denied, call this and tell the user which pane to allow "
-                "under 系统设置 → 隐私与安全性. Do not keep retrying the denied action. Mac only."
+                "Read screen_recording, accessibility, and event_posting on a connected desktop "
+                "(macOS, Windows, or Linux). Read-only. The tool name stays host_tcc_status on every OS. "
+                "macOS is TCC (系统设置 → 隐私与安全性). Windows reports the interactive desktop, UI Automation, "
+                "and UIPI (no separate screen-recording switch). Linux reports X11 DISPLAY, AT-SPI, and XTest. "
+                "If a later action is denied, tell the user which bucket failed. Do not keep retrying."
             ),
             "parameters": {
                 "type": "object",
@@ -1177,10 +1181,10 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_list_windows",
             "description": (
-                "List on-screen windows on a connected Mac (app, title, pid, window_id, bounds). "
+                "List on-screen windows on a connected desktop (macOS, Windows, or Linux): app, title, pid, window_id, bounds. "
                 "Pass frame_id from host_screenshot to also get x,y,width,height in that image's pixels. "
-                "Read-only. Use pid with background=true on click/type/key to avoid stealing focus. "
-                "Empty titles usually mean Screen Recording is not granted."
+                "Read-only. macOS can post background input to pid; Windows PostMessage and Linux XSendEvent are best-effort. "
+                "Empty titles on macOS usually mean Screen Recording is not granted."
             ),
             "parameters": {
                 "type": "object",
@@ -1197,12 +1201,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_ax",
             "description": (
-                "Read a Mac app's accessibility tree and return element_ref values for host_click / host_type. "
+                "Read the accessibility tree on a connected desktop and return element_ref values for host_click / host_type. "
+                "macOS uses AX, Windows uses UI Automation, Linux uses AT-SPI (needs libatspi and the a11y bus). "
                 "Prefer element_ref over guessing coordinates. "
                 "Optional app name, pid, or window_id selects the target; omit them for the frontmost app. "
                 "Optional x,y plus frame_id hit-tests one element in screenshot pixels. "
                 "max_depth is 1..3 (default 2); limit is 1..120 (default 60). Read-only. "
-                "Needs 辅助功能. If denied, tell the user to allow Open Bot and do not retry until they do."
+                "If accessibility is denied, tell the user and do not retry until they fix it. "
+                "An elevated Windows window is invisible to a non-elevated Open Bot."
             ),
             "parameters": {
                 "type": "object",
@@ -1226,12 +1232,13 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_click",
             "description": (
-                "Click on a connected Mac. Pass frame_id from the latest host_screenshot and x,y in that "
+                "Click on a connected desktop (macOS, Windows, or Linux). Pass frame_id from the latest host_screenshot and x,y in that "
                 "image's pixels (width×height, top-left 0,0). Do not multiply by scale. "
                 "Or pass element_ref from host_ax. button is left (default), right, or middle. clicks is 1..3. "
-                "background=true posts to pid without stealing focus. "
-                "Mutating: Auto-review may ask the user. Needs 发送事件 permission. "
-                "Do not use host_shell, osascript, or cliclick for clicks."
+                "background=true needs pid. macOS posts to that process. Windows uses PostMessage (UIPI blocks elevated targets). "
+                "Linux uses XSendEvent, which many apps ignore; foreground clicks use XTest and move the pointer. "
+                "Mutating: Auto-review may ask the user. "
+                "Do not use host_shell, osascript, cliclick, or xdotool for clicks."
             ),
             "parameters": {
                 "type": "object",
@@ -1256,11 +1263,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_type",
             "description": (
-                "Type text into a connected Mac. Requires frame_id from a recent host_screenshot "
+                "Type text into a connected desktop (macOS, Windows, or Linux). Requires frame_id from a recent host_screenshot "
                 "or element_ref from host_ax (element_ref clicks that element first). "
-                "Newlines become Return. background=true with pid avoids stealing focus. "
-                "Mutating: Auto-review may ask. Needs 发送事件. Do not type secrets. "
-                "Do not use host_shell keystroke for this."
+                "Newlines become Return. background=true with pid works on macOS and Windows (PostMessage). "
+                "Linux refuses background typing because XSendEvent is dropped; type in the foreground instead. "
+                "Mutating: Auto-review may ask. Do not type secrets. "
+                "Do not use host_shell keystroke, osascript, or xdotool for this."
             ),
             "parameters": {
                 "type": "object",
@@ -1281,11 +1289,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_key",
             "description": (
-                "Press one key or shortcut on a connected Mac, for example key=t modifiers=[command], "
+                "Press one key or shortcut on a connected desktop (macOS, Windows, or Linux), for example key=t modifiers=[command], "
                 "or key=cmd+t, return, escape, tab, up/down/left/right. "
+                "command is Meta: Command on macOS, Win on Windows, Super on Linux. "
                 "Requires frame_id or element_ref so the key is tied to a recent look at the screen. "
-                "background=true posts to pid. Mutating: Auto-review may ask. Needs 发送事件. "
-                "Do not use osascript keystroke."
+                "background=true posts to pid on macOS and Windows. Linux refuses background keys. "
+                "Mutating: Auto-review may ask. Do not use osascript keystroke or xdotool."
             ),
             "parameters": {
                 "type": "object",
@@ -1307,9 +1316,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_scroll",
             "description": (
-                "Scroll a connected Mac at screenshot pixel x,y. frame_id is required. "
+                "Scroll a connected desktop (macOS, Windows, or Linux) at screenshot pixel x,y. frame_id is required. "
                 "dy>0 scrolls up, dy<0 scrolls down, dx>0 scrolls right. Values are line steps, clamped. "
-                "Mutating: Auto-review may ask. Needs 发送事件."
+                "Windows and Linux refuse background scroll. Mutating: Auto-review may ask."
             ),
             "parameters": {
                 "type": "object",
@@ -1332,8 +1341,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_mouse_move",
             "description": (
-                "Move the pointer on a connected Mac to screenshot pixel x,y for frame_id. "
-                "Mutating: Auto-review may ask. Needs 发送事件. background=true posts to pid."
+                "Move the pointer on a connected desktop (macOS, Windows, or Linux) to screenshot pixel x,y for frame_id. "
+                "Windows and Linux cannot move the pointer in the background. "
+                "Mutating: Auto-review may ask. On macOS, background=true posts to pid."
             ),
             "parameters": {
                 "type": "object",
@@ -1354,9 +1364,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_drag",
             "description": (
-                "Drag on a connected Mac from screenshot pixel x,y to x2,y2 within frame_id. "
-                "button defaults to left. Mutating: Auto-review may ask. Needs 发送事件. "
-                "background=true posts to pid."
+                "Drag on a connected desktop (macOS, Windows, or Linux) from screenshot pixel x,y to x2,y2 within frame_id. "
+                "button defaults to left. Windows and Linux refuse background drag. "
+                "Mutating: Auto-review may ask. On macOS, background=true posts to pid."
             ),
             "parameters": {
                 "type": "object",

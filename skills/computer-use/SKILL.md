@@ -1,11 +1,11 @@
 ---
 name: computer-use
-description: Drive a connected Mac GUI with host_screenshot, host_click, host_type, host_key, host_scroll, host_list_windows, and host_ax. Use when a task needs seeing or clicking in an app without an API/CLI. Check-if-installed and open-by-name use host_open (resolves .app); do not mdfind by English kMDItemKind.
+description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_screenshot, host_click, host_type, host_key, host_scroll, host_list_windows, and host_ax. Use when a task needs seeing or clicking in an app without an API/CLI. Check-if-installed and open-by-name use host_open (resolves .app on Mac); do not mdfind by English kMDItemKind.
 ---
 
 # Computer Use（本机 GUI 自动化）
 
-已连接的 **Mac 桌面**用一等工具看屏幕和操作界面。不要用 `host_shell` 跑 `osascript`、`cliclick` 或 `screencapture` 来点击、打字、按键或截屏。
+已连接的 **macOS、Windows 或 Linux 桌面**用同一套一等工具看屏幕和操作界面。不要用 `host_shell` 跑 `osascript`、`cliclick`、`screencapture`、`xdotool` 或 `grim` 来点击、打字、按键或截屏。
 
 能用 API / CLI / 文件完成的事，**一律不要走 GUI**：
 
@@ -27,16 +27,15 @@ description: Drive a connected Mac GUI with host_screenshot, host_click, host_ty
 
 ## 前提
 
-- 已连接的 **Mac**（`list_machines` 看 platform / connected）。Windows / Linux 上这些工具返回 `unsupported_platform` / 「当前系统暂不支持桌面操控」，不要改用盲截或脚本点击。
-- 权限授给从 DMG 拖进「应用程序」的已安装 **Open Bot**。不要让用户直接运行 `Contents/MacOS/open-bot-desktop`。
-- 手机和浏览器不能截用户电脑的屏幕；目标必须是已连接的桌面。
-- 三个权限桶（`host_tcc_status` 一次看齐）。被拒就告诉用户去哪一栏，**不要反复重试**：
+- 已连接的 **macOS、Windows 或 Linux 桌面**（`list_machines` 看 platform / connected）。手机和浏览器不能截用户电脑的屏幕。
+- 在 Mac 上，权限授给从 DMG 拖进「应用程序」的已安装 **Open Bot**。不要让用户直接运行 `Contents/MacOS/open-bot-desktop`。
+- 三个权限桶（`host_tcc_status` 一次看齐，名字在三个系统上一样）。被拒就告诉用户原因，**不要反复重试**：
 
-| 桶 | 干什么 | 被拒时 |
-|----|--------|--------|
-| 屏幕录制 | `host_screenshot`；窗口标题 | `screen_recording_denied`。系统设置 → 隐私与安全性 → 屏幕录制，允许已安装的 **Open Bot** |
-| 辅助功能 | `host_ax` | `accessibility_denied`。同一页的「辅助功能」 |
-| 发送事件 | 点击、输入、按键、滚动、拖拽、移动鼠标 | `event_posting_denied`。同一页的「发送事件」。较新的 macOS 可能写成「输入监控」或「事件发布」，同样允许这个已安装的 Open Bot |
+| 桶 | 干什么 | macOS | Windows | Linux |
+|----|--------|-------|---------|-------|
+| 屏幕录制 | `host_screenshot` | 系统设置 → 隐私与安全性 → 屏幕录制，允许已安装的 **Open Bot**。从 DMG 拖进「应用程序」，不要直接运行 `Contents/MacOS/open-bot-desktop` | 没有单独开关。必须在已登录、未锁屏的交互桌面，不能以服务运行 | 需要 `DISPLAY`（X11 或 XWayland）。原生 Wayland 且没有 XWayland 目前不能截屏 |
+| 辅助功能 | `host_ax` | 同一页的「辅助功能」（AX） | UI Automation。管理员窗口要同样以管理员启动 Open Bot | 安装 `at-spi2-core`（libatspi）并打开辅助功能。没有库就返回 `accessibility_denied` |
+| 发送事件 | 点击、输入、按键、滚动、拖拽、移动鼠标 | 「发送事件」（有时和辅助功能一起出现）。较新的 macOS 可能写成「输入监控」或「事件发布」，同样允许这个已安装的 Open Bot。`background=true` 用 `CGEventPostToPid` | `SendInput`。`background=true` 用 `PostMessage`。UIPI 会拦住对管理员窗口的输入 | 主路径是 XTest，不用 xdotool。`background=true` 只有点击走 `XSendEvent`（很多应用会忽略）；文字、按键、滚动、移动、拖拽会返回 `background_limited` |
 
 桌面设置 → 电脑里有对应入口。
 
@@ -64,7 +63,7 @@ description: Drive a connected Mac GUI with host_screenshot, host_click, host_ty
 
 菜单栏不在这棵树里。菜单用 `host_key` 快捷键。
 
-有脚本字典的 App（Safari 当前标签 URL、Mail、Music 等）仍可用 `host_shell` 调它自己的 AppleScript（`tell application "Safari" to get URL of current tab of front window`）。这只用于 App 自己的命令，不用于点击和按键。
+有脚本字典的 Mac App（Safari 当前标签 URL、Mail、Music 等）仍可用 `host_shell` 调它自己的 AppleScript（`tell application "Safari" to get URL of current tab of front window`）。这只用于 App 自己的命令，不用于点击和按键。Windows / Linux 没有这套字典。
 
 ### 2. 操作
 
@@ -74,12 +73,12 @@ description: Drive a connected Mac GUI with host_screenshot, host_click, host_ty
 |------|------|
 | `host_click` | `frame_id` + `x,y`，或 `element_ref`。`button`：`left`（默认）/ `right` / `middle`。`clicks` 1–3 |
 | `host_type` | `text`，加上 `frame_id` 或 `element_ref`（元素会先点一下中心）。换行变成回车。不要输入密码或密钥 |
-| `host_key` | `key` 如 `return`、`escape`、`tab`、`up`，或 `key=t` 且 `modifiers=["command"]`，或 `key=cmd+t`。必须带 `frame_id` 或 `element_ref` |
+| `host_key` | `key` 如 `return`、`escape`、`tab`、`up`，或 `key=t` 且 `modifiers=["command"]`，或 `key=cmd+t`。必须带 `frame_id` 或 `element_ref`。`command` 在 Mac 是 Command，在 Windows 是 Win，在 Linux 是 Super |
 | `host_scroll` | 必须 `frame_id` + `x,y`。`dy>0` 向上，`dy<0` 向下，`dx>0` 向右 |
 | `host_mouse_move` | `frame_id` + `x,y` |
 | `host_drag` | `frame_id` + 起点 `x,y` 和终点 `x2,y2` |
 
-用户可能正在同一台电脑上工作。已知目标窗口的 `pid` 时，把 `background=true` 和这个 `pid` 一起传（`element_ref` 自带 pid）。事件发到该进程，不抢全局焦点、不把光标挪走。不确定 pid 时用普通点击，并在抢焦点前先说明。
+用户可能正在同一台电脑上工作。已知目标窗口的 `pid` 时，Mac 上把 `background=true` 和这个 `pid` 一起传（`element_ref` 自带 pid），事件发到该进程，不抢全局焦点。Windows 后台点击和输入走 `PostMessage`，滚动、移动、拖拽请去掉 `background`。Linux 前台点击会移动全局指针；后台文字和按键不可靠，返回 `background_limited` 时去掉 `background` 再试。不确定 pid 时用普通点击，并在抢焦点前先说明。
 
 ### 3. 验证
 
@@ -111,5 +110,7 @@ description: Drive a connected Mac GUI with host_screenshot, host_click, host_ty
 | `这张图不能用来点击` / `frame_not_actionable` | 这是全部屏幕的图。改截单个显示器 |
 | `坐标超出这张截图的宽高` / `coord_out_of_frame` | 坐标必须落在 `width`×`height` 里，不要乘 scale |
 | `界面元素已过期` / `stale_element` | 重新 `host_ax` |
-| `当前系统暂不支持桌面操控` | 这台机器不是 macOS 桌面，停止 |
+| `当前系统暂不支持桌面操控` | 这台机器不是 macOS、Windows 或 Linux 桌面，停止 |
+| `background_limited` | 这个后台动作在当前系统不可靠。去掉 `background` 再试 |
+| Linux 截屏或键鼠失败且提到 X11 / XWayland | 原生 Wayland 会话没有 XWayland。不要改用 xdotool 或 grim |
 | 结果 `waiting` | 系统确认卡尚未批准，命令还没执行 |
