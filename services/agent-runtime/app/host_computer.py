@@ -1,4 +1,7 @@
-"""Normalize Mac desktop-control tool calls onto the host exec channel.
+"""Normalize desktop-control tool calls onto the host exec channel.
+
+The same host_* tools run on macOS, Windows, and Linux. The desktop host
+picks the platform backend.
 
 Coordinates are image pixels of a prior host_screenshot (its width × height)
 and must carry that frame_id. This module only checks the shape; the desktop

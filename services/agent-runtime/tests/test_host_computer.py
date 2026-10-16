@@ -45,6 +45,7 @@ def test_tool_defs_cover_the_action_set() -> None:
     _ok("frame_id" in props and "element_ref" in props, "click accepts frame_id and element_ref")
     shot = str((_tool("host_screenshot").get("function") or {}).get("description") or "")
     _ok("frame_id" in shot and "scale" in shot, "screenshot tells the model about frame binding")
+    _ok("Windows" in shot and "Linux" in shot, "screenshot names Windows and Linux")
     _ok(tool_display_label("host_click") == "点击界面", "click status label")
     _ok(tool_display_label("host_tcc_status") == "检查权限", "tcc status label")
 

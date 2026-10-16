@@ -95,7 +95,13 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
     <SettingsSection title="屏幕录制、辅助功能与发送事件">
       <SettingsCard padded>
         <FieldGroup>
-          <FieldDescription>{DESKTOP_CAPTURE_PERMISSION_HINT}</FieldDescription>
+          <FieldDescription>
+            {clientEnv.platform === "windows"
+              ? "Windows 没有单独的屏幕录制开关。请确认 Open Bot 跑在已登录并解锁的桌面里。读控件用 UI Automation；目标窗口以管理员运行时，Open Bot 也要管理员。键鼠若被拦住，通常是 UIPI。授权或确认会话后回到对话里再试一次。手机和浏览器不能截这台电脑的屏幕。"
+              : clientEnv.platform === "linux"
+                ? "Linux 截屏和键鼠走 X11（含 XWayland）。辅助功能需要安装 at-spi2-core 并打开辅助功能。原生 Wayland 且没有 XWayland 时，目前不能截屏或发送键鼠。授权或确认会话后回到对话里再试一次。手机和浏览器不能截这台电脑的屏幕。"
+                : DESKTOP_CAPTURE_PERMISSION_HINT}
+          </FieldDescription>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => open("screen")}>
               打开「屏幕录制」

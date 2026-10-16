@@ -12,10 +12,10 @@
 | `host_ls` | 浅层列目录 | 默认 **50**（最大 200）；`sort`=`mtime|size|name`；可选 `glob`；响应含 `total`/`truncated` |
 | `host_read` | 读文本 | ≤200KB |
 | `host_shell` | 本机命令（`sh -c`） | 输出 **≤4000 字**；120s；无命令白名单，**看起来会改动或有风险才确认**，硬拒绝始终有效；`terminal=true` 确认；禁 ssh/scp/sftp |
-| `host_screenshot` | 截取已连接 Mac 的屏幕并把图像交给模型 | 只读，默认自动放行；返回 `frame_id` + 图像像素宽高；`scope=all` 不能用来点击 |
-| `host_click` / `host_type` / `host_key` / `host_scroll` / `host_mouse_move` / `host_drag` | Mac 上按截图像素或 `element_ref` 操作界面 | 变更操作，内置确认；必须带未过期的 `frame_id`（或 `element_ref`）；先 `load_skill computer-use` |
-| `host_list_windows` / `host_ax` | 列出窗口、读辅助功能树 | 只读自动放行；`element_ref` 给点击/输入用 |
-| `host_tcc_status` | 屏幕录制 / 辅助功能 / 发送事件是否已授权 | 只读自动放行 |
+| `host_screenshot` | 截取已连接桌面（macOS / Windows / Linux）并把图像交给模型 | 只读，默认自动放行；返回 `frame_id` + 图像像素宽高；`scope=all` 不能用来点击 |
+| `host_click` / `host_type` / `host_key` / `host_scroll` / `host_mouse_move` / `host_drag` | 按截图像素或 `element_ref` 操作界面 | 变更操作，内置确认；必须带未过期的 `frame_id`（或 `element_ref`）；先 `load_skill computer-use`。三套系统同一工具名 |
+| `host_list_windows` / `host_ax` | 列出窗口、读辅助功能树（AX / UI Automation / AT-SPI） | 只读自动放行；`element_ref` 给点击/输入用 |
+| `host_tcc_status` | 屏幕录制 / 辅助功能 / 发送事件是否可用 | 只读自动放行；Windows 没有单独的屏幕录制开关，Linux 看 X11 与 AT-SPI |
 | `host_ssh_*` | 远程（先 `load_skill host-ssh`） | 与上类似 |
 | `load_skill` | 加载 `SKILL.md` / `scripts/` **内容** | **不自动执行**脚本；模型再经 `host_shell` / `sandbox_*` 跑 |
 
@@ -44,7 +44,7 @@ Skills 包可含 `scripts/`（例：`diagnosing-bugs/scripts/`），但产品侧
 | 最大文件、按扩展名、前 N、磁盘占用 | **`host_shell`** 或 **skill 脚本** | 依赖 `host_ls` 再在模型侧排序 |
 | 读/改单个已知路径 | `host_read` / `host_write`… | 用 ls 猜路径后整目录搬进上下文 |
 | SSH 远程 | `load_skill host-ssh` → `host_ssh_*` | `host_shell` 跑 ssh |
-| 看 Mac 屏幕并点击 / 输入 | `load_skill computer-use` → `host_screenshot` 再 `host_click` 等 | `osascript` / `cliclick` / 把截图存成文件 |
+| 看桌面屏幕并点击 / 输入 | `load_skill computer-use` → `host_screenshot` 再 `host_click` 等 | `osascript` / `cliclick` / `xdotool` / 把截图存成文件 |
 
 ## 示例 Skill（草案名 `host-file-query`）
 

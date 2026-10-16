@@ -1,15 +1,15 @@
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
-//! First-class Mac desktop input for the host bridge.
+//! First-class desktop input for the host bridge.
 //!
 //! Screenshot pixels and later clicks share one frame: the model sends image
 //! coordinates from `host_screenshot` (`width` × `height`, origin top-left)
-//! plus that `frame_id`. The host converts them to Quartz points with the
-//! display bounds stored for the frame. Retina `scale` is informational —
-//! callers must not multiply coordinates by it.
+//! plus that `frame_id`. The host converts them with the display bounds stored
+//! for the frame. `scale` is informational — callers must not multiply
+//! coordinates by it or add `origin`.
 //!
-//! Pointer and keyboard events go through CoreGraphics (`CGEventPost` /
-//! `CGEventPostToPid`). Accessibility (`AXUIElement`) is only used to list
-//! windows and build element refs. AppleScript is not on this path.
+//! macOS posts through CoreGraphics and reads AX. Windows uses GDI, SendInput,
+//! and UI Automation. Linux uses the X11 protocol (RandR, GetImage, XTest) and
+//! AT-SPI. Tool names stay the same; only the backend changes.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -33,10 +33,16 @@ pub const ACCESSIBILITY_DENIED_MSG: &str = "没有辅助功能权限。请到「
 pub const EVENT_POSTING_DENIED_MSG: &str = "没有发送事件权限。请到「系统设置 → 隐私与安全性 → 辅助功能」允许已安装的 Open Bot 发送事件，然后重试。桌面设置里也可以打开这一页。若系统列出「输入监控」或「事件发布」，也允许 Open Bot。若系统弹出单独的发送事件提示，请点允许。";
 const STALE_FRAME_MSG: &str = "画面已过期或 frame_id 对不上。请重新截取屏幕，用新的 frame_id 再操作。不要沿用旧坐标。";
 const MISSING_FRAME_MSG: &str = "需要最近一次截图的 frame_id。先截取屏幕，再把返回的 frame_id 和图像像素坐标传进来。";
+pub const LINUX_SCREEN_DENIED_MSG: &str = "无法截取屏幕。Linux 桌面操控使用 X11（含 XWayland 的 DISPLAY），不使用 xdotool 或 grim。请确认 DISPLAY 可用。Wayland 原生若没有 XWayland 目前不能截屏。";
+pub const LINUX_ACCESSIBILITY_DENIED_MSG: &str = "没有辅助功能。请安装 at-spi2-core（libatspi），并打开辅助功能（GNOME：设置 → 辅助功能）。";
+pub const LINUX_EVENT_POSTING_DENIED_MSG: &str = "无法发送键鼠。主路径是 X11 的 XTest，不使用 xdotool。请确认 XTest 扩展可用。Wayland 原生若没有 XWayland 目前不能发送键鼠。";
+pub const WIN_SCREEN_DENIED_MSG: &str = "无法截取屏幕。请确认 Open Bot 在已登录的交互桌面（不是服务或锁屏安全桌面）。没有单独的屏幕录制开关。";
+pub const WIN_ACCESSIBILITY_DENIED_MSG: &str = "无法读取 UI Automation。权限级别需与目标窗口一致（管理员窗口要管理员启动 Open Bot）。";
+pub const WIN_EVENT_POSTING_DENIED_MSG: &str = "无法发送键鼠。请在已解锁的交互桌面运行 Open Bot，不要以服务运行。UIPI 会拦住对管理员窗口的输入。";
 const FRAME_NOT_ACTIONABLE_MSG: &str =
     "这张图不能用来点击（全部屏幕，或缺少显示器尺寸）。请用主屏幕或指定一个显示器重新截一张单屏图。";
 const COORD_OUT_MSG: &str = "坐标超出这张截图的宽高。请按图像像素重新估计，不要乘 scale，也不要加上 origin。";
-const UNSUPPORTED_MSG: &str = "当前系统暂不支持桌面操控（仅 macOS 桌面端）";
+const UNSUPPORTED_MSG: &str = "当前系统暂不支持桌面操控（需要 macOS、Windows 或 Linux 桌面端）";
 const STALE_ELEMENT_MSG: &str = "界面元素已过期。请重新查看界面元素，用新的 element_ref。";
 const ELEMENT_NOT_CLICKABLE_MSG: &str =
     "这个元素没有可用的位置或大小。请改用截图坐标点击，或重新查看界面元素。";
@@ -300,36 +306,180 @@ pub fn bind_screenshot_frame(
     }
 }
 
+fn platform_display_bounds(scope: &str, display: Option<u32>) -> Option<(f64, f64, f64, f64, f64)> {
+    #[cfg(target_os = "macos")]
+    {
+        return mac::display_bounds(scope, display);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        return linux::display_bounds(scope, display);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return win::display_bounds(scope, display);
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        let _ = (scope, display);
+        None
+    }
+}
+
 fn capture_geom(scope: &str, display: Option<u32>, image_w: u32, image_h: u32) -> DisplayGeom {
     if image_w == 0 || image_h == 0 || scope.eq_ignore_ascii_case("all") {
         return DisplayGeom::inert(image_w, image_h);
     }
-    #[cfg(target_os = "macos")]
-    {
-        if let Some((origin_x, origin_y, width_pt, height_pt, scale)) =
-            mac::display_bounds(scope, display)
-        {
-            let actionable = width_pt > 1.0 && height_pt > 1.0;
-            return DisplayGeom {
-                image_width: image_w,
-                image_height: image_h,
-                origin_x,
-                origin_y,
-                width_pt,
-                height_pt,
-                scale: if scale.is_finite() && scale > 0.0 { scale } else { 1.0 },
-                actionable,
-            };
-        }
+    if let Some((origin_x, origin_y, width_pt, height_pt, scale)) = platform_display_bounds(scope, display) {
+        let actionable = width_pt > 1.0 && height_pt > 1.0;
+        return DisplayGeom {
+            image_width: image_w,
+            image_height: image_h,
+            origin_x,
+            origin_y,
+            width_pt,
+            height_pt,
+            scale: if scale.is_finite() && scale > 0.0 { scale } else { 1.0 },
+            actionable,
+        };
     }
-    let _ = display;
     DisplayGeom::inert(image_w, image_h)
+}
+
+pub struct CapturedShot {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+pub struct ShotError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub fn capture_shot(scope: &str, display: Option<u32>, max_bytes: usize) -> Result<CapturedShot, ShotError> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::capture_shot(scope, display, max_bytes)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        win::capture_shot(scope, display, max_bytes)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub fn open_platform_privacy(pane: &str) -> Result<Value, String> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::open_privacy(pane)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        win::open_privacy(pane)
+    }
+}
+
+fn background_target(background: bool, pid: Option<i64>, element_pid: Option<i32>) -> Result<Option<i32>, Value> {
+    if !background {
+        return Ok(None);
+    }
+    let resolved = pid
+        .filter(|p| *p > 0 && *p <= i32::MAX as i64)
+        .map(|p| p as i32)
+        .or(element_pid);
+    match resolved {
+        Some(p) if p > 0 => Ok(Some(p)),
+        _ => Err(cu_error(
+            "missing_pid",
+            "后台发送需要 pid。先列出窗口或查看界面元素，把对应 pid 传进来。",
+        )),
+    }
+}
+
+fn frame_point(frame_id: &str, x: Option<f64>, y: Option<f64>) -> Result<(f64, f64), Value> {
+    let geom = load_frame(frame_id)?;
+    let (x, y) = match (x, y) {
+        (Some(x), Some(y)) => (x, y),
+        _ => return Err(cu_error("invalid_args", "需要 x、y 和 frame_id")),
+    };
+    map_image_point(&geom, x, y).map_err(point_error)
+}
+
+fn element_center(id: &str) -> Result<(f64, f64, i32), Value> {
+    let el = lookup_element(id)?;
+    if el.w_pt <= 1.0 || el.h_pt <= 1.0 {
+        return Err(cu_error("element_not_clickable", ELEMENT_NOT_CLICKABLE_MSG));
+    }
+    Ok((el.x_pt + el.w_pt / 2.0, el.y_pt + el.h_pt / 2.0, el.pid))
+}
+
+fn require_anchor(frame_id: &str, element_ref: &str) -> Result<Option<i32>, Value> {
+    if !element_ref.is_empty() {
+        let el = lookup_element(element_ref)?;
+        if !frame_id.is_empty() {
+            load_frame(frame_id)?;
+        }
+        return Ok(Some(el.pid));
+    }
+    load_frame(frame_id)?;
+    Ok(None)
+}
+
+fn publish_element(
+    pid: i32,
+    role: &str,
+    title: &str,
+    description: &str,
+    value: &str,
+    depth: i32,
+    bounds: Option<(f64, f64, f64, f64)>,
+    geom: Option<&DisplayGeom>,
+) -> Value {
+    let (x_pt, y_pt, w_pt, h_pt) = bounds.unwrap_or((0.0, 0.0, 0.0, 0.0));
+    let id = remember_element(ElementGeom {
+        pid,
+        x_pt,
+        y_pt,
+        w_pt,
+        h_pt,
+    });
+    let mut row = json!({
+        "element_ref": id,
+        "role": if role.is_empty() { "AXUnknown" } else { role },
+        "title": title,
+        "description": description,
+        "value": value,
+        "depth": depth,
+        "pid": pid,
+    });
+    if let Some((x, y, w, h)) = bounds {
+        if let Some(g) = geom.filter(|g| g.actionable) {
+            if let Some((ix, iy, iw, ih)) = screen_rect_to_image(g, x, y, w, h) {
+                row["x"] = json!(ix.round() as i64);
+                row["y"] = json!(iy.round() as i64);
+                row["width"] = json!(iw.round() as i64);
+                row["height"] = json!(ih.round() as i64);
+                row["coord_space"] = json!("image_pixels");
+                return row;
+            }
+        }
+        row["x"] = json!(x.round() as i64);
+        row["y"] = json!(y.round() as i64);
+        row["width"] = json!(w.round() as i64);
+        row["height"] = json!(h.round() as i64);
+        row["coord_space"] = json!("screen_points");
+    }
+    row
 }
 
 #[derive(Debug, PartialEq)]
 pub struct KeyStroke {
     pub keycode: u16,
     pub flags: u64,
+    /// Logical name (`t`, `return`, `arrowup`). Mac uses `keycode`; Windows and Linux map this name.
+    pub name: String,
 }
 
 fn modifier_flag(name: &str) -> Option<u64> {
@@ -482,7 +632,124 @@ pub fn parse_keystroke(key: &str, extra_modifiers: &[String]) -> Result<KeyStrok
     let Some(keycode) = keycode_for(&token) else {
         return Err(format!("不认识的按键：{token}"));
     };
-    Ok(KeyStroke { keycode, flags })
+    Ok(KeyStroke {
+        keycode,
+        flags,
+        name: token,
+    })
+}
+
+/// X11 keysym for a logical key name. Mac virtual keycodes are not reused here.
+pub fn linux_keysym(name: &str) -> Option<u32> {
+    Some(match name.trim().to_ascii_lowercase().as_str() {
+        "return" | "enter" => 0xff0d,
+        "escape" | "esc" => 0xff1b,
+        "tab" => 0xff09,
+        "space" | "spacebar" => 0x20,
+        "delete" | "backspace" => 0xff08,
+        "forwarddelete" | "del" => 0xffff,
+        "left" | "arrowleft" => 0xff51,
+        "up" | "arrowup" => 0xff52,
+        "right" | "arrowright" => 0xff53,
+        "down" | "arrowdown" => 0xff54,
+        "home" => 0xff50,
+        "end" => 0xff57,
+        "pageup" | "pgup" => 0xff55,
+        "pagedown" | "pgdn" => 0xff56,
+        "f1" => 0xffbe,
+        "f2" => 0xffbf,
+        "f3" => 0xffc0,
+        "f4" => 0xffc1,
+        "f5" => 0xffc2,
+        "f6" => 0xffc3,
+        "f7" => 0xffc4,
+        "f8" => 0xffc5,
+        "f9" => 0xffc6,
+        "f10" => 0xffc7,
+        "f11" => 0xffc8,
+        "f12" => 0xffc9,
+        "shift" => 0xffe1,
+        "control" | "ctrl" | "ctl" => 0xffe3,
+        "option" | "opt" | "alt" => 0xffe9,
+        "command" | "cmd" | "meta" => 0xffeb,
+        "=" | "equal" => 0x3d,
+        "-" | "minus" => 0x2d,
+        "[" => 0x5b,
+        "]" => 0x5d,
+        "'" | "quote" => 0x27,
+        ";" | "semicolon" => 0x3b,
+        "\\" | "backslash" => 0x5c,
+        "," | "comma" => 0x2c,
+        "/" | "slash" => 0x2f,
+        "." | "period" => 0x2e,
+        "`" | "grave" => 0x60,
+        other => {
+            let mut chars = other.chars();
+            match (chars.next(), chars.next()) {
+                (Some(ch), None) if ch.is_ascii() && !ch.is_control() => ch as u32,
+                _ => return None,
+            }
+        }
+    })
+}
+
+/// Win32 virtual-key for a logical key name. Letters assume the US layout's A–Z VKs.
+pub fn windows_vk(name: &str) -> Option<u16> {
+    let name = name.trim().to_ascii_lowercase();
+    if let Some(ch) = name.chars().next() {
+        if name.chars().count() == 1 {
+            if ch.is_ascii_lowercase() {
+                return Some(0x41 + (ch as u16 - b'a' as u16));
+            }
+            if ch.is_ascii_digit() {
+                return Some(0x30 + (ch as u16 - b'0' as u16));
+            }
+        }
+    }
+    Some(match name.as_str() {
+        "return" | "enter" => 0x0d,
+        "tab" => 0x09,
+        "escape" | "esc" => 0x1b,
+        "space" | "spacebar" => 0x20,
+        "delete" | "backspace" => 0x08,
+        "forwarddelete" | "del" => 0x2e,
+        "left" | "arrowleft" => 0x25,
+        "up" | "arrowup" => 0x26,
+        "right" | "arrowright" => 0x27,
+        "down" | "arrowdown" => 0x28,
+        "home" => 0x24,
+        "end" => 0x23,
+        "pageup" | "pgup" => 0x21,
+        "pagedown" | "pgdn" => 0x22,
+        "shift" => 0x10,
+        "control" | "ctrl" | "ctl" => 0x11,
+        "option" | "opt" | "alt" => 0x12,
+        "command" | "cmd" | "meta" => 0x5b,
+        "f1" => 0x70,
+        "f2" => 0x71,
+        "f3" => 0x72,
+        "f4" => 0x73,
+        "f5" => 0x74,
+        "f6" => 0x75,
+        "f7" => 0x76,
+        "f8" => 0x77,
+        "f9" => 0x78,
+        "f10" => 0x79,
+        "f11" => 0x7a,
+        "f12" => 0x7b,
+        "=" | "equal" => 0xbb,
+        "-" | "minus" => 0xbd,
+        "[" => 0xdb,
+        "]" => 0xdd,
+        "'" | "quote" => 0xde,
+        ";" | "semicolon" => 0xba,
+        "\\" | "backslash" => 0xdc,
+        "," | "comma" => 0xbc,
+        "/" | "slash" => 0xbf,
+        "." | "period" => 0xbe,
+        "`" | "grave" => 0xc0,
+        _ => return None,
+    })
 }
 
 pub fn clamp_scroll(dx: f64, dy: f64) -> Result<(i32, i32), String> {
@@ -535,7 +802,15 @@ pub fn host_tcc_status() -> Result<Value, String> {
     {
         return Ok(mac::tcc_status());
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(linux::tcc_status());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(win::tcc_status());
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         Ok(unsupported())
     }
@@ -543,11 +818,20 @@ pub fn host_tcc_status() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn host_list_windows(frame_id: Option<String>) -> Result<Value, String> {
+    let frame_id = opt_str(&frame_id);
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::list_windows(opt_str(&frame_id)));
+        return Ok(mac::list_windows(frame_id));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(linux::list_windows(frame_id));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(win::list_windows(frame_id));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = frame_id;
         Ok(unsupported())
@@ -579,7 +863,33 @@ pub fn host_ax(
             y,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        return Ok(linux::ax_query(
+            opt_str(&frame_id),
+            opt_str(&app),
+            pid,
+            window_id,
+            max_depth,
+            limit,
+            x,
+            y,
+        ));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(win::ax_query(
+            opt_str(&frame_id),
+            opt_str(&app),
+            pid,
+            window_id,
+            max_depth,
+            limit,
+            x,
+            y,
+        ));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, app, pid, window_id, max_depth, limit, x, y);
         Ok(unsupported())
@@ -613,7 +923,22 @@ pub fn host_click(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let modifiers = modifiers.unwrap_or_default();
+        let element_ref = opt_str(&element_ref);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::click(frame_id, x, y, button, clicks, modifiers, element_ref, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::click(frame_id, x, y, button, clicks, modifiers, element_ref, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, x, y, button, clicks, modifiers, element_ref, background, pid);
         Ok(unsupported())
@@ -638,7 +963,22 @@ pub fn host_type(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let text = text.unwrap_or_default();
+        let element_ref = opt_str(&element_ref);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::type_text(frame_id, text, element_ref, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::type_text(frame_id, text, element_ref, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, text, element_ref, background, pid);
         Ok(unsupported())
@@ -665,7 +1005,23 @@ pub fn host_key(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let key = key.unwrap_or_default();
+        let modifiers = modifiers.unwrap_or_default();
+        let element_ref = opt_str(&element_ref);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::press_key(frame_id, key, modifiers, element_ref, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::press_key(frame_id, key, modifiers, element_ref, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, key, modifiers, element_ref, background, pid);
         Ok(unsupported())
@@ -695,7 +1051,22 @@ pub fn host_scroll(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let dx = dx.unwrap_or(0.0);
+        let dy = dy.unwrap_or(0.0);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::scroll(frame_id, x, y, dx, dy, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::scroll(frame_id, x, y, dx, dy, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, x, y, dx, dy, background, pid);
         Ok(unsupported())
@@ -720,7 +1091,20 @@ pub fn host_mouse_move(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::mouse_move(frame_id, x, y, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::mouse_move(frame_id, x, y, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, x, y, background, pid);
         Ok(unsupported())
@@ -752,12 +1136,33 @@ pub fn host_drag(
             pid,
         }));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        let frame_id = opt_str(&frame_id);
+        let background = background.unwrap_or(false);
+        #[cfg(target_os = "linux")]
+        {
+            return Ok(linux::drag(frame_id, x, y, x2, y2, button, background, pid));
+        }
+        #[cfg(target_os = "windows")]
+        {
+            return Ok(win::drag(frame_id, x, y, x2, y2, button, background, pid));
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
         let _ = (frame_id, x, y, x2, y2, button, background, pid);
         Ok(unsupported())
     }
 }
+
+#[cfg(target_os = "linux")]
+#[path = "host_input_linux.rs"]
+mod linux;
+
+#[cfg(target_os = "windows")]
+#[path = "host_input_win.rs"]
+mod win;
 
 #[cfg(target_os = "macos")]
 mod mac {
@@ -1329,9 +1734,23 @@ mod mac {
         };
         for ch in text.chars() {
             if ch == '\n' || ch == '\r' {
-                post_key(&KeyStroke { keycode: 36, flags: 0 }, pid);
+                post_key(
+                    &KeyStroke {
+                        keycode: 36,
+                        flags: 0,
+                        name: "return".into(),
+                    },
+                    pid,
+                );
             } else if ch == '\t' {
-                post_key(&KeyStroke { keycode: 48, flags: 0 }, pid);
+                post_key(
+                    &KeyStroke {
+                        keycode: 48,
+                        flags: 0,
+                        name: "tab".into(),
+                    },
+                    pid,
+                );
             } else {
                 post_unicode(ch, 0, pid);
             }
@@ -2054,5 +2473,50 @@ mod tests {
         assert!(ACCESSIBILITY_DENIED_MSG.contains("辅助功能"));
         assert!(EVENT_POSTING_DENIED_MSG.contains("发送事件"));
         assert!(EVENT_POSTING_DENIED_MSG.contains("辅助功能"));
+        assert!(LINUX_SCREEN_DENIED_MSG.contains("X11"));
+        assert!(LINUX_EVENT_POSTING_DENIED_MSG.contains("XTest"));
+        assert!(WIN_SCREEN_DENIED_MSG.contains("交互桌面"));
+        assert!(WIN_EVENT_POSTING_DENIED_MSG.contains("UIPI"));
+    }
+
+    #[test]
+    fn logical_names_map_without_reusing_mac_keycodes() {
+        let t = parse_keystroke("cmd+t", &[]).unwrap();
+        assert_eq!(t.name, "t");
+        assert_eq!(linux_keysym(&t.name), Some(b't' as u32));
+        assert_eq!(windows_vk(&t.name), Some(b'T' as u16));
+        assert_eq!(linux_keysym("return"), Some(0xff0d));
+        assert_eq!(linux_keysym("arrowup"), Some(0xff52));
+        assert_eq!(linux_keysym("command"), Some(0xffeb));
+        assert_eq!(windows_vk("return"), Some(0x0d));
+        assert_eq!(windows_vk("arrowup"), Some(0x26));
+        assert_eq!(windows_vk("command"), Some(0x5b));
+        assert_eq!(windows_vk("delete"), Some(0x08));
+        assert_eq!(windows_vk("del"), Some(0x2e));
+        assert!(linux_keysym("notakey").is_none());
+        assert!(windows_vk("notakey").is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_capture_is_jpeg_or_a_named_denial() {
+        match capture_shot("main", None, 1_200_000) {
+            Ok(shot) => {
+                assert!(shot.bytes.starts_with(&[0xFF, 0xD8]), "jpeg magic");
+                assert!(shot.width > 0 && shot.height > 0);
+            }
+            Err(err) => {
+                assert!(
+                    err.code == "screen_recording_denied" || err.code == "screenshot_failed",
+                    "{}",
+                    err.message
+                );
+                assert!(
+                    err.message.contains("X11") || err.message.contains("截屏"),
+                    "{}",
+                    err.message
+                );
+            }
+        }
     }
 }
