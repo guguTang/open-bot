@@ -1243,6 +1243,15 @@ async def openai_path(
             "host_move",
             "host_open",
             "host_screenshot",
+            "host_click",
+            "host_type",
+            "host_key",
+            "host_scroll",
+            "host_mouse_move",
+            "host_drag",
+            "host_list_windows",
+            "host_ax",
+            "host_tcc_status",
             "host_shell",
             "host_ssh_ls",
             "host_ssh_read",
@@ -1251,8 +1260,10 @@ async def openai_path(
             "host_ssh_exec",
         ):
             from . import machines as machines_mod
+            from .host_computer import is_computer_tool, prepare_host_computer
 
             op = name.removeprefix("host_")
+            cu_args: dict[str, Any] | None = None
             listed = machines_mod.list_machines(str(user_id or ""))
             rows = listed.get("machines") if isinstance(listed, dict) else None
             if not isinstance(rows, list):
@@ -1319,6 +1330,11 @@ async def openai_path(
                                 ensure_ascii=False,
                             )
                         dest = str(display)
+                elif is_computer_tool(name):
+                    try:
+                        path, dest, cu_args = prepare_host_computer(name, args)
+                    except ValueError as exc:
+                        return json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False)
                 else:
                     path = str(args.get("path") or args.get("name") or args.get("command") or "")
                     dest = str(args.get("dest") or "")
@@ -1351,6 +1367,7 @@ async def openai_path(
                 limit=ls_limit,
                 sort=ls_sort,
                 glob=ls_glob,
+                args=cu_args,
             )
             if result.get("ok"):
                 machines_mod.remember_usual_device(mem_store or mem, result.get("usual"))

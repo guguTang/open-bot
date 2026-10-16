@@ -399,7 +399,7 @@ const SCREENSHOT_MAX_BYTES: usize = 1_200_000;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SCREENSHOT_TIMEOUT_SECS: u64 = 20;
 
-const SCREEN_RECORDING_DENIED_MSG: &str = "没有屏幕录制权限。请到「系统设置 → 隐私与安全性 → 屏幕录制」允许已安装的 Open Bot，然后重试。请打开 DMG 或「应用程序」里的 Open Bot，不要直接运行 Contents/MacOS 里的二进制。桌面设置里也可以打开这一页。若还要让助手操作界面，请同时允许「辅助功能」；若系统列出「输入监控」或「事件发布」，也允许 Open Bot。";
+const SCREEN_RECORDING_DENIED_MSG: &str = "没有屏幕录制权限。请到「系统设置 → 隐私与安全性 → 屏幕录制」允许已安装的 Open Bot，然后重试。请打开 DMG 或「应用程序」里的 Open Bot，不要直接运行 Contents/MacOS 里的二进制。桌面设置里也可以打开这一页。若还要让助手操作界面，请同时允许「辅助功能」和发送事件；若系统列出「输入监控」或「事件发布」，也允许 Open Bot。";
 
 fn screenshot_error(code: &str, error: &str) -> Value {
     json!({ "ok": false, "error": error, "code": code })
@@ -626,6 +626,7 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
     } else {
         "main"
     };
+    let frame = crate::host_input::bind_screenshot_frame(scope_out, display, width, height);
     Ok(json!({
         "ok": true,
         "mime": "image/jpeg",
@@ -634,6 +635,15 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
         "scope": scope_out,
         "display": display,
         "bytes": bytes.len(),
+        "frame_id": frame.frame_id,
+        "scale": frame.scale,
+        "coord_space": "image_pixels",
+        "actionable": frame.actionable,
+        "expires_in_sec": frame.expires_in_sec,
+        "origin_x": frame.origin_x,
+        "origin_y": frame.origin_y,
+        "width_pt": frame.width_pt,
+        "height_pt": frame.height_pt,
         "image_base64": encode_base64(&bytes),
     }))
 }
@@ -671,13 +681,17 @@ pub fn host_screenshot(scope: Option<String>, display: Option<i64>) -> Result<Va
 #[tauri::command]
 pub fn host_open_privacy(pane: String) -> Result<Value, String> {
     let pane = pane.trim().to_ascii_lowercase();
-    let anchor = match pane.as_str() {
-        "accessibility" | "assistive" => "Privacy_Accessibility",
-        "screen" | "screen_recording" | "screencapture" => "Privacy_ScreenCapture",
+    let (anchor, request_post) = match pane.as_str() {
+        "accessibility" | "assistive" => ("Privacy_Accessibility", false),
+        "screen" | "screen_recording" | "screencapture" => ("Privacy_ScreenCapture", false),
+        "event" | "event_posting" | "post_event" => ("Privacy_Accessibility", true),
         _ => return Err("未知的隐私设置页".into()),
     };
     #[cfg(target_os = "macos")]
     {
+        if request_post {
+            crate::host_input::request_event_posting();
+        }
         let url = format!("x-apple.systempreferences:com.apple.preference.security?{anchor}");
         let mut cmd = Command::new("open");
         cmd.arg(&url);
@@ -686,8 +700,8 @@ pub fn host_open_privacy(pane: String) -> Result<Value, String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = anchor;
-        Err("请在 macOS「系统设置 → 隐私与安全性」里授权屏幕录制和辅助功能".into())
+        let _ = (anchor, request_post);
+        Err("请在 macOS「系统设置 → 隐私与安全性」里授权屏幕录制、辅助功能和发送事件".into())
     }
 }
 
@@ -742,5 +756,6 @@ mod tests {
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("辅助功能"));
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("Contents/MacOS"));
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("输入监控"));
+        assert!(SCREEN_RECORDING_DENIED_MSG.contains("发送事件"));
     }
 }

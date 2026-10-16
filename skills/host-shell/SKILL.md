@@ -21,7 +21,7 @@ description: Run local commands on a connected computer via host_shell. Use for 
 2. 本机命令：`host_shell`（自己写；stdout 可能被截断）。
 3. 浅层浏览已知小目录：`host_ls`（不要拿它做「最大文件」汇总后再自己排序）。
 4. 打开软件，或判断某个 App 是否已安装：`host_open`（传用户说的名字）。它会在 Mac 上按名字解析 `.app`。不要用 `mdfind 'kMDItemKind == "Application"'`——Kind 随系统语言本地化（简体中文是「应用程序」），空结果不等于没安装。
-5. 看屏幕：`host_screenshot`（图像附在工具结果里）。不要用 `screencapture` 存文件再假装看过。
+5. 看屏幕：`host_screenshot`（图像附在工具结果里）。不要用 `screencapture` 存文件再假装看过。要点、输入、按键、滚动：先 `load_skill computer-use`，用 `host_click` / `host_type` / `host_key` / `host_scroll`，不要用 cliclick 或 osascript 模拟点击。
 6. 删除：`host_delete`（多个文件传 `paths` 一次完成）。用户说再试一次且上一轮是删除时，再次调用 `host_delete`。
 7. 写入/移动：`host_write` / `host_move`。
 

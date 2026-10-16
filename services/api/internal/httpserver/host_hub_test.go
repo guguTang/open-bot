@@ -17,6 +17,15 @@ func TestHostSSHOps(t *testing.T) {
 	if !supportedHostOp("screenshot") || !hostExecAllowsEmptyPath("screenshot") {
 		t.Fatal("screenshot op")
 	}
+	if !supportedHostOp("click") || !supportedHostOp("type") || !supportedHostOp("tcc_status") {
+		t.Fatal("computer use ops")
+	}
+	if hostExecAllowsEmptyPath("click") || !hostExecAllowsEmptyPath("tcc_status") || !hostExecAllowsEmptyPath("ax") {
+		t.Fatal("computer use empty path")
+	}
+	if !hostOpNeedsConfirm("click") || !hostOpNeedsConfirm("drag") || hostOpNeedsConfirm("ax") {
+		t.Fatal("computer use confirm")
+	}
 	if hostExecAllowsEmptyPath("open") {
 		t.Fatal("open still needs a name")
 	}

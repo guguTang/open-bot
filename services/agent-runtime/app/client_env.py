@@ -119,7 +119,7 @@ def format_environment_block(
             "浏览器没有 machine_id 时：用可选的优先电脑，否则仅一台已连接时用那一台；多台且无优先则先问用户。"
             "对不上或有多台都像时先问用户。"
             # Must-load details live in ## 工具路由; keep a short pointer (tests expect load_skill + host-ssh here).
-            "本机/远程操作前先 load_skill（host-shell / host-file-query / host-ssh）。"
+            "本机/远程操作前先 load_skill（host-shell / host-file-query / host-ssh / computer-use）。"
             "禁止编造文件名和大小；不要用内部运行环境冒充本机文件。"
         )
         lines.extend(_usual_machine_lines(machines))
@@ -243,7 +243,7 @@ def format_tools_routing_block(*, tools_enabled: bool, available_tool_names: lis
             # Machine selection detail lives in ## 环境; keep must-load as the canonical host-skill rule.
             "主机：选机规则见「环境」。本机命令、文件查询、远程 SSH 的用法不写在系统提示里——"
             "目录有匹配技能时，动手前必须 load_skill"
-            "（host-shell / host-file-query / host-ssh），读完再调用工具；禁止跳过 load 直接调。"
+            "（host-shell / host-file-query / host-ssh / computer-use），读完再调用工具；禁止跳过 load 直接调。"
             "禁止用 sandbox 冒充本机。"
         )
     if "clone_agent" in names:
@@ -275,6 +275,15 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "host_move": "移动本机文件",
     "host_open": "打开软件",
     "host_screenshot": "截取屏幕",
+    "host_click": "点击界面",
+    "host_type": "输入文字",
+    "host_key": "发送按键",
+    "host_scroll": "滚动界面",
+    "host_mouse_move": "移动鼠标",
+    "host_drag": "拖拽",
+    "host_list_windows": "列出窗口",
+    "host_ax": "查看界面元素",
+    "host_tcc_status": "检查权限",
     "host_shell": "在本机运行命令",
     "host_ssh_ls": "列出远程目录",
     "host_ssh_read": "读取远程文件",

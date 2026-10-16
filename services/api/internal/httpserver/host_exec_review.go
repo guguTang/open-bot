@@ -126,10 +126,24 @@ func classifyHostExecReview(op, path, dest string) hostExecReview {
 	dest = strings.TrimSpace(dest)
 
 	switch op {
-	case "ls", "read", "ssh_ls", "ssh_read", "open":
+	case "ls", "read", "ssh_ls", "ssh_read", "open", "list_windows", "ax":
 		return hostExecReview{Tier: hostExecReviewAuto, Reason: "只读/可逆操作，Auto-review 自动放行", Code: "readonly_op"}
 	case "screenshot":
 		return hostExecReview{Tier: hostExecReviewAuto, Reason: "截取屏幕是只读操作，Auto-review 自动放行", Code: "screenshot"}
+	case "tcc_status":
+		return hostExecReview{Tier: hostExecReviewAuto, Reason: "查看权限是只读操作，Auto-review 自动放行", Code: "tcc_status"}
+	case "click":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "点击界面，需你确认", Code: "click"}
+	case "type":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "向界面输入文字，需你确认", Code: "type"}
+	case "key":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "发送按键，需你确认", Code: "key"}
+	case "scroll":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "滚动界面，需你确认", Code: "scroll"}
+	case "mouse_move":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "移动鼠标，需你确认", Code: "mouse_move"}
+	case "drag":
+		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "拖拽界面，需你确认", Code: "drag"}
 	case "write":
 		return hostExecReview{Tier: hostExecReviewConfirm, Reason: "写入本机文件，需你确认", Code: "write"}
 	case "delete":
@@ -239,7 +253,8 @@ func hostExecHardDenied(op, path, dest string) (bool, hostExecReview) {
 
 func hostOpNeedsConfirm(op string) bool {
 	switch op {
-	case "write", "delete", "move", "shell", "ssh_write", "ssh_delete", "ssh_exec", "email_send":
+	case "write", "delete", "move", "shell", "ssh_write", "ssh_delete", "ssh_exec", "email_send",
+		"click", "type", "key", "scroll", "mouse_move", "drag":
 		return true
 	default:
 		return false
@@ -793,6 +808,22 @@ func hostOpChineseLabel(op string) string {
 		return "本机只读 打开文件 列表"
 	case "screenshot":
 		return "截取屏幕 屏幕录制"
+	case "tcc_status":
+		return "查看权限 屏幕录制 辅助功能 发送事件"
+	case "list_windows", "ax":
+		return "查看界面 窗口 辅助功能"
+	case "click":
+		return "点击界面 桌面操控"
+	case "type":
+		return "输入文字 桌面操控"
+	case "key":
+		return "发送按键 桌面操控"
+	case "scroll":
+		return "滚动界面 桌面操控"
+	case "mouse_move":
+		return "移动鼠标 桌面操控"
+	case "drag":
+		return "拖拽界面 桌面操控"
 	case "write":
 		return "写入本机文件"
 	case "delete":

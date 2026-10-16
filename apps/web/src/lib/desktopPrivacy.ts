@@ -21,8 +21,10 @@ function tauriInvoke(): TauriInvoke | null {
   return internals?.invoke ?? null;
 }
 
-/** Open the macOS Privacy pane for Screen Recording or Accessibility. */
-export async function openDesktopPrivacyPane(pane: "screen" | "accessibility"): Promise<void> {
+/** Open the macOS Privacy pane for Screen Recording, Accessibility, or event posting. */
+export async function openDesktopPrivacyPane(
+  pane: "screen" | "accessibility" | "event_posting",
+): Promise<void> {
   const invoke = tauriInvoke();
   if (!invoke) {
     throw new Error("请在 macOS 桌面应用里打开系统设置");

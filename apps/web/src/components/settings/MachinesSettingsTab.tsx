@@ -81,7 +81,7 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
   const [msg, setMsg] = useState("");
   if (!shouldShowDesktopCapturePermissions(clientEnv)) return null;
 
-  const open = (pane: "screen" | "accessibility") => {
+  const open = (pane: "screen" | "accessibility" | "event_posting") => {
     setBusy(true);
     setMsg("");
     void openDesktopPrivacyPane(pane)
@@ -92,7 +92,7 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
   };
 
   return (
-    <SettingsSection title="屏幕录制与辅助功能">
+    <SettingsSection title="屏幕录制、辅助功能与发送事件">
       <SettingsCard padded>
         <FieldGroup>
           <FieldDescription>{DESKTOP_CAPTURE_PERMISSION_HINT}</FieldDescription>
@@ -108,6 +108,15 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
               onClick={() => open("accessibility")}
             >
               打开「辅助功能」
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => open("event_posting")}
+            >
+              打开「发送事件」
             </Button>
           </div>
           {msg ? <FieldDescription>{msg}</FieldDescription> : null}

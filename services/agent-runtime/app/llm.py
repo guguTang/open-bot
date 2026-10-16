@@ -325,6 +325,11 @@ _NO_RETRY_HINT = (
     "端口无效",
     "屏幕录制",
     "暂不支持截屏",
+    "辅助功能",
+    "发送事件",
+    "画面已过期",
+    "frame_id",
+    "暂不支持桌面操控",
 )
 
 _ERRORISH_OUTPUT = re.compile(
@@ -1123,9 +1128,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "so you can see it. Prefer this over host_shell screencapture. "
                 "scope main (default) is the main display; all captures every display; "
                 "display is a 1-based index and overrides scope. "
+                "The result includes frame_id, width, height, and scale. "
+                "Later clicks, scrolls, and mouse moves use image pixels in that width×height "
+                "(top-left is 0,0) plus the same frame_id. Do not multiply by scale and do not add origin. "
+                "scope=all is not clickable; screenshot one display first. Frames expire after a few minutes. "
                 "Describe what is on screen from the attached image. "
                 "If the result says screen recording was denied, tell the user to allow Open Bot under "
-                "系统设置 → 隐私与安全性 → 屏幕录制 (and 辅助功能 when driving the GUI). Do not retry until they grant it. "
+                "系统设置 → 隐私与安全性 → 屏幕录制 (and 辅助功能 / 发送事件 when driving the GUI). "
+                "Do not retry until they grant it. "
                 "Phones and the browser cannot capture the desktop."
             ),
             "parameters": {
@@ -1143,6 +1153,225 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     },
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_tcc_status",
+            "description": (
+                "Read this Mac desktop app's privacy grants: screen_recording, accessibility, and event_posting. "
+                "Read-only. If a later desktop action is denied, call this and tell the user which pane to allow "
+                "under 系统设置 → 隐私与安全性. Do not keep retrying the denied action. Mac only."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"machine_id": {"type": "string"}},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_list_windows",
+            "description": (
+                "List on-screen windows on a connected Mac (app, title, pid, window_id, bounds). "
+                "Pass frame_id from host_screenshot to also get x,y,width,height in that image's pixels. "
+                "Read-only. Use pid with background=true on click/type/key to avoid stealing focus. "
+                "Empty titles usually mean Screen Recording is not granted."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_ax",
+            "description": (
+                "Read a Mac app's accessibility tree and return element_ref values for host_click / host_type. "
+                "Prefer element_ref over guessing coordinates. "
+                "Optional app name, pid, or window_id selects the target; omit them for the frontmost app. "
+                "Optional x,y plus frame_id hit-tests one element in screenshot pixels. "
+                "max_depth is 1..3 (default 2); limit is 1..120 (default 60). Read-only. "
+                "Needs 辅助功能. If denied, tell the user to allow Open Bot and do not retry until they do."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "app": {"type": "string"},
+                    "pid": {"type": "integer"},
+                    "window_id": {"type": "integer"},
+                    "max_depth": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_click",
+            "description": (
+                "Click on a connected Mac. Pass frame_id from the latest host_screenshot and x,y in that "
+                "image's pixels (width×height, top-left 0,0). Do not multiply by scale. "
+                "Or pass element_ref from host_ax. button is left (default), right, or middle. clicks is 1..3. "
+                "background=true posts to pid without stealing focus. "
+                "Mutating: Auto-review may ask the user. Needs 发送事件 permission. "
+                "Do not use host_shell, osascript, or cliclick for clicks."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "element_ref": {"type": "string"},
+                    "button": {"type": "string", "enum": ["left", "right", "middle"]},
+                    "clicks": {"type": "integer"},
+                    "modifiers": {"type": "array", "items": {"type": "string"}},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_type",
+            "description": (
+                "Type text into a connected Mac. Requires frame_id from a recent host_screenshot "
+                "or element_ref from host_ax (element_ref clicks that element first). "
+                "Newlines become Return. background=true with pid avoids stealing focus. "
+                "Mutating: Auto-review may ask. Needs 发送事件. Do not type secrets. "
+                "Do not use host_shell keystroke for this."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "element_ref": {"type": "string"},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_key",
+            "description": (
+                "Press one key or shortcut on a connected Mac, for example key=t modifiers=[command], "
+                "or key=cmd+t, return, escape, tab, up/down/left/right. "
+                "Requires frame_id or element_ref so the key is tied to a recent look at the screen. "
+                "background=true posts to pid. Mutating: Auto-review may ask. Needs 发送事件. "
+                "Do not use osascript keystroke."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "key": {"type": "string"},
+                    "modifiers": {"type": "array", "items": {"type": "string"}},
+                    "frame_id": {"type": "string"},
+                    "element_ref": {"type": "string"},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_scroll",
+            "description": (
+                "Scroll a connected Mac at screenshot pixel x,y. frame_id is required. "
+                "dy>0 scrolls up, dy<0 scrolls down, dx>0 scrolls right. Values are line steps, clamped. "
+                "Mutating: Auto-review may ask. Needs 发送事件."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "dx": {"type": "number"},
+                    "dy": {"type": "number"},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": ["frame_id", "x", "y"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_mouse_move",
+            "description": (
+                "Move the pointer on a connected Mac to screenshot pixel x,y for frame_id. "
+                "Mutating: Auto-review may ask. Needs 发送事件. background=true posts to pid."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": ["frame_id", "x", "y"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_drag",
+            "description": (
+                "Drag on a connected Mac from screenshot pixel x,y to x2,y2 within frame_id. "
+                "button defaults to left. Mutating: Auto-review may ask. Needs 发送事件. "
+                "background=true posts to pid."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "frame_id": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "x2": {"type": "number"},
+                    "y2": {"type": "number"},
+                    "button": {"type": "string", "enum": ["left", "right", "middle"]},
+                    "background": {"type": "boolean"},
+                    "pid": {"type": "integer"},
+                },
+                "required": ["frame_id", "x", "y", "x2", "y2"],
             },
         },
     },

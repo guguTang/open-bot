@@ -96,6 +96,12 @@ function actionCopy(item: HostConfirmPayload): ActionCopy {
         : "主屏幕";
     return { title: "截取屏幕？", detail: where, danger: false };
   }
+  if (item.op === "click") return { title: "点击界面？", detail: item.path, danger: false };
+  if (item.op === "type") return { title: "向界面输入文字？", detail: item.path, danger: false };
+  if (item.op === "key") return { title: "发送按键？", detail: item.path, danger: false };
+  if (item.op === "scroll") return { title: "滚动界面？", detail: item.path, danger: false };
+  if (item.op === "mouse_move") return { title: "移动鼠标？", detail: item.path, danger: false };
+  if (item.op === "drag") return { title: "拖拽界面？", detail: item.path, danger: false };
   if (item.op === "email_send") {
     const attachLine = (item.preview || "")
       .split("\n")
@@ -112,7 +118,7 @@ function actionCopy(item: HostConfirmPayload): ActionCopy {
   return { title: "确认这次操作？", detail: item.path, danger: false };
 }
 
-const PREVIEW_OPS = new Set(["write", "shell", "ssh_write", "ssh_exec", "email_send"]);
+const PREVIEW_OPS = new Set(["write", "shell", "ssh_write", "ssh_exec", "email_send", "type", "key"]);
 
 export function HostConfirmCard({
   conversationId,

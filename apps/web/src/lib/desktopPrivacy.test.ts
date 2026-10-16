@@ -51,4 +51,22 @@ describe("desktop capture permissions", () => {
     });
     expect(toolLabelForHostOp("screenshot")).toBe("host_screenshot");
   });
+
+  it("confirms pointer actions and auto-runs permission and window reads", () => {
+    expect(classifyHostExecReview("click", "12,34", "")).toEqual({
+      tier: "confirm",
+      reason: "点击界面，需你确认",
+      code: "click",
+    });
+    expect(classifyHostExecReview("type", "输入 2 字", "").tier).toBe("confirm");
+    expect(classifyHostExecReview("key", "cmd+t", "").code).toBe("key");
+    expect(classifyHostExecReview("scroll", "1,1", "").code).toBe("scroll");
+    expect(classifyHostExecReview("drag", "1,1", "").code).toBe("drag");
+    expect(classifyHostExecReview("mouse_move", "1,1", "").code).toBe("mouse_move");
+    expect(classifyHostExecReview("tcc_status", "", "").code).toBe("tcc_status");
+    expect(classifyHostExecReview("list_windows", "", "").code).toBe("readonly_op");
+    expect(classifyHostExecReview("ax", "Safari", "").tier).toBe("auto");
+    expect(toolLabelForHostOp("click")).toBe("host_click");
+    expect(toolLabelForHostOp("tcc_status")).toBe("host_tcc_status");
+  });
 });

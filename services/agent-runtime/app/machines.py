@@ -211,6 +211,7 @@ def exec_host(
     limit: int | None = None,
     sort: str = "",
     glob: str = "",
+    args: dict[str, Any] | None = None,
     timeout: float = HOST_EXEC_TIMEOUT_SEC,
 ) -> dict[str, Any]:
     uid = (user_id or "").strip()
@@ -240,6 +241,8 @@ def exec_host(
         payload["sort"] = str(sort).strip()
     if glob:
         payload["glob"] = str(glob).strip()
+    if args:
+        payload["args"] = args
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,

@@ -15,6 +15,8 @@ export type HostExecRequest = {
   limit?: number;
   sort?: string;
   glob?: string;
+  /** Structured desktop-control arguments (click/type/key/scroll/ax/…). */
+  args?: Record<string, unknown>;
   /** API already got allow/deny in chat; execute without asking again. */
   preconfirmed?: boolean;
 };

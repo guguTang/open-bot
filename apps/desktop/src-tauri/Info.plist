@@ -16,6 +16,6 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Open Bot 需要屏幕录制权限，才能把当前画面截给助手查看。</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Open Bot 需要辅助功能与 Apple 事件权限，才能按你的要求操作本机应用。</string>
+	<string>Open Bot 需要辅助功能、发送事件与 Apple 事件权限，才能按你的要求点击、输入和操作本机应用。</string>
 </dict>
 </plist>
