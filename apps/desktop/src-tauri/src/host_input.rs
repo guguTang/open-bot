@@ -33,15 +33,22 @@ pub const ACCESSIBILITY_DENIED_MSG: &str = "没有辅助功能权限。请到「
 pub const EVENT_POSTING_DENIED_MSG: &str = "没有发送事件权限。请到「系统设置 → 隐私与安全性 → 辅助功能」允许已安装的 Open Bot 发送事件，然后重试。桌面设置里也可以打开这一页。若系统列出「输入监控」或「事件发布」，也允许 Open Bot。若系统弹出单独的发送事件提示，请点允许。";
 const STALE_FRAME_MSG: &str = "画面已过期或 frame_id 对不上。请重新截取屏幕，用新的 frame_id 再操作。不要沿用旧坐标。";
 const MISSING_FRAME_MSG: &str = "需要最近一次截图的 frame_id。先截取屏幕，再把返回的 frame_id 和图像像素坐标传进来。";
+#[cfg(any(target_os = "linux", test))]
 pub const LINUX_SCREEN_DENIED_MSG: &str = "无法截取屏幕。Linux 桌面操控使用 X11（含 XWayland 的 DISPLAY），不使用 xdotool 或 grim。请确认 DISPLAY 可用。Wayland 原生若没有 XWayland 目前不能截屏。";
+#[cfg(any(target_os = "linux", test))]
 pub const LINUX_ACCESSIBILITY_DENIED_MSG: &str = "没有辅助功能。请安装 at-spi2-core（libatspi），并打开辅助功能（GNOME：设置 → 辅助功能）。";
+#[cfg(any(target_os = "linux", test))]
 pub const LINUX_EVENT_POSTING_DENIED_MSG: &str = "无法发送键鼠。主路径是 X11 的 XTest，不使用 xdotool。请确认 XTest 扩展可用。Wayland 原生若没有 XWayland 目前不能发送键鼠。";
+#[cfg(any(target_os = "windows", test))]
 pub const WIN_SCREEN_DENIED_MSG: &str = "无法截取屏幕。请确认 Open Bot 在已登录的交互桌面（不是服务或锁屏安全桌面）。没有单独的屏幕录制开关。";
+#[cfg(any(target_os = "windows", test))]
 pub const WIN_ACCESSIBILITY_DENIED_MSG: &str = "无法读取 UI Automation。权限级别需与目标窗口一致（管理员窗口要管理员启动 Open Bot）。";
+#[cfg(any(target_os = "windows", test))]
 pub const WIN_EVENT_POSTING_DENIED_MSG: &str = "无法发送键鼠。请在已解锁的交互桌面运行 Open Bot，不要以服务运行。UIPI 会拦住对管理员窗口的输入。";
 const FRAME_NOT_ACTIONABLE_MSG: &str =
     "这张图不能用来点击（全部屏幕，或缺少显示器尺寸）。请用主屏幕或指定一个显示器重新截一张单屏图。";
 const COORD_OUT_MSG: &str = "坐标超出这张截图的宽高。请按图像像素重新估计，不要乘 scale，也不要加上 origin。";
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 const UNSUPPORTED_MSG: &str = "当前系统暂不支持桌面操控（需要 macOS、Windows 或 Linux 桌面端）";
 const STALE_ELEMENT_MSG: &str = "界面元素已过期。请重新查看界面元素，用新的 element_ref。";
 const ELEMENT_NOT_CLICKABLE_MSG: &str =
@@ -51,6 +58,7 @@ fn cu_error(code: &str, error: &str) -> Value {
     json!({ "ok": false, "error": error, "code": code })
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn unsupported() -> Value {
     cu_error("unsupported_platform", UNSUPPORTED_MSG)
 }
@@ -346,12 +354,14 @@ fn capture_geom(scope: &str, display: Option<u32>, image_w: u32, image_h: u32) -
     DisplayGeom::inert(image_w, image_h)
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub struct CapturedShot {
     pub bytes: Vec<u8>,
     pub width: u32,
     pub height: u32,
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub struct ShotError {
     pub code: &'static str,
     pub message: String,
@@ -381,6 +391,7 @@ pub fn open_platform_privacy(pane: &str) -> Result<Value, String> {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn background_target(background: bool, pid: Option<i64>, element_pid: Option<i32>) -> Result<Option<i32>, Value> {
     if !background {
         return Ok(None);
@@ -398,6 +409,7 @@ fn background_target(background: bool, pid: Option<i64>, element_pid: Option<i32
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn frame_point(frame_id: &str, x: Option<f64>, y: Option<f64>) -> Result<(f64, f64), Value> {
     let geom = load_frame(frame_id)?;
     let (x, y) = match (x, y) {
@@ -407,6 +419,7 @@ fn frame_point(frame_id: &str, x: Option<f64>, y: Option<f64>) -> Result<(f64, f
     map_image_point(&geom, x, y).map_err(point_error)
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn element_center(id: &str) -> Result<(f64, f64, i32), Value> {
     let el = lookup_element(id)?;
     if el.w_pt <= 1.0 || el.h_pt <= 1.0 {
@@ -415,6 +428,7 @@ fn element_center(id: &str) -> Result<(f64, f64, i32), Value> {
     Ok((el.x_pt + el.w_pt / 2.0, el.y_pt + el.h_pt / 2.0, el.pid))
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn require_anchor(frame_id: &str, element_ref: &str) -> Result<Option<i32>, Value> {
     if !element_ref.is_empty() {
         let el = lookup_element(element_ref)?;
@@ -427,6 +441,7 @@ fn require_anchor(frame_id: &str, element_ref: &str) -> Result<Option<i32>, Valu
     Ok(None)
 }
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 fn publish_element(
     pid: i32,
     role: &str,
@@ -640,6 +655,7 @@ pub fn parse_keystroke(key: &str, extra_modifiers: &[String]) -> Result<KeyStrok
 }
 
 /// X11 keysym for a logical key name. Mac virtual keycodes are not reused here.
+#[cfg(any(target_os = "linux", test))]
 pub fn linux_keysym(name: &str) -> Option<u32> {
     Some(match name.trim().to_ascii_lowercase().as_str() {
         "return" | "enter" => 0xff0d,
@@ -694,6 +710,7 @@ pub fn linux_keysym(name: &str) -> Option<u32> {
 }
 
 /// Win32 virtual-key for a logical key name. Letters assume the US layout's A–Z VKs.
+#[cfg(any(target_os = "windows", test))]
 pub fn windows_vk(name: &str) -> Option<u16> {
     let name = name.trim().to_ascii_lowercase();
     if let Some(ch) = name.chars().next() {
@@ -2474,8 +2491,10 @@ mod tests {
         assert!(EVENT_POSTING_DENIED_MSG.contains("发送事件"));
         assert!(EVENT_POSTING_DENIED_MSG.contains("辅助功能"));
         assert!(LINUX_SCREEN_DENIED_MSG.contains("X11"));
+        assert!(LINUX_ACCESSIBILITY_DENIED_MSG.contains("辅助功能"));
         assert!(LINUX_EVENT_POSTING_DENIED_MSG.contains("XTest"));
         assert!(WIN_SCREEN_DENIED_MSG.contains("交互桌面"));
+        assert!(WIN_ACCESSIBILITY_DENIED_MSG.contains("UI Automation"));
         assert!(WIN_EVENT_POSTING_DENIED_MSG.contains("UIPI"));
     }
 
