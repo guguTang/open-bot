@@ -221,8 +221,8 @@ function AppSidebarInner() {
           </div>
         </div>
       ) : (
-        <div className="flex shrink-0 px-1 py-0.5">
-          <InputGroup>
+        <div className="flex min-w-0 shrink-0 px-1 py-0.5">
+          <InputGroup className="min-w-0 overflow-hidden">
             <InputGroupInput
               value={convSearch}
               onChange={(e) => setConvSearch(e.target.value)}
@@ -236,16 +236,15 @@ function AppSidebarInner() {
             <InputGroupAddon align="inline-end">
               <InputGroupButton
                 ref={actions.newChatBtnRef}
-                size="xs"
+                size="icon-xs"
                 title="新建聊天"
                 aria-label="新建聊天"
                 aria-haspopup="dialog"
                 aria-expanded={showNewChat}
-                className="shrink-0 min-w-fit whitespace-nowrap px-2"
+                className="shrink-0"
                 onClick={() => sessionActions().onOpenNewChatList()}
               >
                 <Plus aria-hidden />
-                新建
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
