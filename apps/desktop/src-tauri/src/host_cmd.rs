@@ -101,7 +101,7 @@ fn defaults_read_info(app: &Path, key: &str) -> Option<String> {
     }
 }
 
-/// CFBundle* names so callers can match `host_list_windows` owners (e.g. Lark.app → Feishu).
+/// CFBundle* names so callers can match `host_list_windows` owners (window owner may differ from .app).
 #[cfg(target_os = "macos")]
 fn macos_app_name_fields(app: &Path) -> serde_json::Map<String, Value> {
     let mut m = serde_json::Map::new();
