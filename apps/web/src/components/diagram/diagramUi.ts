@@ -177,7 +177,8 @@ export const diagramFsBodyClass = (opts?: { source?: boolean; html?: boolean; im
   cn(
     "min-h-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y",
     opts?.html && "flex flex-col p-0",
-    opts?.image && "grid place-items-center bg-[#0a0a0a] p-4 touch-pan-x touch-pan-y",
+    opts?.image &&
+      "grid place-items-center bg-[#0a0a0a] p-4 select-none touch-pan-x touch-pan-y cursor-grab active:cursor-grabbing",
   );
 
 export const diagramBodyHtmlClass = cn(
@@ -218,7 +219,7 @@ export const diagramImageFailClass = cn(
   "[data-theme=dark]:text-[#a1a1aa]",
 );
 
+/** Fullscreen lightbox img — width/height set by ImageFullscreen (natural × scale). */
 export const diagramImageImgFsClass = cn(
-  "block max-h-full max-w-full cursor-default object-contain transition-transform duration-[50ms] ease-linear",
-  "motion-reduce:transition-none",
+  "block h-auto w-auto max-h-none max-w-none object-contain pointer-events-none",
 );

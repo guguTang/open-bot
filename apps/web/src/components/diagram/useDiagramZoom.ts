@@ -9,6 +9,8 @@ type Anchor = { vx: number; vy: number; cx: number; cy: number };
 
 export const DIAGRAM_INLINE_ZOOM = { min: 0.5, max: 2 } as const;
 export const DIAGRAM_FULLSCREEN_ZOOM = { min: 0.25, max: 4 } as const;
+/** Image lightbox: allow deep fit-contain under 25% for large screenshots. */
+export const DIAGRAM_IMAGE_FULLSCREEN_ZOOM = { min: 0.05, max: 8 } as const;
 
 export function useDiagramZoom(
   el: HTMLElement | null,

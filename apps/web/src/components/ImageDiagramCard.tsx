@@ -1,10 +1,10 @@
 /**
  * Image diagram card — design bot-diagram-card-design-v2 §2.
  * Auth attachment GET via ?access_token= on <img>; toolbar: copy URL · download · fullscreen.
- * No fake generated images — only real urls / attachments.
+ * Fullscreen lightbox: open at fit-contain, then Ctrl/Cmd+wheel / pinch / toolbar zoom,
+ * drag or scroll to pan. No fake generated images — only real urls / attachments.
  * Interaction chrome from `./diagram`.
  */
-import { clamp } from "es-toolkit";
 import {
   useCallback,
   useEffect,
@@ -12,7 +12,6 @@ import {
   useRef,
   useState,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { toast } from "sonner";
 import {
@@ -26,12 +25,16 @@ import { DiagramCardFrame } from "./DiagramCardFrame";
 import { type DiagramOverflowItem } from "./diagramCardFrameModel";
 import {
   copyDiagramText,
+  DIAGRAM_IMAGE_FULLSCREEN_ZOOM,
   DiagramCopyButton,
   DiagramDownloadIconButton,
   DiagramExpandButton,
   DiagramFullscreenShell,
+  DiagramIconMinus,
+  DiagramIconPlus,
   diagramOverflowItems,
   useDiagramCardChrome,
+  useDiagramZoom,
 } from "./diagram";
 import {
   diagramBodyImageClass,
@@ -42,6 +45,10 @@ import {
   diagramImageImgClass,
   diagramImageImgFsClass,
   diagramImageSkeletonClass,
+  diagramZoomFitClass,
+  diagramZoomGroupClass,
+  diagramZoomStepClass,
+  diagramZoomValueClass,
 } from "./diagram/diagramUi";
 
 function saveBlob(blob: Blob, filename: string) {
@@ -55,50 +62,53 @@ function saveBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function useImageFullscreenZoom(bodyRef: RefObject<HTMLDivElement | null>) {
-  const [scale, setScale] = useState(1);
-  const scaleRef = useRef(1);
-  useLayoutEffect(() => {
-    scaleRef.current = scale;
-  });
-
+/** Pointer drag → scrollLeft/Top so zoomed images can pan without relying on scrollbars. */
+function useImageDragPan(el: HTMLElement | null) {
   useEffect(() => {
-    const el = bodyRef.current;
     if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      e.preventDefault();
-      setScale((s) => clamp(s * Math.exp(-e.deltaY * 0.0015), 0.25, 4));
-    };
-    let start: { dist: number; scale: number } | null = null;
-    const dist = (t: TouchList) =>
-      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) start = { dist: dist(e.touches) || 1, scale: scaleRef.current };
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (!start || e.touches.length !== 2) return;
-      e.preventDefault();
-      setScale(clamp(start.scale * (dist(e.touches) / start.dist), 0.25, 4));
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) start = null;
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("touchcancel", onTouchEnd);
-    return () => {
-      el.removeEventListener("wheel", onWheel);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [bodyRef]);
+    let dragging = false;
+    let pid: number | null = null;
+    let x = 0;
+    let y = 0;
 
-  return { scale, setScale };
+    const overflows = () =>
+      el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !overflows()) return;
+      dragging = true;
+      pid = e.pointerId;
+      x = e.clientX;
+      y = e.clientY;
+      el.setPointerCapture(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging || e.pointerId !== pid) return;
+      const dx = e.clientX - x;
+      const dy = e.clientY - y;
+      x = e.clientX;
+      y = e.clientY;
+      el.scrollLeft -= dx;
+      el.scrollTop -= dy;
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId !== pid) return;
+      dragging = false;
+      pid = null;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    };
+
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+  }, [el]);
 }
 
 function ImageFullscreen({
@@ -118,14 +128,99 @@ function ImageFullscreen({
   downloading: boolean;
   onClose: () => void;
 }) {
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const { scale, setScale } = useImageFullscreenZoom(bodyRef);
+  const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const { scale, setScale } = useDiagramZoom(bodyEl, {
+    ...DIAGRAM_IMAGE_FULLSCREEN_ZOOM,
+    enabled: Boolean(nat),
+    pinch: true,
+  });
+  useImageDragPan(bodyEl);
+
+  const fitScale = useCallback(() => {
+    if (!bodyEl || !nat) return 1;
+    const pad = 32; // body p-4
+    const sw = (bodyEl.clientWidth - pad) / nat.w;
+    const sh = (bodyEl.clientHeight - pad) / nat.h;
+    // Contain: entire image visible; do not upscale past 100% natural.
+    return Math.min(1, sw, sh);
+  }, [bodyEl, nat]);
+
+  // Capture natural size (cached images may already be complete).
+  useLayoutEffect(() => {
+    const img = imgRef.current;
+    if (!img) return;
+    const apply = () => {
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setNat({ w: img.naturalWidth, h: img.naturalHeight });
+      }
+    };
+    apply();
+    img.addEventListener("load", apply);
+    return () => img.removeEventListener("load", apply);
+  }, [src]);
+
+  // On open: fit entire image in view (object-fit: contain equivalent).
+  // Gate sized layout until fit runs so we never flash at 100% natural on large shots.
+  const [fitReady, setFitReady] = useState(false);
+  useLayoutEffect(() => {
+    if (fitReady || !bodyEl || !nat) return;
+    setScale(fitScale());
+    setFitReady(true);
+  }, [bodyEl, nat, fitScale, setScale, fitReady]);
+
+  const sized = Boolean(nat && fitReady);
+  const displayW = sized && nat ? Math.max(1, Math.round(nat.w * scale)) : undefined;
+  const displayH = sized && nat ? Math.max(1, Math.round(nat.h * scale)) : undefined;
 
   return (
     <DiagramFullscreenShell
       label="图片"
       ariaLabel="图片"
       variant="image"
+      toolbarCenter={
+        <div className={diagramZoomGroupClass} aria-label="缩放">
+          <button
+            type="button"
+            className={diagramZoomStepClass}
+            aria-label="缩小"
+            title="缩小"
+            disabled={!nat}
+            onClick={() => setScale((s) => s / 1.25)}
+          >
+            <DiagramIconMinus />
+          </button>
+          <button
+            type="button"
+            className={diagramZoomValueClass}
+            title="重置为 100%"
+            disabled={!nat}
+            onClick={() => setScale(1)}
+          >
+            {Math.round(scale * 100)}%
+          </button>
+          <button
+            type="button"
+            className={diagramZoomStepClass}
+            aria-label="放大"
+            title="放大"
+            disabled={!nat}
+            onClick={() => setScale((s) => s * 1.25)}
+          >
+            <DiagramIconPlus />
+          </button>
+          <button
+            type="button"
+            className={diagramZoomFitClass}
+            title="适应窗口"
+            disabled={!nat}
+            onClick={() => setScale(fitScale())}
+          >
+            适应
+          </button>
+        </div>
+      }
       actions={
         <>
           <DiagramCopyButton onClick={onCopy} />
@@ -137,16 +232,23 @@ function ImageFullscreen({
           />
         </>
       }
-      bodyRef={bodyRef}
+      bodyRef={setBodyEl}
       bodyClassName={diagramFsBodyClass({ image: true })}
-      onBodyDoubleClick={() => setScale(1)}
+      onBodyDoubleClick={() => setScale(fitScale())}
       onClose={onClose}
     >
       <img
+        ref={imgRef}
         className={diagramImageImgFsClass}
         src={src}
         alt={alt || name || "图片"}
-        style={{ transform: `scale(${scale})` }}
+        width={displayW}
+        height={displayH}
+        style={
+          sized
+            ? { width: displayW, height: displayH }
+            : { maxWidth: "100%", maxHeight: "100%" }
+        }
         draggable={false}
       />
     </DiagramFullscreenShell>

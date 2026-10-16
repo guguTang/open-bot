@@ -38,6 +38,7 @@ export { diagramOverflowItems } from "./diagramToolbarModel";
 
 export {
   DIAGRAM_FULLSCREEN_ZOOM,
+  DIAGRAM_IMAGE_FULLSCREEN_ZOOM,
   DIAGRAM_INLINE_ZOOM,
   useDiagramZoom,
 } from "./useDiagramZoom";
