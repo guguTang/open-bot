@@ -101,6 +101,8 @@ export function Composer({
 }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  /** True while an IME session is active (incl. Safari gap after compositionend). */
+  const imeComposingRef = useRef(false);
   const [trigger, setTrigger] = useState<TriggerState | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
 
@@ -185,6 +187,19 @@ export function Composer({
   }, [replyTo?.id]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Chinese/Japanese/etc. IME: Space/Enter confirm candidates into the input.
+    // Never treat those as send or @/ picker shortcuts. keyCode 229 = IME "Process".
+    // imeComposingRef covers Safari, where compositionend can clear isComposing
+    // before the confirming keydown runs.
+    const imeComposing =
+      imeComposingRef.current ||
+      e.isComposing ||
+      e.nativeEvent.isComposing ||
+      e.keyCode === 229;
+    if (imeComposing) {
+      return;
+    }
+    // Send is Enter-only (Shift+Enter inserts newline). Space must never submit.
     if (showPicker && activeOptions.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -410,6 +425,16 @@ export function Composer({
             ref={taRef}
             value={value}
             onChange={(e) => onTextChange(e.target.value)}
+            onCompositionStart={() => {
+              imeComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              // Defer clear so a confirming Enter/Space keydown in the same turn
+              // still sees composing=true and does not submit.
+              window.setTimeout(() => {
+                imeComposingRef.current = false;
+              }, 0);
+            }}
             onClick={() => {
               const caret = taRef.current?.selectionStart ?? value.length;
               refreshTrigger(value, caret);
