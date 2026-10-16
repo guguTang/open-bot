@@ -282,7 +282,11 @@ func hostActivityLabel(label, op, path, dest string) string {
 	case "move":
 		action = "移动文件"
 	case "open":
-		action = "打开软件"
+		if dest == "check" {
+			action = "检查软件"
+		} else {
+			action = "打开软件"
+		}
 	case "screenshot":
 		action = "截取屏幕"
 	case "click":

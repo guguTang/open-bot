@@ -138,13 +138,18 @@ def test_machine_label_in_env_block() -> None:
 
 def test_app_lookup_prefers_host_open() -> None:
     opened = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_open")
-    odesc = str((opened.get("function") or {}).get("description") or "")
+    ofn = opened.get("function") or {}
+    odesc = str(ofn.get("description") or "")
+    props = (ofn.get("parameters") or {}).get("properties") or {}
     _ok("installed" in odesc.lower(), "host_open covers check-if-installed")
+    _ok("launch=false" in odesc.replace(" ", ""), "host_open describes launch=false check-only")
+    _ok("launch" in props, "host_open has launch parameter")
     _ok(".app" in odesc, "host_open resolves .app on Mac")
     _ok("mdfind" in odesc, "host_open steers away from mdfind")
     shell = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_shell")
     sdesc = str((shell.get("function") or {}).get("description") or "")
     _ok("host_open" in sdesc, "host_shell sends app lookup to host_open")
+    _ok("launch=false" in sdesc.replace(" ", ""), "host_shell points install-check at launch=false")
     _ok("kMDItemKind" in sdesc and "mdfind" in sdesc, "host_shell warns against localized Spotlight Kind")
     _ok("does not mean the app is not installed" in sdesc, "empty mdfind is not not-installed")
     _ok("find/du" not in sdesc.lower(), "app-lookup hint does not embed find/du how-to")
@@ -153,6 +158,7 @@ def test_app_lookup_prefers_host_open() -> None:
     computer_use_skill = (skills / "computer-use" / "SKILL.md").read_text()
     for label, text in (("host-shell", host_shell_skill), ("computer-use", computer_use_skill)):
         _ok("host_open" in text and "kMDItemKind" in text, f"{label} skill points app lookup at host_open")
+        _ok("launch=false" in text.replace(" ", ""), f"{label} skill uses launch=false for install check")
         _ok("应用程序" in text, f"{label} skill names the zh_CN Kind")
 
 

@@ -1330,6 +1330,19 @@ async def openai_path(
                                 ensure_ascii=False,
                             )
                         dest = str(display)
+                elif name == "host_open":
+                    path = str(args.get("name") or args.get("path") or "").strip()
+                    launch = True
+                    if "launch" in args:
+                        raw = args.get("launch")
+                        if isinstance(raw, bool):
+                            launch = raw
+                        elif isinstance(raw, (int, float)):
+                            launch = bool(raw)
+                        else:
+                            launch = str(raw).strip().lower() not in ("false", "0", "no", "off", "")
+                    dest = "" if launch else "check"
+                    cu_args = {"launch": launch}
                 elif is_computer_tool(name):
                     try:
                         path, dest, cu_args = prepare_host_computer(name, args)
