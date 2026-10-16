@@ -49,6 +49,51 @@ description = "Enables the host_shell command."
 commands.allow = ["host_shell"]
 
 [[permission]]
+identifier = "allow-host-click"
+description = "Enables the host_click command."
+commands.allow = ["host_click"]
+
+[[permission]]
+identifier = "allow-host-type"
+description = "Enables the host_type command."
+commands.allow = ["host_type"]
+
+[[permission]]
+identifier = "allow-host-key"
+description = "Enables the host_key command."
+commands.allow = ["host_key"]
+
+[[permission]]
+identifier = "allow-host-scroll"
+description = "Enables the host_scroll command."
+commands.allow = ["host_scroll"]
+
+[[permission]]
+identifier = "allow-host-mouse-move"
+description = "Enables the host_mouse_move command."
+commands.allow = ["host_mouse_move"]
+
+[[permission]]
+identifier = "allow-host-drag"
+description = "Enables the host_drag command."
+commands.allow = ["host_drag"]
+
+[[permission]]
+identifier = "allow-host-list-windows"
+description = "Enables the host_list_windows command."
+commands.allow = ["host_list_windows"]
+
+[[permission]]
+identifier = "allow-host-ax"
+description = "Enables the host_ax command."
+commands.allow = ["host_ax"]
+
+[[permission]]
+identifier = "allow-host-tcc-status"
+description = "Enables the host_tcc_status command."
+commands.allow = ["host_tcc_status"]
+
+[[permission]]
 identifier = "allow-host-ssh-probe"
 description = "Enables the host_ssh_probe command."
 commands.allow = ["host_ssh_probe"]

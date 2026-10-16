@@ -23,6 +23,7 @@ export type ToolFamilyId =
   | "ssh_write"
   | "ssh_delete"
   | "email"
+  | "computer_use"
   | "other";
 
 export type ToolAllowEntry = {
@@ -47,6 +48,7 @@ const FAMILY_LABEL: Record<ToolFamilyId, string> = {
   ssh_write: "远程写入",
   email: "邮件发送",
   ssh_delete: "远程删除",
+  computer_use: "操作界面",
   other: "其他操作",
 };
 
@@ -91,6 +93,16 @@ export function toolFamilyForHostOp(op: string, path = ""): ToolFamilyId {
   if (o === "ssh_write") return "ssh_write";
   if (o === "ssh_delete") return "ssh_delete";
   if (o === "email_send") return "email";
+  if (
+    o === "click" ||
+    o === "type" ||
+    o === "key" ||
+    o === "scroll" ||
+    o === "mouse_move" ||
+    o === "drag"
+  ) {
+    return "computer_use";
+  }
   return "other";
 }
 
@@ -121,6 +133,24 @@ export function toolLabelForHostOp(op: string, path = ""): string {
       return "host_open";
     case "screenshot":
       return "host_screenshot";
+    case "click":
+      return "host_click";
+    case "type":
+      return "host_type";
+    case "key":
+      return "host_key";
+    case "scroll":
+      return "host_scroll";
+    case "mouse_move":
+      return "host_mouse_move";
+    case "drag":
+      return "host_drag";
+    case "list_windows":
+      return "host_list_windows";
+    case "ax":
+      return "host_ax";
+    case "tcc_status":
+      return "host_tcc_status";
     case "email_send":
       return "gmail_send";
     default:

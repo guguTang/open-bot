@@ -36,6 +36,8 @@ type hostExecRequest struct {
 	Limit int    `json:"limit,omitempty"`
 	Sort  string `json:"sort,omitempty"`
 	Glob  string `json:"glob,omitempty"`
+	// Structured desktop-control arguments (click/type/key/scroll/ax/…).
+	Args json.RawMessage `json:"args,omitempty"`
 	// Preconfirmed: chat UI already allowed this op; host client must execute without asking again.
 	Preconfirmed bool `json:"preconfirmed,omitempty"`
 }
@@ -159,7 +161,7 @@ func (h *hostHub) Call(ctx context.Context, userID, machineID string, req hostEx
 	}
 	s.pending[reqID] = ch
 	s.mu.Unlock()
-	payload, err := json.Marshal(map[string]any{
+	wire := map[string]any{
 		"type":            "exec",
 		"req_id":          reqID,
 		"op":              req.Op,
@@ -171,7 +173,14 @@ func (h *hostHub) Call(ctx context.Context, userID, machineID string, req hostEx
 		"ssh_user":        req.SSHUser,
 		"ssh_port":        req.SSHPort,
 		"preconfirmed":    req.Preconfirmed,
-	})
+	}
+	if len(req.Args) > 0 && string(req.Args) != "null" {
+		var parsed any
+		if err := json.Unmarshal(req.Args, &parsed); err == nil {
+			wire["args"] = parsed
+		}
+	}
+	payload, err := json.Marshal(wire)
 	if err != nil {
 		s.mu.Lock()
 		delete(s.pending, reqID)

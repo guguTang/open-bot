@@ -20,6 +20,8 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
 SCREENSHOT_NOTE = (
     "屏幕截图已作为图像附在这条工具结果上。请直接根据画面回答。"
     "不要说自己看不到图，也不要再用 screencapture 另存一份。"
+    "后续点击、滚动、移动鼠标的坐标用本结果的 width×height 像素（左上角为 0,0），并带上 frame_id。"
+    "不要乘 scale，不要加 origin。frame_id 过期或 scope=all 时先重新截一张单屏图。"
 )
 
 TEXT_MODEL_IMAGE_NOTE = (

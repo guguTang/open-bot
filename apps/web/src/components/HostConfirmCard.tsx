@@ -142,7 +142,13 @@ export function HostConfirmCard({
       ) : null}
       {detail && detail !== snippet ? <div className="host-confirm-path">{detail}</div> : null}
       {item.preview &&
-      (item.op === "write" || item.op === "shell" || item.op === "ssh_write" || item.op === "ssh_exec" || item.op === "email_send") ? (
+      (item.op === "write" ||
+        item.op === "shell" ||
+        item.op === "ssh_write" ||
+        item.op === "ssh_exec" ||
+        item.op === "email_send" ||
+        item.op === "type" ||
+        item.op === "key") ? (
         <pre className="host-confirm-preview">{item.preview}</pre>
       ) : null}
       {pending && onDecide ? (

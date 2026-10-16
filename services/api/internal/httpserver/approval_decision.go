@@ -81,6 +81,9 @@ func InferToolGroup(tool string) string {
 		return "file_delete"
 	case "move", "host_move", "ssh_move":
 		return "file_move"
+	case "click", "host_click", "type", "host_type", "key", "host_key",
+		"scroll", "host_scroll", "mouse_move", "host_mouse_move", "drag", "host_drag":
+		return "computer_use"
 	}
 	if strings.HasPrefix(t, "git_") || t == "git" {
 		return "git"
@@ -109,8 +112,10 @@ func HostOpToolIdentity(op string) (tool, toolGroup string) {
 		return "host_ssh_delete", "file_delete"
 	case "move":
 		return "host_move", "file_move"
-	case "ls", "read", "open", "screenshot":
+	case "ls", "read", "open", "screenshot", "list_windows", "ax", "tcc_status":
 		return "host_" + op, "host_read"
+	case "click", "type", "key", "scroll", "mouse_move", "drag":
+		return "host_" + op, "computer_use"
 	case "email_send":
 		return "gmail_send", "email"
 	default:

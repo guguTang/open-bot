@@ -139,6 +139,15 @@ func TestClassifyHostExecReview_Tiers(t *testing.T) {
 		{"open", "Safari", "", hostExecReviewAuto, "readonly_op"},
 		{"screenshot", "main", "", hostExecReviewAuto, "screenshot"},
 		{"screenshot", "", "2", hostExecReviewAuto, "screenshot"},
+		{"list_windows", "", "", hostExecReviewAuto, "readonly_op"},
+		{"ax", "Safari", "", hostExecReviewAuto, "readonly_op"},
+		{"tcc_status", "", "", hostExecReviewAuto, "tcc_status"},
+		{"click", "120,340", "", hostExecReviewConfirm, "click"},
+		{"type", "输入 4 字", "", hostExecReviewConfirm, "type"},
+		{"key", "cmd+t", "", hostExecReviewConfirm, "key"},
+		{"scroll", "10,10", "", hostExecReviewConfirm, "scroll"},
+		{"mouse_move", "10,10", "", hostExecReviewConfirm, "mouse_move"},
+		{"drag", "1,1 → 2,2", "", hostExecReviewConfirm, "drag"},
 		{"shell", "ls -la", "", hostExecReviewAuto, "shell_auto"},
 		{"shell", "cd ~/Downloads", "", hostExecReviewAuto, "shell_auto"},
 		{"shell", "pwd", "", hostExecReviewAuto, "shell_auto"},
@@ -319,6 +328,14 @@ func TestExecPolicyAllowSkipsConfirm(t *testing.T) {
 	rev = classifyHostExecReviewForMachine("delete", "~/a", "", on, db.MachineExecAllow)
 	if rev.Tier != hostExecReviewAuto || rev.Code != "exec_policy_allow" {
 		t.Fatalf("allow delete: tier=%s code=%s", rev.Tier, rev.Code)
+	}
+	rev = classifyHostExecReviewForMachine("click", "120,340", "", on, db.MachineExecAllow)
+	if rev.Tier != hostExecReviewAuto || rev.Code != "exec_policy_allow" {
+		t.Fatalf("allow click: tier=%s code=%s", rev.Tier, rev.Code)
+	}
+	rev = classifyHostExecReviewForMachine("type", "输入 2 字", "", on, db.MachineExecAsk)
+	if rev.Tier != hostExecReviewConfirm || rev.Code != "auto_review_off" {
+		t.Fatalf("ask type confirms: tier=%s code=%s", rev.Tier, rev.Code)
 	}
 	rev = classifyHostExecReviewForMachine("write", "~/a", "", on, db.MachineExecAllow)
 	if rev.Tier != hostExecReviewAuto {

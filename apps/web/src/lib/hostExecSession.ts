@@ -23,6 +23,41 @@ function isWriteOp(op: string): boolean {
   return op === "write" || op === "delete" || op === "move" || op === "ssh_write" || op === "ssh_delete" || op === "ssh_exec";
 }
 
+const COMPUTER_INVOKE: Record<string, string> = {
+  click: "host_click",
+  type: "host_type",
+  key: "host_key",
+  scroll: "host_scroll",
+  mouse_move: "host_mouse_move",
+  drag: "host_drag",
+  list_windows: "host_list_windows",
+  ax: "host_ax",
+  tcc_status: "host_tcc_status",
+};
+
+const COMPUTER_ARG_KEYS: Record<string, string[]> = {
+  click: ["frame_id", "x", "y", "button", "clicks", "modifiers", "element_ref", "background", "pid"],
+  type: ["frame_id", "text", "element_ref", "background", "pid"],
+  key: ["frame_id", "key", "modifiers", "element_ref", "background", "pid"],
+  scroll: ["frame_id", "x", "y", "dx", "dy", "background", "pid"],
+  mouse_move: ["frame_id", "x", "y", "background", "pid"],
+  drag: ["frame_id", "x", "y", "x2", "y2", "button", "background", "pid"],
+  list_windows: ["frame_id"],
+  ax: ["frame_id", "app", "pid", "window_id", "max_depth", "limit", "x", "y"],
+  tcc_status: [],
+};
+
+function computerInvokeArgs(op: string, args: Record<string, unknown> | undefined): Record<string, unknown> {
+  const src = args || {};
+  const keys = COMPUTER_ARG_KEYS[op] || [];
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const value = src[key];
+    if (value !== undefined && value !== null) out[key] = value;
+  }
+  return out;
+}
+
 async function runOp(req: HostExecRequest): Promise<Record<string, unknown>> {
   const invoke = tauriInvoke();
   if (!invoke) {
@@ -54,6 +89,10 @@ async function runOp(req: HostExecRequest): Promise<Record<string, unknown>> {
       args.display = display;
     }
     return (await invoke("host_screenshot", args)) as Record<string, unknown>;
+  }
+  const computerCmd = COMPUTER_INVOKE[req.op];
+  if (computerCmd) {
+    return (await invoke(computerCmd, computerInvokeArgs(req.op, req.args))) as Record<string, unknown>;
   }
   if (req.op === "shell") {
     return (await invoke("host_shell", {

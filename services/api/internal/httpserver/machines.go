@@ -229,6 +229,8 @@ func (s *Server) handleHostExecWS(w http.ResponseWriter, r *http.Request) {
 func supportedHostOp(op string) bool {
 	switch op {
 	case "ls", "read", "write", "delete", "move", "open", "shell", "screenshot",
+		"click", "type", "key", "scroll", "mouse_move", "drag",
+		"list_windows", "ax", "tcc_status",
 		"ssh_ls", "ssh_read", "ssh_write", "ssh_delete", "ssh_exec":
 		return true
 	default:
@@ -238,11 +240,32 @@ func supportedHostOp(op string) bool {
 
 func hostExecAllowsEmptyPath(op string) bool {
 	switch op {
-	case "ls", "ssh_ls", "screenshot":
+	case "ls", "ssh_ls", "screenshot", "list_windows", "ax", "tcc_status":
 		return true
 	default:
 		return false
 	}
+}
+
+func computerUsePreview(op string, args json.RawMessage) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var m map[string]any
+	if json.Unmarshal(args, &m) != nil {
+		return ""
+	}
+	switch op {
+	case "type":
+		if s, ok := m["text"].(string); ok {
+			return s
+		}
+	case "key":
+		if s, ok := m["key"].(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func hostActivityLabel(label, op, path, dest string) string {
@@ -262,6 +285,24 @@ func hostActivityLabel(label, op, path, dest string) string {
 		action = "打开软件"
 	case "screenshot":
 		action = "截取屏幕"
+	case "click":
+		action = "点击界面"
+	case "type":
+		action = "输入文字"
+	case "key":
+		action = "发送按键"
+	case "scroll":
+		action = "滚动界面"
+	case "mouse_move":
+		action = "移动鼠标"
+	case "drag":
+		action = "拖拽"
+	case "list_windows":
+		action = "列出窗口"
+	case "ax":
+		action = "查看界面元素"
+	case "tcc_status":
+		action = "检查权限"
 	case "shell":
 		action = "运行命令"
 	case "ssh_ls":
@@ -310,19 +351,20 @@ func hostActivityText(label, op, path, dest string, needsConfirm bool) string {
 
 func (s *Server) handleInternalHostExec(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID         string `json:"user_id"`
-		MachineID      string `json:"machine_id"`
-		ConversationID string `json:"conversation_id"`
-		Op             string `json:"op"`
-		Path           string `json:"path"`
-		Dest           string `json:"dest"`
-		Content        string `json:"content"`
-		SSHHost        string `json:"ssh_host"`
-		SSHUser        string `json:"ssh_user"`
-		SSHPort        int    `json:"ssh_port"`
-		Limit          int    `json:"limit"`
-		Sort           string `json:"sort"`
-		Glob           string `json:"glob"`
+		UserID         string          `json:"user_id"`
+		MachineID      string          `json:"machine_id"`
+		ConversationID string          `json:"conversation_id"`
+		Op             string          `json:"op"`
+		Path           string          `json:"path"`
+		Dest           string          `json:"dest"`
+		Content        string          `json:"content"`
+		SSHHost        string          `json:"ssh_host"`
+		SSHUser        string          `json:"ssh_user"`
+		SSHPort        int             `json:"ssh_port"`
+		Limit          int             `json:"limit"`
+		Sort           string          `json:"sort"`
+		Glob           string          `json:"glob"`
+		Args           json.RawMessage `json:"args"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -366,6 +408,21 @@ func (s *Server) handleInternalHostExec(w http.ResponseWriter, r *http.Request) 
 	if len(body.Content) > 1<<20 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content too large"})
 		return
+	}
+	if len(body.Args) > 16*1024 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "args too large"})
+		return
+	}
+	if len(body.Args) > 0 && string(body.Args) != "null" {
+		var probe any
+		if err := json.Unmarshal(body.Args, &probe); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "args invalid"})
+			return
+		}
+		if _, ok := probe.(map[string]any); !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "args must be an object"})
+			return
+		}
 	}
 	m, err := s.db.GetMachine(uid, mid)
 	if err != nil {
@@ -428,6 +485,9 @@ func (s *Server) handleInternalHostExec(w http.ResponseWriter, r *http.Request) 
 				preview = body.Path
 			}
 		}
+		if preview == "" && (op == "type" || op == "key") {
+			preview = computerUsePreview(op, body.Args)
+		}
 		allowed, reqID, cerr := s.requestChatHostConfirm(
 			r.Context(), uid, conversationID, op, body.Path, body.Dest, preview, rev,
 		)
@@ -466,6 +526,7 @@ func (s *Server) handleInternalHostExec(w http.ResponseWriter, r *http.Request) 
 		Limit:          body.Limit,
 		Sort:           strings.TrimSpace(body.Sort),
 		Glob:           strings.TrimSpace(body.Glob),
+		Args:           body.Args,
 		Preconfirmed:   preconfirmed,
 	})
 	if s.events != nil {

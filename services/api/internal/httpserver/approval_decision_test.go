@@ -86,6 +86,17 @@ func TestHostOpToolIdentity(t *testing.T) {
 	if tool != "host_screenshot" || group != "host_read" {
 		t.Fatalf("screenshot: %s/%s", tool, group)
 	}
+	tool, group = HostOpToolIdentity("click")
+	if tool != "host_click" || group != "computer_use" {
+		t.Fatalf("click: %s/%s", tool, group)
+	}
+	tool, group = HostOpToolIdentity("tcc_status")
+	if tool != "host_tcc_status" || group != "host_read" {
+		t.Fatalf("tcc: %s/%s", tool, group)
+	}
+	if InferToolGroup("host_type") != "computer_use" {
+		t.Fatal("host_type group")
+	}
 }
 
 func TestShouldAutoApproveFromAllowlist(t *testing.T) {

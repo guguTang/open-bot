@@ -582,6 +582,15 @@ function buildAutoReviewHaystack(op: string, path: string, dest: string, reason:
     read: "本机只读 打开文件 列表",
     open: "本机只读 打开文件 列表",
     screenshot: "截取屏幕 屏幕录制",
+    tcc_status: "查看权限 屏幕录制 辅助功能 发送事件",
+    list_windows: "查看界面 窗口 辅助功能",
+    ax: "查看界面 窗口 辅助功能",
+    click: "点击界面 桌面操控",
+    type: "输入文字 桌面操控",
+    key: "发送按键 桌面操控",
+    scroll: "滚动界面 桌面操控",
+    mouse_move: "移动鼠标 桌面操控",
+    drag: "拖拽界面 桌面操控",
     write: "写入本机文件",
     delete: "删除本机文件",
     move: "移动重命名",
@@ -697,9 +706,25 @@ export function classifyHostExecReview(op: string, path = "", dest = ""): HostEx
     case "ssh_ls":
     case "ssh_read":
     case "open":
+    case "list_windows":
+    case "ax":
       return { tier: "auto", reason: "只读/可逆操作，Auto-review 自动放行", code: "readonly_op" };
     case "screenshot":
       return { tier: "auto", reason: "截取屏幕是只读操作，Auto-review 自动放行", code: "screenshot" };
+    case "tcc_status":
+      return { tier: "auto", reason: "查看权限是只读操作，Auto-review 自动放行", code: "tcc_status" };
+    case "click":
+      return { tier: "confirm", reason: "点击界面，需你确认", code: "click" };
+    case "type":
+      return { tier: "confirm", reason: "向界面输入文字，需你确认", code: "type" };
+    case "key":
+      return { tier: "confirm", reason: "发送按键，需你确认", code: "key" };
+    case "scroll":
+      return { tier: "confirm", reason: "滚动界面，需你确认", code: "scroll" };
+    case "mouse_move":
+      return { tier: "confirm", reason: "移动鼠标，需你确认", code: "mouse_move" };
+    case "drag":
+      return { tier: "confirm", reason: "拖拽界面，需你确认", code: "drag" };
     case "write":
       return { tier: "confirm", reason: "写入本机文件，需你确认", code: "write" };
     case "delete":

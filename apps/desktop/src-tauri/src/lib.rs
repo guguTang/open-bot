@@ -1,5 +1,6 @@
 mod host_cmd;
 mod host_fs;
+mod host_input;
 mod host_ssh;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +18,15 @@ pub fn run() {
             host_cmd::host_screenshot,
             host_cmd::host_open_privacy,
             host_cmd::host_shell,
+            host_input::host_click,
+            host_input::host_type,
+            host_input::host_key,
+            host_input::host_scroll,
+            host_input::host_mouse_move,
+            host_input::host_drag,
+            host_input::host_list_windows,
+            host_input::host_ax,
+            host_input::host_tcc_status,
             host_cmd::host_device_name,
             host_cmd::host_machine_id,
             host_ssh::host_ssh_probe,
