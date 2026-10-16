@@ -49,7 +49,7 @@ make build-desktop
 
 1. 打开 DMG。窗口里是 **Open Bot** 和 **Applications** 快捷方式，把应用拖进去。
 2. 从「应用程序」或 DMG 里打开 **Open Bot.app**。
-3. 到「系统设置 → 隐私与安全性」，把 **Open Bot** 加进「屏幕录制」和「辅助功能」。较新的 macOS 若还列出「输入监控」（Input Monitoring）或「事件发布」（Event Posting），同样允许 Open Bot。桌面端「设置 → 电脑」可以打开前两个页面。
+3. 首次截屏或操作时，系统可能先弹出授权框；若仍失败，到「系统设置 → 隐私与安全性」把 **Open Bot** 加进「屏幕录制」和「辅助功能」（屏幕录制常需完全退出后重开应用）。较新的 macOS 若还列出「输入监控」（Input Monitoring）或「事件发布」（Event Posting），同样允许 Open Bot。桌面端「设置 → 电脑」可以打开前两个页面。
 
 请打开 `.app` 或 DMG。不要双击 `Open Bot.app/Contents/MacOS/open-bot-desktop`：那是裸 Mach-O，会先拉起终端，签名也只是链接器打的 ad-hoc（标识类似 `open_bot_desktop-…`，`Info.plist` 未绑定，没有密封资源），系统设置无法把权限稳定授给「这个应用」。
 

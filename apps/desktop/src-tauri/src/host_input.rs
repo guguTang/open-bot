@@ -11,7 +11,7 @@
 //! and UI Automation. Linux uses the X11 protocol (RandR, GetImage, XTest) and
 //! AT-SPI. Tool names stay the same; only the backend changes.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -805,11 +805,11 @@ fn click_count(raw: Option<i64>) -> Result<i32, Value> {
     Ok(n as i32)
 }
 
-/// Ask macOS to show the one-time event-posting prompt. Settings UI only.
+/// Ask macOS to show the event-posting prompt once per process (Settings UI or first click).
 pub fn request_event_posting() {
     #[cfg(target_os = "macos")]
-    unsafe {
-        mac::CGRequestPostEventAccess();
+    {
+        mac::request_posting_once();
     }
 }
 
@@ -1305,6 +1305,19 @@ mod mac {
         pub fn CFBooleanGetValue(b: *const c_void) -> bool;
 
         pub fn AXIsProcessTrusted() -> bool;
+        pub fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
+        pub static kAXTrustedCheckOptionPrompt: CFStringRef;
+        pub static kCFBooleanTrue: *const c_void;
+        pub static kCFTypeDictionaryKeyCallBacks: u8;
+        pub static kCFTypeDictionaryValueCallBacks: u8;
+        pub fn CFDictionaryCreate(
+            allocator: *const c_void,
+            keys: *const *const c_void,
+            values: *const *const c_void,
+            num_values: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> CFDictionaryRef;
         pub fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
         pub fn AXUIElementCreateSystemWide() -> AXUIElementRef;
         pub fn AXUIElementCopyAttributeValue(
@@ -1442,7 +1455,45 @@ mod mac {
         })
     }
 
+    static POSTING_REQUESTED: AtomicBool = AtomicBool::new(false);
+    static ACCESSIBILITY_PROMPTED: AtomicBool = AtomicBool::new(false);
+
+    pub fn request_posting_once() {
+        if POSTING_REQUESTED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        unsafe { CGRequestPostEventAccess() };
+    }
+
+    fn prompt_accessibility_once() {
+        if ACCESSIBILITY_PROMPTED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        unsafe {
+            let key = kAXTrustedCheckOptionPrompt as *const c_void;
+            let value = kCFBooleanTrue;
+            let keys = [key];
+            let values = [value];
+            let options = CFDictionaryCreate(
+                ptr::null(),
+                keys.as_ptr(),
+                values.as_ptr(),
+                1,
+                std::ptr::addr_of!(kCFTypeDictionaryKeyCallBacks) as *const c_void,
+                std::ptr::addr_of!(kCFTypeDictionaryValueCallBacks) as *const c_void,
+            );
+            let _ = AXIsProcessTrustedWithOptions(options);
+            if !options.is_null() {
+                CFRelease(options);
+            }
+        }
+    }
+
     fn ensure_posting() -> Result<(), Value> {
+        if unsafe { CGPreflightPostEventAccess() } {
+            return Ok(());
+        }
+        request_posting_once();
         if unsafe { CGPreflightPostEventAccess() } {
             return Ok(());
         }
@@ -1450,6 +1501,10 @@ mod mac {
     }
 
     fn ensure_accessibility() -> Result<(), Value> {
+        if unsafe { AXIsProcessTrusted() } {
+            return Ok(());
+        }
+        prompt_accessibility_once();
         if unsafe { AXIsProcessTrusted() } {
             return Ok(());
         }

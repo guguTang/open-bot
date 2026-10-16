@@ -30,7 +30,7 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 - 已连接的 **macOS、Windows 或 Linux 桌面**（`list_machines` 看 platform / connected）。手机和浏览器不能截用户电脑的屏幕。
 - 在 Mac 上，权限授给从 DMG 拖进「应用程序」的已安装 **Open Bot**。不要让用户直接运行 `Contents/MacOS/open-bot-desktop`。
-- 三个权限桶（`host_tcc_status` 一次看齐，名字在三个系统上一样）。被拒就告诉用户原因，**不要反复重试**：
+- 三个权限桶（`host_tcc_status` 一次看齐，名字在三个系统上一样）。macOS 首次使用时桌面端可能先弹出系统授权框；仍被拒就告诉用户去系统设置，**不要反复重试**：
 
 | 桶 | 干什么 | macOS | Windows | Linux |
 |----|--------|-------|---------|-------|

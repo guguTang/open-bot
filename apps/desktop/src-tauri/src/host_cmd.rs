@@ -543,13 +543,38 @@ fn parse_display_index(display: Option<i64>) -> Result<Option<u32>, String> {
 
 #[cfg(target_os = "macos")]
 mod screen_access {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGPreflightScreenCaptureAccess() -> bool;
+        fn CGRequestScreenCaptureAccess() -> bool;
     }
+
+    static SCREEN_REQUESTED: AtomicBool = AtomicBool::new(false);
 
     pub fn screen_recording_allowed() -> bool {
         unsafe { CGPreflightScreenCaptureAccess() }
+    }
+
+    /// Show the system Screen Recording prompt at most once per process.
+    pub fn request_screen_recording_once() {
+        if SCREEN_REQUESTED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let _ = unsafe { CGRequestScreenCaptureAccess() };
+    }
+
+    /// Preflight; if denied, Request once then Preflight again.
+    /// Returns (allowed, did_request_this_call).
+    pub fn ensure_screen_recording() -> (bool, bool) {
+        if screen_recording_allowed() {
+            return (true, false);
+        }
+        let already = SCREEN_REQUESTED.load(Ordering::SeqCst);
+        request_screen_recording_once();
+        let did_request = !already;
+        (screen_recording_allowed(), did_request)
     }
 }
 
@@ -622,11 +647,16 @@ fn jpeg_pixels(path: &Path) -> (Option<u32>, Option<u32>) {
 
 #[cfg(target_os = "macos")]
 fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
-    if !screen_access::screen_recording_allowed() {
-        return Ok(screenshot_error(
-            "screen_recording_denied",
-            SCREEN_RECORDING_DENIED_MSG,
-        ));
+    let (allowed, did_request) = screen_access::ensure_screen_recording();
+    if !allowed {
+        let msg = if did_request {
+            format!(
+                "{SCREEN_RECORDING_DENIED_MSG}若刚点允许仍失败请到系统设置打开并完全退出重开。"
+            )
+        } else {
+            SCREEN_RECORDING_DENIED_MSG.to_string()
+        };
+        return Ok(screenshot_error("screen_recording_denied", &msg));
     }
     let file_name = format!(
         "open-bot-shot-{}-{}.jpg",
@@ -769,7 +799,7 @@ pub fn host_screenshot(scope: Option<String>, display: Option<i64>) -> Result<Va
     }
 }
 
-/// Open the desktop privacy or input settings page. Settings UI only — not an agent tool.
+/// Open the desktop privacy or input settings page. May also fire a one-shot TCC Request; not an agent tool.
 #[tauri::command]
 pub fn host_open_privacy(pane: String) -> Result<Value, String> {
     let pane = pane.trim().to_ascii_lowercase();
@@ -780,11 +810,14 @@ pub fn host_open_privacy(pane: String) -> Result<Value, String> {
     }
     #[cfg(target_os = "macos")]
     {
-        let (anchor, request_post) = match pane.as_str() {
-            "screen" | "screen_recording" | "screencapture" => ("Privacy_ScreenCapture", false),
-            "event" | "event_posting" | "post_event" => ("Privacy_Accessibility", true),
-            _ => ("Privacy_Accessibility", false),
+        let (anchor, request_screen, request_post) = match pane.as_str() {
+            "screen" | "screen_recording" | "screencapture" => ("Privacy_ScreenCapture", true, false),
+            "event" | "event_posting" | "post_event" => ("Privacy_Accessibility", false, true),
+            _ => ("Privacy_Accessibility", false, false),
         };
+        if request_screen {
+            screen_access::request_screen_recording_once();
+        }
         if request_post {
             crate::host_input::request_event_posting();
         }
