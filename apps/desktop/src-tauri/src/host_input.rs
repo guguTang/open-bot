@@ -875,7 +875,7 @@ pub fn request_event_posting() {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_tcc_status() -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
@@ -895,7 +895,7 @@ pub fn host_tcc_status() -> Result<Value, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_list_windows(frame_id: Option<String>) -> Result<Value, String> {
     let frame_id = opt_str(&frame_id);
     #[cfg(target_os = "macos")]
@@ -918,7 +918,7 @@ pub fn host_list_windows(frame_id: Option<String>) -> Result<Value, String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_ax(
     frame_id: Option<String>,
     app: Option<String>,
@@ -976,7 +976,7 @@ pub fn host_ax(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_click(
     frame_id: Option<String>,
     x: Option<f64>,
@@ -1024,7 +1024,7 @@ pub fn host_click(
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_type(
     frame_id: Option<String>,
     text: Option<String>,
@@ -1064,7 +1064,7 @@ pub fn host_type(
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_key(
     frame_id: Option<String>,
     key: Option<String>,
@@ -1108,7 +1108,7 @@ pub fn host_key(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_scroll(
     frame_id: Option<String>,
     x: Option<f64>,
@@ -1152,7 +1152,7 @@ pub fn host_scroll(
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_mouse_move(
     frame_id: Option<String>,
     x: Option<f64>,
@@ -1191,7 +1191,7 @@ pub fn host_mouse_move(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_drag(
     frame_id: Option<String>,
     x: Option<f64>,

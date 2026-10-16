@@ -43,19 +43,111 @@ fn command_ok(cmd: &mut Command) -> Result<(), String> {
     }
 }
 
+pub(super) fn name_matches_query(candidate: &str, query: &str) -> MatchKind {
+    if candidate.eq_ignore_ascii_case(query) {
+        return MatchKind::Exact;
+    }
+    // Unicode-aware contains (ASCII-only to_lowercase misses CJK display names).
+    if candidate.to_lowercase().contains(&query.to_lowercase())
+        || (!query.is_ascii() && candidate.contains(query))
+    {
+        return MatchKind::Fuzzy;
+    }
+    MatchKind::None
+}
+
+pub(super) enum MatchKind {
+    None,
+    Exact,
+    Fuzzy,
+}
+
+/// Folder stem plus CFBundle* / localized InfoPlist names (any locale).
+/// Lets `host_find_app("显示名")` hit `/Applications/Foo.app` without product-specific aliases.
+pub(super) fn app_match_names(app: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(stem) = app
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|n| n.strip_suffix(".app"))
+    {
+        names.push(stem.to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        for key in ["CFBundleName", "CFBundleDisplayName", "CFBundleExecutable"] {
+            if let Some(v) = defaults_read_info(app, key) {
+                if !names.iter().any(|n| n.eq_ignore_ascii_case(&v)) {
+                    names.push(v);
+                }
+            }
+        }
+        let resources = app.join("Contents").join("Resources");
+        if let Ok(rd) = fs::read_dir(&resources) {
+            for ent in rd.flatten() {
+                let p = ent.path();
+                if !p
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .map(|n| n.ends_with(".lproj"))
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                let strings = p.join("InfoPlist.strings");
+                if !strings.is_file() {
+                    continue;
+                }
+                // Localized display names live in *.lproj/InfoPlist.strings (plutil, not defaults).
+                for key in ["CFBundleName", "CFBundleDisplayName"] {
+                    let output = Command::new("plutil")
+                        .args(["-extract", key, "raw"])
+                        .arg(&strings)
+                        .output();
+                    let Ok(output) = output else { continue };
+                    if !output.status.success() {
+                        continue;
+                    }
+                    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if v.is_empty() {
+                        continue;
+                    }
+                    if !names.iter().any(|n| n == &v || n.eq_ignore_ascii_case(&v)) {
+                        names.push(v);
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
 fn consider_app(path: PathBuf, query: &str, exact: &mut Option<PathBuf>, fuzzy: &mut Option<PathBuf>) {
     let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
         return;
     };
-    let Some(stem) = name.strip_suffix(".app") else {
-        return;
-    };
-    if stem.eq_ignore_ascii_case(query) {
-        *exact = Some(path);
+    if !name.ends_with(".app") {
         return;
     }
-    if fuzzy.is_none() && stem.to_lowercase().contains(&query.to_lowercase()) {
-        *fuzzy = Some(path);
+    let mut best = MatchKind::None;
+    for candidate in app_match_names(&path) {
+        match name_matches_query(&candidate, query) {
+            MatchKind::Exact => {
+                best = MatchKind::Exact;
+                break;
+            }
+            MatchKind::Fuzzy => best = MatchKind::Fuzzy,
+            MatchKind::None => {}
+        }
+    }
+    match best {
+        MatchKind::Exact => *exact = Some(path),
+        MatchKind::Fuzzy => {
+            if fuzzy.is_none() {
+                *fuzzy = Some(path);
+            }
+        }
+        MatchKind::None => {}
     }
 }
 
@@ -101,7 +193,8 @@ fn defaults_read_info(app: &Path, key: &str) -> Option<String> {
     }
 }
 
-/// CFBundle* names so callers can match `host_list_windows` owners (window owner may differ from .app).
+/// CFBundle* + localized names so callers can match `host_list_windows` owners
+/// (window owner / title may differ from the `.app` folder name).
 #[cfg(target_os = "macos")]
 fn macos_app_name_fields(app: &Path) -> serde_json::Map<String, Value> {
     let mut m = serde_json::Map::new();
@@ -114,10 +207,30 @@ fn macos_app_name_fields(app: &Path) -> serde_json::Map<String, Value> {
     if let Some(v) = defaults_read_info(app, "CFBundleExecutable") {
         m.insert("executable_name".into(), json!(v));
     }
+    let names = app_match_names(app);
+    if !names.is_empty() {
+        // Prefer a localized / non-folder display label when present.
+        if let Some(preferred) = names
+            .iter()
+            .find(|n| {
+                let stem = app
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| s.strip_suffix(".app"))
+                    .unwrap_or("");
+                !n.eq_ignore_ascii_case(stem)
+            })
+            .cloned()
+        {
+            m.entry("display_name".to_string())
+                .or_insert(json!(preferred));
+        }
+        m.insert("names".into(), json!(names));
+    }
     m
 }
 
-fn find_macos_app(query: &str) -> Option<PathBuf> {
+pub(super) fn find_macos_app(query: &str) -> Option<PathBuf> {
     let query = query.trim().trim_end_matches(".app");
     let mut dirs = vec![
         PathBuf::from("/Applications"),
@@ -137,7 +250,7 @@ fn find_macos_app(query: &str) -> Option<PathBuf> {
     exact.or(fuzzy)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_find_app(name: String) -> Result<Value, String> {
     let name = validate_label(&name, 200)?;
     #[cfg(target_os = "macos")]
@@ -199,7 +312,7 @@ pub fn host_find_app(name: String) -> Result<Value, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_open(name: String) -> Result<Value, String> {
     let name = validate_label(&name, 200)?;
     #[cfg(target_os = "macos")]
@@ -358,7 +471,7 @@ fn run_captured(command: &str) -> Result<Value, String> {
     }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_shell(command: String, terminal: bool) -> Result<Value, String> {
     let command = validate_label(&command, 2000)?;
     if crate::host_ssh::is_remote_ssh_command(&command) {
@@ -381,7 +494,7 @@ fn trim_cmd_out(raw: &[u8]) -> String {
 }
 
 /// Best-effort computer / device display name for machine registration.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_device_name() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
@@ -437,7 +550,7 @@ fn extract_quoted_value(line: &str) -> Option<String> {
 
 /// Stable platform machine id for machine_key registration.
 /// macOS IOPlatformUUID / Windows MachineGuid / Linux /etc/machine-id (or dbus).
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_machine_id() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
@@ -897,7 +1010,7 @@ fn capture_screen_cross(scope: &str, display: Option<u32>, window_id: Option<u32
 /// Capture the desktop (or one window) and return JPEG bytes the agent runtime attaches as vision.
 /// macOS uses `screencapture` (`-l` for a CGWindowID). Windows uses GDI / window DC.
 /// Linux uses X11 `GetImage` on the root or the window drawable.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_screenshot(
     scope: Option<String>,
     display: Option<i64>,
@@ -943,7 +1056,7 @@ pub fn host_screenshot(
 }
 
 /// Open the desktop privacy or input settings page. May also fire a one-shot TCC Request; not an agent tool.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_open_privacy(pane: String) -> Result<Value, String> {
     let pane = pane.trim().to_ascii_lowercase();
     match pane.as_str() {
@@ -983,9 +1096,11 @@ pub fn host_open_privacy(pane: String) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        encode_base64, extract_quoted_value, parse_sips_pixels, screenshot_capture_args,
-        SCREEN_RECORDING_DENIED_MSG, HOST_SHELL_TIMEOUT_SECS,
+        app_match_names, encode_base64, extract_quoted_value, find_macos_app, name_matches_query,
+        parse_sips_pixels, screenshot_capture_args, MatchKind, HOST_SHELL_TIMEOUT_SECS,
+        SCREEN_RECORDING_DENIED_MSG,
     };
+    use std::path::PathBuf;
 
     #[test]
     fn host_shell_timeout_is_120s_and_bounded() {
@@ -1036,5 +1151,28 @@ mod tests {
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("Contents/MacOS"));
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("输入监控"));
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("发送事件"));
+    }
+
+    #[test]
+    fn name_matches_query_ascii_and_cjk() {
+        assert!(matches!(name_matches_query("Lark", "lark"), MatchKind::Exact));
+        assert!(matches!(name_matches_query("飞书", "飞书"), MatchKind::Exact));
+        assert!(matches!(name_matches_query("MyLarkHelper", "lark"), MatchKind::Fuzzy));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn find_macos_app_matches_localized_display_name() {
+        let lark = PathBuf::from("/Applications/Lark.app");
+        if !lark.is_dir() {
+            return;
+        }
+        let names = app_match_names(&lark);
+        assert!(
+            names.iter().any(|n| n == "飞书"),
+            "expected localized 飞书 in {names:?}"
+        );
+        let found = find_macos_app("飞书").expect("飞书 should resolve via localized CFBundle name");
+        assert_eq!(found, lark);
     }
 }

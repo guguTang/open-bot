@@ -60,7 +60,7 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 1. 若还没打开：`host_find_app` → `host_open`。
 2. **打开后再** `host_list_windows`（open 之前的列表没有新窗口，不能复用）。
-3. 在列表里用 **不区分大小写的包含匹配** 找 `windows[].app` / `title`：窗口 owner / title 可能和 `.app` 或展示名不同；同时对照用户说的名字 **以及** `host_find_app` / `host_open` 返回的 `bundle_name` / `display_name` / `executable_name`。不要在文案里发明 App 别名。
+3. 在列表里用 **不区分大小写的包含匹配** 找 `windows[].app` / `title`：窗口 owner / title 可能和 `.app` 或展示名不同；同时对照用户说的名字 **以及** `host_find_app` / `host_open` 返回的 `bundle_name` / `display_name` / `executable_name` / `names`（含本地化显示名）。不要在文案里发明 App 别名。
 4. 对上了再 `host_screenshot(window_id=…)`。
 
 **禁止**在「去某 App / 截某 App」场景只用 `scope=main/all` 充数——那是整屏桌面，不是该 App。只有用户明确要整屏桌面时才用默认主屏或 `scope=all`。列表里暂时没有目标窗口：再说一声在等窗口，或再 list 一次，不要拿整屏截图假装成功。

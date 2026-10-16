@@ -1036,7 +1036,7 @@ fn push_limited(buf: &mut Vec<u8>, data: &[u8], cap: usize) -> bool {
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_probe(host: String, user: String, port: u16) -> Result<Value, String> {
     match connect_authenticated(&host, &user, port).await {
         ConnectOutcome::Failed(value) => Ok(value),
@@ -1061,27 +1061,27 @@ pub async fn host_ssh_probe(host: String, user: String, port: u16) -> Result<Val
     }
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_ls(host: String, user: String, port: u16, path: String) -> Result<Value, String> {
     run_ssh("ls", host, user, port, path, String::new()).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_read(host: String, user: String, port: u16, path: String) -> Result<Value, String> {
     run_ssh("read", host, user, port, path, String::new()).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_write(host: String, user: String, port: u16, path: String, content: String) -> Result<Value, String> {
     run_ssh("write", host, user, port, path, content).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_delete(host: String, user: String, port: u16, path: String) -> Result<Value, String> {
     run_ssh("delete", host, user, port, path, String::new()).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn host_ssh_exec(host: String, user: String, port: u16, command: String) -> Result<Value, String> {
     run_ssh("exec", host, user, port, command, String::new()).await
 }

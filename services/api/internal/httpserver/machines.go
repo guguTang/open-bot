@@ -326,6 +326,8 @@ func hostActivityLabel(label, op, path, dest string) string {
 			what = "全部屏幕"
 		case "", "main":
 			what = "主屏幕"
+		case "window":
+			what = "单个窗口"
 		default:
 			what = path
 		}

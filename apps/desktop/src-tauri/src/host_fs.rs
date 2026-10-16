@@ -110,7 +110,7 @@ fn display_path(path: &Path) -> String {
     path.display().to_string()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_stat(path: String) -> Result<Value, String> {
     let resolved = resolve_path(&path)?;
     let exists = resolved.exists();
@@ -163,7 +163,7 @@ fn name_glob_match(pattern: &str, name: &str) -> bool {
 const HOST_LS_DEFAULT_LIMIT: usize = 50;
 const HOST_LS_MAX_LIMIT: usize = 200;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_ls(
     path: String,
     limit: Option<u32>,
@@ -244,7 +244,7 @@ pub fn host_ls(
     }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_read(path: String) -> Result<Value, String> {
     let file = resolve_path(&path)?;
     if !file.is_file() {
@@ -258,7 +258,7 @@ pub fn host_read(path: String) -> Result<Value, String> {
     Ok(json!({ "ok": true, "path": display_path(&file), "content": text }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_write(path: String, content: String) -> Result<Value, String> {
     let file = resolve_path(&path)?;
     if let Some(parent) = file.parent() {
@@ -268,7 +268,7 @@ pub fn host_write(path: String, content: String) -> Result<Value, String> {
     Ok(json!({ "ok": true, "path": display_path(&file) }))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_delete(path: String) -> Result<Value, String> {
     let paths: Vec<String> = path
         .split('\n')
@@ -313,7 +313,7 @@ fn delete_one_file(path: &str) -> Result<String, String> {
     Ok(display_path(&file))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn host_move(path: String, dest: String) -> Result<Value, String> {
     let from = resolve_path(&path)?;
     let to = resolve_path(&dest)?;

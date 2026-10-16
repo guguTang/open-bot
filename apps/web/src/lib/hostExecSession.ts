@@ -86,9 +86,19 @@ async function runOp(req: HostExecRequest): Promise<Record<string, unknown>> {
   if (req.op === "open") return (await invoke("host_open", { name: path })) as Record<string, unknown>;
   if (req.op === "screenshot") {
     const args: Record<string, unknown> = {};
-    const rawWindow = req.args?.window_id;
+    // Runtime sets path=window + args.window_id. Never treat path=window as main —
+    // that silent fallback shipped full-desktop shots while the model thought it
+    // captured a single window (Langfuse 0009eeb259319272 / window_id=168).
+    const rawWindow = req.args?.window_id ?? req.args?.windowId;
     const windowId = typeof rawWindow === "number" ? rawWindow : Number(rawWindow);
-    if (path === "window" && Number.isInteger(windowId) && windowId > 0) {
+    if (path === "window") {
+      if (!Number.isInteger(windowId) || windowId <= 0) {
+        return {
+          ok: false,
+          error: "截窗口需要 window_id。请先 host_list_windows，再传返回的 window_id。",
+          code: "invalid_window",
+        };
+      }
       args.window_id = windowId;
     } else {
       args.scope = path === "all" ? "all" : "main";
