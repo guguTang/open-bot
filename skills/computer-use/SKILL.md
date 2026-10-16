@@ -30,7 +30,7 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 - 已连接的 **macOS、Windows 或 Linux 桌面**（`list_machines` 看 platform / connected）。手机和浏览器不能截用户电脑的屏幕。
 - 在 Mac 上，权限授给从 DMG 拖进「应用程序」的已安装 **Open Bot**。不要让用户直接运行 `Contents/MacOS/open-bot-desktop`。
-- 三个权限桶（`host_tcc_status` 一次看齐，名字在三个系统上一样）。macOS 首次使用时桌面端可能先弹出系统授权框；仍被拒就告诉用户去系统设置，**不要反复重试**：
+- 三个权限桶（`host_tcc_status` 一次看齐，名字在三个系统上一样）。macOS 上 `host_tcc_status` 会顺带触发一次系统授权框，并在仍缺权限时打开对应的系统设置页；结果里的 `identity`（`identifier` / `cdhash` / `executable`）是**正在跑的那个二进制**。若系统设置里已勾选「Open Bot」但 `granted` 仍是 false，多半是授权给了旧构建或 `make dev-desktop` / `cargo run` 的另一个身份（adhoc 每次打包 CDHash 会变）——请用户只保留「应用程序」里的 **Open Bot.app**（`com.openbot.desktop`），删掉列表里重复的 Open Bot 项后重新勾选，然后**完全退出并重开** Open Bot，**不要反复重试截屏**：
 
 | 桶 | 干什么 | macOS | Windows | Linux |
 |----|--------|-------|---------|-------|

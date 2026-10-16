@@ -1442,16 +1442,104 @@ mod mac {
         })
     }
 
+    fn code_identity() -> Value {
+        use std::process::Command;
+        let exe = std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        let mut identifier = "com.openbot.desktop".to_string();
+        let mut cdhash = String::new();
+        let mut signature = String::new();
+        let mut team = String::new();
+        if !exe.is_empty() {
+            if let Ok(output) = Command::new("codesign")
+                .args(["-dv", "--verbose=4", &exe])
+                .output()
+            {
+                // codesign -dv writes details to stderr
+                let text = String::from_utf8_lossy(&output.stderr);
+                for line in text.lines() {
+                    if let Some(v) = line.strip_prefix("Identifier=") {
+                        identifier = v.to_string();
+                    } else if let Some(v) = line.strip_prefix("CDHash=") {
+                        cdhash = v.to_string();
+                    } else if let Some(v) = line.strip_prefix("Signature=") {
+                        signature = v.to_string();
+                    } else if let Some(v) = line.strip_prefix("TeamIdentifier=") {
+                        team = v.to_string();
+                    }
+                }
+            }
+        }
+        json!({
+            "executable": exe,
+            "identifier": identifier,
+            "cdhash": cdhash,
+            "signature": signature,
+            "team_identifier": team,
+            "hint": "权限必须授给正在运行的这个身份（看 identifier + cdhash）。adhoc 每次重新打包 CDHash 会变；请只打开「应用程序」里的 Open Bot.app，在系统设置里勾选名为 Open Bot、标识 com.openbot.desktop 的那一项，然后完全退出再开。不要给 Terminal、Cursor、cargo run 或 make dev-desktop 产生的二进制授权。",
+        })
+    }
+
+    fn open_privacy_anchor(anchor: &str) {
+        use std::process::Command;
+        let url = format!("x-apple.systempreferences:com.apple.preference.security?{anchor}");
+        let _ = Command::new("open").arg(url).status();
+    }
+
+    static TCC_SETTINGS_OPENED: AtomicBool = AtomicBool::new(false);
+
+    /// Preflight all three buckets. If any is denied, fire one-shot Request/prompt,
+    /// Preflight again, and (once per process) open the matching System Settings pane.
     pub fn tcc_status() -> Value {
-        let screen = unsafe { CGPreflightScreenCaptureAccess() };
-        let accessibility = unsafe { AXIsProcessTrusted() };
-        let posting = unsafe { CGPreflightPostEventAccess() };
+        let mut screen = unsafe { CGPreflightScreenCaptureAccess() };
+        let mut accessibility = unsafe { AXIsProcessTrusted() };
+        let mut posting = unsafe { CGPreflightPostEventAccess() };
+        let mut requested = json!({
+            "screen_recording": false,
+            "accessibility": false,
+            "event_posting": false,
+        });
+
+        if !screen {
+            crate::host_cmd::request_screen_recording();
+            requested["screen_recording"] = json!(true);
+            screen = unsafe { CGPreflightScreenCaptureAccess() };
+        }
+        if !accessibility {
+            let already = ACCESSIBILITY_PROMPTED.load(Ordering::SeqCst);
+            prompt_accessibility_once();
+            requested["accessibility"] = json!(!already);
+            accessibility = unsafe { AXIsProcessTrusted() };
+        }
+        if !posting {
+            let already = POSTING_REQUESTED.load(Ordering::SeqCst);
+            request_posting_once();
+            requested["event_posting"] = json!(!already);
+            posting = unsafe { CGPreflightPostEventAccess() };
+        }
+
+        let any_denied = !screen || !accessibility || !posting;
+        let mut opened_settings = false;
+        if any_denied && !TCC_SETTINGS_OPENED.swap(true, Ordering::SeqCst) {
+            opened_settings = true;
+            // Prefer the first missing bucket's pane.
+            if !screen {
+                open_privacy_anchor("Privacy_ScreenCapture");
+            } else {
+                open_privacy_anchor("Privacy_Accessibility");
+            }
+        }
+
         json!({
             "ok": true,
             "platform": "macos",
             "screen_recording": tcc_bucket(screen, "系统设置 → 隐私与安全性 → 屏幕录制"),
             "accessibility": tcc_bucket(accessibility, "系统设置 → 隐私与安全性 → 辅助功能"),
             "event_posting": tcc_bucket(posting, "系统设置 → 隐私与安全性 → 辅助功能（发送事件）"),
+            "identity": code_identity(),
+            "requested": requested,
+            "opened_settings": opened_settings,
         })
     }
 

@@ -578,6 +578,13 @@ mod screen_access {
     }
 }
 
+/// Show the Screen Recording TCC prompt at most once per process (Settings / tcc_status).
+#[cfg(target_os = "macos")]
+pub fn request_screen_recording() {
+    screen_access::request_screen_recording_once();
+}
+
+
 #[cfg(target_os = "macos")]
 fn run_timed(cmd: &mut Command, timeout: Duration) -> Result<std::process::Output, String> {
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
