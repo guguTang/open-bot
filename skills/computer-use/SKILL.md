@@ -56,7 +56,7 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 ### 1. 看屏幕
 
-`host_screenshot`（默认主屏幕；或先 `host_list_windows` 再 `host_screenshot(window_id=…)` 截单个窗口）。图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
+`host_screenshot`：用户要看**某个 App / 某个窗口**时（例如「截 VLC」「截这个窗口」），先 `host_list_windows`，再 `host_screenshot(window_id=…)`，不要只传 `scope=main/all`（那是整屏）。只有用户明确要整屏桌面时才用默认主屏或 `scope=all`。图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
 
 记下 `frame_id`。需要结构化目标时：
 

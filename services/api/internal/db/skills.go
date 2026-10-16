@@ -1318,8 +1318,10 @@ func (d *DB) DeleteGlobalSkill(name string) error {
 	return nil
 }
 
-// SeedGlobalSkillsFromDisk inserts repo skills/ packages when missing (does not overwrite skill rows).
-// Missing package files are inserted; references/ and scripts/ from disk are refreshed on each boot.
+// SeedGlobalSkillsFromDisk upserts repo skills/ packages from disk on each API boot.
+// Platform SKILL.md / description / body_markdown and package files are refreshed so
+// local edits (and commits like host_screenshot window_id) reach load_skill; Admin-only
+// skills that are not on disk are left alone. enabled is preserved on conflict.
 func (d *DB) SeedGlobalSkillsFromDisk() error {
 	disk, err := ListGlobalSkillsFromDisk()
 	if err != nil {
@@ -1331,9 +1333,12 @@ func (d *DB) SeedGlobalSkillsFromDisk() error {
 			continue
 		}
 		_, err = d.SQL.Exec(
-			`INSERT INTO global_skills (name, description, body_markdown, enabled)
-			 VALUES ($1, $2, $3, TRUE)
-			 ON CONFLICT (name) DO NOTHING`,
+			`INSERT INTO global_skills (name, description, body_markdown, enabled, updated_at)
+			 VALUES ($1, $2, $3, TRUE, NOW())
+			 ON CONFLICT (name) DO UPDATE SET
+			   description = EXCLUDED.description,
+			   body_markdown = EXCLUDED.body_markdown,
+			   updated_at = NOW()`,
 			g.Name, g.Description, string(data),
 		)
 		if err != nil {
@@ -1348,24 +1353,14 @@ func (d *DB) SeedGlobalSkillsFromDisk() error {
 			files = []SkillFileRecord{{Path: "SKILL.md", Content: string(data)}}
 		}
 		for _, f := range files {
-			refresh := strings.HasPrefix(f.Path, "references/") || strings.HasPrefix(f.Path, "scripts/")
-			if refresh {
-				_, err = d.SQL.Exec(
-					`INSERT INTO global_skill_files (skill_name, path, content, updated_at)
-					 VALUES ($1, $2, $3, NOW())
-					 ON CONFLICT (skill_name, path) DO UPDATE SET
-					   content = EXCLUDED.content,
-					   updated_at = NOW()`,
-					g.Name, f.Path, f.Content,
-				)
-			} else {
-				_, err = d.SQL.Exec(
-					`INSERT INTO global_skill_files (skill_name, path, content)
-					 VALUES ($1, $2, $3)
-					 ON CONFLICT (skill_name, path) DO NOTHING`,
-					g.Name, f.Path, f.Content,
-				)
-			}
+			_, err = d.SQL.Exec(
+				`INSERT INTO global_skill_files (skill_name, path, content, updated_at)
+				 VALUES ($1, $2, $3, NOW())
+				 ON CONFLICT (skill_name, path) DO UPDATE SET
+				   content = EXCLUDED.content,
+				   updated_at = NOW()`,
+				g.Name, f.Path, f.Content,
+			)
 			if err != nil {
 				return err
 			}
