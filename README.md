@@ -61,8 +61,8 @@ make dev-desktop
 
 - 窗口：标题 Open Bot，默认约 1200×800，深色背景
 - API：与 Web 相同，默认 `http://127.0.0.1:18080`；用 `.env` 的 `VITE_API_BASE` 覆盖
-- 构建：`make check-desktop` / `pnpm --dir apps/desktop tauri build --debug`
-- 说明见 [apps/desktop/README.md](apps/desktop/README.md)；本轮不做签名公证与自动更新
+- 构建：`make build-desktop`（macOS 得到 `.app` 和安装 DMG）或 `make check-desktop`
+- 说明见 [apps/desktop/README.md](apps/desktop/README.md)。没有 Developer ID 时用 ad-hoc 签名；公证密钥是可选的
 
 
 
@@ -191,7 +191,7 @@ curl -s -X POST http://127.0.0.1:18080/v1/mcp-servers \
 ```bash
 cd services/api && go build -o /tmp/openbot-api ./cmd/api
 pnpm --dir apps/web build
-make check-desktop   # 或：pnpm --dir apps/desktop tauri build --debug
+make check-desktop   # 完整 macOS 安装包：make build-desktop
 make sync-mobile     # Capacitor：build-web + cap sync
 ```
 

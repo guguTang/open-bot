@@ -22,7 +22,7 @@ screen capture to read device locations.
 
 - **macOS** with Find My app and iCloud signed in
 - Devices/AirTags already registered in Find My
-- Screen Recording permission for **Open Bot** (系统设置 → 隐私与安全性 → 屏幕录制). If `host_screenshot` returns `screen_recording_denied`, ask the user to grant it and stop retrying.
+- Screen Recording permission for the installed **Open Bot** app (系统设置 → 隐私与安全性 → 屏幕录制). Install it from the DMG into Applications; do not launch `Contents/MacOS/open-bot-desktop`. If `host_screenshot` returns `screen_recording_denied`, ask the user to grant it and stop retrying.
 - **Optional but recommended**: Install `peekaboo` for better UI automation:
   `brew install steipete/tap/peekaboo`
 

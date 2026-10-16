@@ -4,12 +4,15 @@
   "version": "0.1.0",
   "description": "Open Bot Tauri 2 desktop shell (reuses @open-bot/web)",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
-    "build:debug": "tauri build --debug",
-    "tauri": "tauri"
+    "dev": "node ./scripts/tauri.mjs dev",
+    "build": "node ./scripts/tauri.mjs build",
+    "build:debug": "node ./scripts/tauri.mjs build --debug",
+    "tauri": "node ./scripts/tauri.mjs",
+    "test": "node --test scripts/macos-bundle.test.mjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "bplist-creator": "0.0.8",
+    "tn1150": "0.1.0"
   }
 }

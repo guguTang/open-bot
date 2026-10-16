@@ -143,6 +143,7 @@ dev-desktop:
 	set -a && [ -f .env ] && . ./.env; set +a && \
 	  pnpm --dir apps/desktop tauri dev
 
+# macOS：签名后的 Open Bot.app，以及不依赖 Finder AppleScript 的安装 DMG。
 build-desktop:
 	set -a && [ -f .env ] && . ./.env; set +a && \
 	  pnpm --dir apps/desktop tauri build

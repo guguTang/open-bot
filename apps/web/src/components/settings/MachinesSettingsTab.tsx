@@ -1,6 +1,10 @@
 import { useState, type KeyboardEvent } from "react";
 import type { Machine } from "../../api";
-import { openDesktopPrivacyPane, shouldShowDesktopCapturePermissions } from "../../lib/desktopPrivacy";
+import {
+  DESKTOP_CAPTURE_PERMISSION_HINT,
+  openDesktopPrivacyPane,
+  shouldShowDesktopCapturePermissions,
+} from "../../lib/desktopPrivacy";
 import {
   type ClientContext,
   isLoginOnlyMachine,
@@ -91,10 +95,7 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
     <SettingsSection title="屏幕录制与辅助功能">
       <SettingsCard padded>
         <FieldGroup>
-          <FieldDescription>
-            助手要看到这台 Mac 的画面，需要在「系统设置 → 隐私与安全性 → 屏幕录制」里允许 Open Bot。
-            通过辅助功能点按钮、读控件时，还要允许「辅助功能」。授权后回到对话里再试一次。手机和浏览器不能截这台电脑的屏幕。
-          </FieldDescription>
+          <FieldDescription>{DESKTOP_CAPTURE_PERMISSION_HINT}</FieldDescription>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => open("screen")}>
               打开「屏幕录制」

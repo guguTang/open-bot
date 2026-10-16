@@ -399,7 +399,7 @@ const SCREENSHOT_MAX_BYTES: usize = 1_200_000;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const SCREENSHOT_TIMEOUT_SECS: u64 = 20;
 
-const SCREEN_RECORDING_DENIED_MSG: &str = "没有屏幕录制权限。请到「系统设置 → 隐私与安全性 → 屏幕录制」允许 Open Bot，然后重试。桌面设置里也可以打开这一页。若还要让助手操作界面，请同时允许「辅助功能」。";
+const SCREEN_RECORDING_DENIED_MSG: &str = "没有屏幕录制权限。请到「系统设置 → 隐私与安全性 → 屏幕录制」允许已安装的 Open Bot，然后重试。请打开 DMG 或「应用程序」里的 Open Bot，不要直接运行 Contents/MacOS 里的二进制。桌面设置里也可以打开这一页。若还要让助手操作界面，请同时允许「辅助功能」；若系统列出「输入监控」或「事件发布」，也允许 Open Bot。";
 
 fn screenshot_error(code: &str, error: &str) -> Value {
     json!({ "ok": false, "error": error, "code": code })
@@ -740,5 +740,7 @@ mod tests {
     fn screen_recording_denied_message_names_the_pane() {
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("屏幕录制"));
         assert!(SCREEN_RECORDING_DENIED_MSG.contains("辅助功能"));
+        assert!(SCREEN_RECORDING_DENIED_MSG.contains("Contents/MacOS"));
+        assert!(SCREEN_RECORDING_DENIED_MSG.contains("输入监控"));
     }
 }
