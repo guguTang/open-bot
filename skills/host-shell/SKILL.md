@@ -1,6 +1,6 @@
 ---
 name: host-shell
-description: Run local commands on a connected computer via host_shell. Use for on-machine shell work (inspect, build, process) with short output; revise on error. Desktop apps: is-it-installed uses host_open with launch=false; open-by-name uses host_open (default launches). Resolves .app on Mac — not mdfind kMDItemKind. Not for ssh (use host-ssh) or file-summary recipes (use host-file-query).
+description: Run local commands on a connected computer via host_shell. Use for on-machine shell work (inspect, build, process) with short output; revise on error. Desktop apps: is-it-installed uses host_find_app; open-by-name uses host_open. Resolves .app on Mac — not mdfind kMDItemKind. Not for ssh (use host-ssh) or file-summary recipes (use host-file-query).
 ---
 
 # 本机 Shell
@@ -9,7 +9,7 @@ description: Run local commands on a connected computer via host_shell. Use for 
 
 ## 何时 load
 
-用户要在本机执行命令、读写/删除/移动文件，或你需要自行拼命令时。判断某个 App 是否已安装：`host_open` 且 `launch=false`。打开软件：`host_open`（默认会启动）。不必靠本 skill。
+用户要在本机执行命令、读写/删除/移动文件，或你需要自行拼命令时。判断某个 App 是否已安装：`host_find_app`。打开软件：`host_open`。不必靠本 skill。
 
 - 文件「最大 / 按扩展名 / 最新」等摘要：优先 `load_skill host-file-query`
 - 远程 SSH / 远程文件：`load_skill host-ssh`（不要用 `host_shell` 跑 `ssh`/`scp`/`sftp`）
@@ -20,7 +20,7 @@ description: Run local commands on a connected computer via host_shell. Use for 
 1. 需要选机时先 `list_machines`，再传 `machine_id`（用户点名用对应且 connected 的；没点名用最常用工作设备）。
 2. 本机命令：`host_shell`（自己写；stdout 可能被截断）。
 3. 浅层浏览已知小目录：`host_ls`（不要拿它做「最大文件」汇总后再自己排序）。
-4. 判断某个 App 是否已安装：`host_open`（传用户说的名字，`launch=false`）。打开软件：同一工具且省略 `launch`（或 `launch=true`）。它会在 Mac 上按名字解析 `.app`。用户只问「有没有」时不要启动。不要用 `mdfind 'kMDItemKind == "Application"'`——Kind 随系统语言本地化（简体中文是「应用程序」），空结果不等于没安装。
+4. 判断某个 App 是否已安装：`host_find_app`（传用户说的名字）。打开软件：`host_open`。二者都会在 Mac 上按名字解析 `.app`。不要用 `mdfind 'kMDItemKind == "Application"'`——Kind 随系统语言本地化（简体中文是「应用程序」），空结果不等于没安装。
 5. 看屏幕：`host_screenshot`（图像附在工具结果里）。不要用 `screencapture` 存文件再假装看过。要点、输入、按键、滚动：先 `load_skill computer-use`，用 `host_click` / `host_type` / `host_key` / `host_scroll`。macOS、Windows、Linux 桌面都是同一套工具，不要用 cliclick、osascript、xdotool 或 grim 模拟点击。
 6. 删除：`host_delete`（多个文件传 `paths` 一次完成）。用户说再试一次且上一轮是删除时，再次调用 `host_delete`。
 7. 写入/移动：`host_write` / `host_move`。
@@ -50,7 +50,7 @@ description: Run local commands on a connected computer via host_shell. Use for 
 
 ## 禁止
 
-- 用 Spotlight 的本地化 Kind（`kMDItemKind == "Application"`）查找 App；查 App 用 `host_open`+`launch=false`，打开用 `host_open`。`mdfind` 为空不能当成没安装
+- 用 Spotlight 的本地化 Kind（`kMDItemKind == "Application"`）查找 App；查 App 用 `host_find_app`，打开用 `host_open`。`mdfind` 为空不能当成没安装
 - 用 `host_shell` 跑系统 `ssh` / `scp` / `sftp`
 - `terminal=true` 仅用于打开可见本机终端，不要用来拨 SSH
 - 用 `sandbox_*` 或记忆冒充本机 Downloads/桌面

@@ -1097,16 +1097,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "host_open",
+            "name": "host_find_app",
             "description": (
-                "Resolve a named desktop app on a connected computer (Mac resolves .app under "
-                "~/Applications, /Applications, /System/Applications). "
+                "Check whether a named desktop app is installed on a connected computer without opening it. "
                 "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code). "
-                "For “is X installed?” / “有没有 X” / check-only: set launch=false — returns found "
-                "(and app path when found) and does NOT start the app. "
-                "For “open X” / “打开 X”: omit launch or set launch=true (default) to start it. "
-                "A result with found=true and app is the bundle that was resolved. "
-                "Use this — not host_shell or mdfind — for install checks and open-by-name. "
+                "On Mac this resolves the .app under ~/Applications, /Applications, and /System/Applications. "
+                "Result includes found (boolean) and app (bundle/path when found). "
+                "Use this — not host_open, host_shell, or mdfind — for install / “is it installed?” checks. "
+                "To open the app, call host_open separately. "
                 "Pass machine_id when the user named a computer; otherwise omit it to use the current session computer."
             ),
             "parameters": {
@@ -1117,12 +1115,31 @@ TOOL_DEFS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Application name the user said, for example 微信, VLC, or Terminal",
                     },
-                    "launch": {
-                        "type": "boolean",
-                        "description": (
-                            "true (default) starts the app; false only checks whether it is installed "
-                            "without opening it. Use false for 有没有 / 是否安装."
-                        ),
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "host_open",
+            "description": (
+                "Open a named desktop app on a connected computer. "
+                "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code). "
+                "On Mac this resolves the .app under ~/Applications, /Applications, and /System/Applications, then launches it. "
+                "A result that includes app is the bundle that was opened. "
+                "Use this — not host_shell or mdfind — for “open X”. "
+                "To only check whether an app is installed without launching, call host_find_app instead. "
+                "Pass machine_id when the user named a computer; otherwise omit it to use the current session computer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "machine_id": {"type": "string"},
+                    "name": {
+                        "type": "string",
+                        "description": "Application name the user said, for example 微信, VLC, or Terminal",
                     },
                 },
                 "required": ["name"],
@@ -1403,7 +1420,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "Run one local command on a connected computer. "
                 "For how to use it, load_skill host-shell "
                 "(file summaries: host-file-query; remote SSH: host-ssh). "
-                "To see if a desktop app is installed, call host_open with launch=false; to open it by name, call host_open (launch defaults to true). "
+                "To see if a desktop app is installed, call host_find_app; to open it by name, call host_open. "
                 "Do not search apps with mdfind and kMDItemKind == \"Application\": "
                 "Spotlight Kind is localized (on zh_CN it is 「应用程序」), "
                 "so an empty mdfind result does not mean the app is not installed. "

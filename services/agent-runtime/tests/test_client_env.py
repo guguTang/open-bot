@@ -72,7 +72,7 @@ def test_tool_defs_include_list_machines() -> None:
     _ok("list_machines" in names, "list_machines in TOOL_DEFS")
     _ok("host_ls" in names and "host_read" in names and "host_write" in names, "host file tools present")
     _ok("host_delete" in names and "host_move" in names, "dangerous host tools present")
-    _ok("host_open" in names and "host_shell" in names, "host open and shell tools present")
+    _ok("host_find_app" in names and "host_open" in names and "host_shell" in names, "host find/open and shell tools present")
     _ok("host_ssh_exec" in names and "host_ssh_ls" in names and "host_ssh_read" in names, "ssh client tools present")
     shell = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_shell")
     desc = str((shell.get("function") or {}).get("description") or "")
@@ -137,19 +137,24 @@ def test_machine_label_in_env_block() -> None:
 
 
 def test_app_lookup_prefers_host_open() -> None:
+    find = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_find_app")
+    fdesc = str((find.get("function") or {}).get("description") or "")
+    _ok("installed" in fdesc.lower() or "without opening" in fdesc.lower(), "host_find_app is check-only")
+    _ok("host_open" in fdesc, "host_find_app points open to host_open")
+    _ok(".app" in fdesc, "host_find_app resolves .app on Mac")
+    _ok("mdfind" in fdesc, "host_find_app steers away from mdfind")
     opened = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_open")
     ofn = opened.get("function") or {}
     odesc = str(ofn.get("description") or "")
     props = (ofn.get("parameters") or {}).get("properties") or {}
-    _ok("installed" in odesc.lower(), "host_open covers check-if-installed")
-    _ok("launch=false" in odesc.replace(" ", ""), "host_open describes launch=false check-only")
-    _ok("launch" in props, "host_open has launch parameter")
+    _ok("launch" not in props, "host_open has no launch parameter")
+    _ok("host_find_app" in odesc, "host_open points install-check to host_find_app")
     _ok(".app" in odesc, "host_open resolves .app on Mac")
     _ok("mdfind" in odesc, "host_open steers away from mdfind")
     shell = next(t for t in TOOL_DEFS if (t.get("function") or {}).get("name") == "host_shell")
     sdesc = str((shell.get("function") or {}).get("description") or "")
-    _ok("host_open" in sdesc, "host_shell sends app lookup to host_open")
-    _ok("launch=false" in sdesc.replace(" ", ""), "host_shell points install-check at launch=false")
+    _ok("host_find_app" in sdesc, "host_shell sends install-check to host_find_app")
+    _ok("host_open" in sdesc, "host_shell sends open to host_open")
     _ok("kMDItemKind" in sdesc and "mdfind" in sdesc, "host_shell warns against localized Spotlight Kind")
     _ok("does not mean the app is not installed" in sdesc, "empty mdfind is not not-installed")
     _ok("find/du" not in sdesc.lower(), "app-lookup hint does not embed find/du how-to")
@@ -157,8 +162,7 @@ def test_app_lookup_prefers_host_open() -> None:
     host_shell_skill = (skills / "host-shell" / "SKILL.md").read_text()
     computer_use_skill = (skills / "computer-use" / "SKILL.md").read_text()
     for label, text in (("host-shell", host_shell_skill), ("computer-use", computer_use_skill)):
-        _ok("host_open" in text and "kMDItemKind" in text, f"{label} skill points app lookup at host_open")
-        _ok("launch=false" in text.replace(" ", ""), f"{label} skill uses launch=false for install check")
+        _ok("host_find_app" in text and "host_open" in text and "kMDItemKind" in text, f"{label} skill splits find vs open")
         _ok("应用程序" in text, f"{label} skill names the zh_CN Kind")
 
 

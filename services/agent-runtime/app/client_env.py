@@ -273,6 +273,7 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "host_write": "写入本机文件",
     "host_delete": "删除本机文件",
     "host_move": "移动本机文件",
+    "host_find_app": "检查软件",
     "host_open": "打开软件",
     "host_screenshot": "截取屏幕",
     "host_click": "点击界面",

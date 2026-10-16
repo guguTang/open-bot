@@ -116,6 +116,8 @@ export function toolLabelForHostOp(op: string, path = ""): string {
       return "host_ls";
     case "read":
       return "host_read";
+    case "find_app":
+      return "host_find_app";
     case "open":
       return "host_open";
     case "screenshot":

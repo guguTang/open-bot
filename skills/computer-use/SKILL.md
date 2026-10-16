@@ -1,6 +1,6 @@
 ---
 name: computer-use
-description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_screenshot, host_click, host_type, host_key, host_scroll, host_list_windows, and host_ax. Use when a task needs seeing or clicking in an app without an API/CLI. Check-if-installed: host_open with launch=false. Open-by-name: host_open (launch defaults true; resolves .app on Mac). Do not mdfind by English kMDItemKind.
+description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_screenshot, host_click, host_type, host_key, host_scroll, host_list_windows, and host_ax. Use when a task needs seeing or clicking in an app without an API/CLI. Check-if-installed: host_find_app. Open-by-name: host_open (resolves .app on Mac). Do not mdfind by English kMDItemKind.
 ---
 
 # Computer Use（本机 GUI 自动化）
@@ -11,8 +11,8 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 | 任务 | 优先用 |
 |------|--------|
-| 是否已安装 | `host_open` + `launch=false`（只解析，不启动） |
-| 打开 App | `host_open`（默认启动；按名字解析 `.app`） |
+| 是否已安装 | `host_find_app`（只解析，不启动） |
+| 打开 App | `host_open`（按名字解析 `.app` 并启动） |
 | 看屏幕 | `host_screenshot`（图像附在工具结果里） |
 | 点、输入、按键、滚动、拖拽 | `host_click` / `host_type` / `host_key` / `host_scroll` / `host_drag` / `host_mouse_move` |
 | 窗口与控件 | `host_list_windows` / `host_ax`（返回 `element_ref`） |
@@ -22,7 +22,7 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 | 网页内容 | `http_fetch`；需要登录/交互时用 Playwright 脚本（见 `dogfood`） |
 | 备忘录 / 提醒事项 / 短信 | `apple-notes` / `apple-reminders` / `imessage` |
 
-查 App 是否安装用 `host_open` 且 `launch=false`；要打开再用默认 `host_open`。不要 `mdfind 'kMDItemKind == "Application"'`（Kind 随语言本地化，简体中文是「应用程序」；空结果不等于没安装）。用户只问「有没有 / 是否安装」时禁止启动。
+查 App 是否安装用 `host_find_app`；要打开用 `host_open`。不要 `mdfind 'kMDItemKind == "Application"'`（Kind 随语言本地化，简体中文是「应用程序」；空结果不等于没安装）。
 
 只有原生 App 没有别的接口（设置面板、某些客户端按钮、原生对话框）时才用本 skill。
 

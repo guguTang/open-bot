@@ -17,6 +17,7 @@ pub fn run() {
             host_fs::host_write,
             host_fs::host_delete,
             host_fs::host_move,
+            host_cmd::host_find_app,
             host_cmd::host_open,
             host_cmd::host_screenshot,
             host_cmd::host_open_privacy,

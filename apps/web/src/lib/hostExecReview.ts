@@ -581,6 +581,7 @@ function buildAutoReviewHaystack(op: string, path: string, dest: string, reason:
     ls: "本机只读 打开文件 列表",
     read: "本机只读 打开文件 列表",
     open: "本机只读 打开文件 列表",
+    find_app: "本机只读 检查软件",
     screenshot: "截取屏幕 屏幕录制",
     tcc_status: "查看权限 屏幕录制 辅助功能 发送事件",
     list_windows: "查看界面 窗口 辅助功能",
@@ -706,6 +707,7 @@ export function classifyHostExecReview(op: string, path = "", dest = ""): HostEx
     case "ssh_ls":
     case "ssh_read":
     case "open":
+    case "find_app":
     case "list_windows":
     case "ax":
       return { tier: "auto", reason: "只读/可逆操作，Auto-review 自动放行", code: "readonly_op" };

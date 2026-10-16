@@ -29,6 +29,11 @@ description = "Enables the host_move command."
 commands.allow = ["host_move"]
 
 [[permission]]
+identifier = "allow-host-find-app"
+description = "Enables the host_find_app command."
+commands.allow = ["host_find_app"]
+
+[[permission]]
 identifier = "allow-host-open"
 description = "Enables the host_open command."
 commands.allow = ["host_open"]

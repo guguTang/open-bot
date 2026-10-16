@@ -101,22 +101,70 @@ fn find_macos_app(query: &str) -> Option<PathBuf> {
 }
 
 #[tauri::command]
-pub fn host_open(name: String, launch: Option<bool>) -> Result<Value, String> {
+pub fn host_find_app(name: String) -> Result<Value, String> {
     let name = validate_label(&name, 200)?;
-    let do_launch = launch.unwrap_or(true);
     #[cfg(target_os = "macos")]
     {
+        return Ok(match find_macos_app(&name) {
+            Some(app) => json!({
+                "ok": true,
+                "found": true,
+                "name": name,
+                "app": app.display().to_string()
+            }),
+            None => json!({ "ok": true, "found": false, "name": name }),
+        });
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let found = Command::new("where")
+            .arg(&name)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                stdout.lines().next().map(|s| s.trim().to_string())
+            })
+            .filter(|s| !s.is_empty());
+        return Ok(match found {
+            Some(path) => json!({ "ok": true, "found": true, "name": name, "app": path }),
+            None => json!({ "ok": true, "found": false, "name": name }),
+        });
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let found = Command::new("which")
+            .arg(&name)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                stdout.lines().next().map(|s| s.trim().to_string())
+            })
+            .filter(|s| !s.is_empty());
+        return Ok(match found {
+            Some(path) => json!({ "ok": true, "found": true, "name": name, "app": path }),
+            None => json!({ "ok": true, "found": false, "name": name }),
+        });
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        let _ = name;
+        Err("当前系统不能查找软件".into())
+    }
+}
+
+#[tauri::command]
+pub fn host_open(name: String) -> Result<Value, String> {
+    let name = validate_label(&name, 200)?;
+    #[cfg(target_os = "macos")]
+    {
+        let mut cmd = Command::new("open");
+        cmd.arg("-a");
         if let Some(app) = find_macos_app(&name) {
-            if !do_launch {
-                return Ok(json!({
-                    "ok": true,
-                    "found": true,
-                    "name": name,
-                    "app": app.display().to_string()
-                }));
-            }
-            let mut cmd = Command::new("open");
-            cmd.arg("-a").arg(&app);
+            cmd.arg(&app);
             command_ok(&mut cmd)?;
             return Ok(json!({
                 "ok": true,
@@ -125,32 +173,12 @@ pub fn host_open(name: String, launch: Option<bool>) -> Result<Value, String> {
                 "app": app.display().to_string()
             }));
         }
-        if !do_launch {
-            return Ok(json!({ "ok": true, "found": false, "name": name }));
-        }
-        let mut cmd = Command::new("open");
-        cmd.arg("-a").arg(&name);
+        cmd.arg(&name);
         command_ok(&mut cmd)?;
         return Ok(json!({ "ok": true, "name": name }));
     }
     #[cfg(target_os = "windows")]
     {
-        if !do_launch {
-            let found = Command::new("where")
-                .arg(&name)
-                .output()
-                .ok()
-                .filter(|o| o.status.success())
-                .and_then(|o| {
-                    let stdout = String::from_utf8_lossy(&o.stdout);
-                    stdout.lines().next().map(|s| s.trim().to_string())
-                })
-                .filter(|s| !s.is_empty());
-            return Ok(match found {
-                Some(path) => json!({ "ok": true, "found": true, "name": name, "app": path }),
-                None => json!({ "ok": true, "found": false, "name": name }),
-            });
-        }
         let mut cmd = Command::new("cmd");
         cmd.args(["/C", "start", "", &name]);
         command_ok(&mut cmd)?;
@@ -158,22 +186,6 @@ pub fn host_open(name: String, launch: Option<bool>) -> Result<Value, String> {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        if !do_launch {
-            let found = Command::new("which")
-                .arg(&name)
-                .output()
-                .ok()
-                .filter(|o| o.status.success())
-                .and_then(|o| {
-                    let stdout = String::from_utf8_lossy(&o.stdout);
-                    stdout.lines().next().map(|s| s.trim().to_string())
-                })
-                .filter(|s| !s.is_empty());
-            return Ok(match found {
-                Some(path) => json!({ "ok": true, "found": true, "name": name, "app": path }),
-                None => json!({ "ok": true, "found": false, "name": name }),
-            });
-        }
         if Command::new("gtk-launch")
             .arg(&name)
             .status()
@@ -189,7 +201,7 @@ pub fn host_open(name: String, launch: Option<bool>) -> Result<Value, String> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
     {
-        let _ = (name, do_launch);
+        let _ = name;
         Err("当前系统不能打开软件".into())
     }
 }
