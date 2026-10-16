@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClientContext } from "./clientEnv";
 import { classifyHostExecReview } from "./hostExecReview";
-import { shouldShowDesktopCapturePermissions } from "./desktopPrivacy";
+import { DESKTOP_CAPTURE_PERMISSION_HINT, shouldShowDesktopCapturePermissions } from "./desktopPrivacy";
 import { toolLabelForHostOp } from "./toolAllowlist";
 
 function client(partial: Partial<ClientContext>): ClientContext {
@@ -18,6 +18,16 @@ function client(partial: Partial<ClientContext>): ClientContext {
 }
 
 describe("desktop capture permissions", () => {
+  it("tells people to grant TCC to the installed Open Bot app", () => {
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("DMG");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("Open Bot");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("Contents/MacOS/open-bot-desktop");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("屏幕录制");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("辅助功能");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("输入监控");
+    expect(DESKTOP_CAPTURE_PERMISSION_HINT).toContain("事件发布");
+  });
+
   it("shows Screen Recording guidance only on the macOS desktop app", () => {
     expect(shouldShowDesktopCapturePermissions(client({ platform: "macos", app: "tauri" }))).toBe(true);
     expect(

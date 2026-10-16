@@ -97,6 +97,12 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2
         version: 2.11.5
+      bplist-creator:
+        specifier: 0.0.8
+        version: 0.0.8
+      tn1150:
+        specifier: 0.1.0
+        version: 0.1.0
 
   apps/mobile:
     dependencies:
@@ -4241,6 +4247,9 @@ packages:
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
 
+  bplist-creator@0.0.8:
+    resolution: {integrity: sha512-Za9JKzD6fjLC16oX2wsXfc+qBEhJBJB1YPInoAQpMLhDuj5aVOv1baGeIQSq1Fr3OCqzvsoQcSBSwGId/Ja2PA==}
+
   bplist-creator@0.1.0:
     resolution: {integrity: sha512-sXaHZicyEEmY86WyueLTQesbeoH/mquvarJaQNbjuOQO+7gbFcDEWqKmcWA4cOTLzFlfgvkiVxolk1k5bBIpmg==}
 
@@ -8282,6 +8291,10 @@ packages:
   tmpl@1.0.5:
     resolution: {integrity: sha512-3f0uOEAQwIqGuWW2MVzYg8fV/QNnc/IpuJNG837rLuczAaLVHslWHZQj4IGiEl5Hs3kkbhwL9Ab7Hrsmuj+Smw==}
 
+  tn1150@0.1.0:
+    resolution: {integrity: sha512-DbplOfQFkqG5IHcDyyrs/lkvSr3mPUVsFf/RbDppOshs22yTPnSJWEe6FkYd1txAwU/zcnR905ar2fi4kwF29w==}
+    engines: {node: '>=0.12'}
+
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
@@ -8454,6 +8467,10 @@ packages:
         optional: true
       metro-transform-worker:
         optional: true
+
+  unorm@1.6.0:
+    resolution: {integrity: sha512-b2/KCUlYZUeA7JFUuRJZPUtr4gZvBh7tavtv4fvk4+KV9pfGiR6CQAQAWl49ZpR3ts2dk4FYkP7EIgDJoiOLDA==}
+    engines: {node: '>= 0.4.0'}
 
   unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -13700,6 +13717,10 @@ snapshots:
 
   boolbase@1.0.0: {}
 
+  bplist-creator@0.0.8:
+    dependencies:
+      stream-buffers: 2.2.0
+
   bplist-creator@0.1.0:
     dependencies:
       stream-buffers: 2.2.0
@@ -18920,6 +18941,10 @@ snapshots:
 
   tmpl@1.0.5: {}
 
+  tn1150@0.1.0:
+    dependencies:
+      unorm: 1.6.0
+
   to-regex-range@5.0.1:
     dependencies:
       is-number: 7.0.0
@@ -19094,6 +19119,8 @@ snapshots:
     optionalDependencies:
       '@expo/metro-config': 57.0.13(expo@57.0.28)(typescript@6.0.3)
       metro-transform-worker: 0.84.6
+
+  unorm@1.6.0: {}
 
   unpipe@1.0.0: {}
 

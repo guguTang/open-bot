@@ -25,8 +25,8 @@ description: Drive desktop GUI apps on a connected Mac via host_open, host_scree
 ## 前提
 
 - 已连接的 **Mac**（`list_machines` 看 platform / connected）。Windows / Linux 上 `host_screenshot` 会返回暂不支持，不要改用盲截。
-- 截屏需要「系统设置 → 隐私与安全性 → 屏幕录制」允许 **Open Bot**。报错含 `screen_recording_denied` / 「没有屏幕录制权限」时，请用户去桌面设置打开该页并授权，**不要反复重试**。
-- 点按钮、读辅助功能树需要「辅助功能」。报错 `not allowed assistive access` / `-1719` / `-25211` 时，请用户授权，不要反复重试。
+- 截屏需要「系统设置 → 隐私与安全性 → 屏幕录制」允许已安装的 **Open Bot**（从 DMG 拖进「应用程序」的那个）。报错含 `screen_recording_denied` / 「没有屏幕录制权限」时，请用户去桌面设置打开该页并授权，**不要反复重试**。不要让用户直接运行 `Contents/MacOS/open-bot-desktop`。
+- 点按钮、读辅助功能树需要「辅助功能」。报错 `not allowed assistive access` / `-1719` / `-25211` 时，请用户授权，不要反复重试。较新的 macOS 若还列出「输入监控」或「事件发布」，同样允许 Open Bot。
 - 手机和浏览器不能截用户电脑的屏幕；目标必须是已连接的桌面。
 - 若工具列表里有用户自己配置的桌面驱动 MCP（例如 `mcp__cua*`），优先用它，按其 schema 操作；下面的流程是兜底。
 
