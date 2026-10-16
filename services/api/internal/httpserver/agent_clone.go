@@ -135,14 +135,9 @@ func (s *Server) cloneAgentFor(uid, sourceID string, body cloneAgentBody) (map[s
 		}
 	}
 
-	if s.events != nil {
-		s.events.Publish(uid, map[string]any{
-			"type":            "agents_changed",
-			"reason":          "cloned",
-			"agent_id":        newID,
-			"source_agent_id": sourceID,
-		})
-	}
+	s.publishAgentsChanged(uid, "cloned", newID, map[string]any{
+		"source_agent_id": sourceID,
+	})
 	return out, http.StatusCreated, nil
 }
 

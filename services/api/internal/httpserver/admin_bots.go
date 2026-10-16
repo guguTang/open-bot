@@ -89,6 +89,7 @@ func (s *Server) handleAdminCreateBot(w http.ResponseWriter, r *http.Request) {
 		"user_id":  a.UserID,
 		"username": owner.Username,
 	})
+	s.publishAgentsChanged(owner.ID, "created", a.ID, nil)
 	writeJSON(w, http.StatusCreated, map[string]any{"bot": agentAdminPublic(a, owner.Username)})
 }
 
@@ -134,6 +135,7 @@ func (s *Server) handleAdminPatchBot(w http.ResponseWriter, r *http.Request) {
 		"name":    a.Name,
 		"user_id": a.UserID,
 	})
+	s.publishAgentsChanged(a.UserID, "updated", a.ID, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"bot": agentAdminPublic(a, existing.OwnerUsername)})
 }
 
@@ -168,6 +170,7 @@ func (s *Server) handleAdminDeleteBot(w http.ResponseWriter, r *http.Request) {
 		"name":    existing.Name,
 		"user_id": existing.UserID,
 	})
+	s.publishAgentsChanged(existing.UserID, "deleted", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

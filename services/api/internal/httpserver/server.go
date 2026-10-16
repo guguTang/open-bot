@@ -887,6 +887,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		a = a2
 	}
 	s.stampAgentOnline(uid, a)
+	s.publishAgentsChanged(uid, "created", a.ID, nil)
 	writeJSON(w, http.StatusCreated, a)
 }
 
@@ -951,6 +952,7 @@ func (s *Server) handlePatchAgent(w http.ResponseWriter, r *http.Request) {
 		s.publishAgentOnlineIfChanged(uid, a)
 	}
 	s.stampAgentOnline(uid, a)
+	s.publishAgentsChanged(uid, "updated", a.ID, nil)
 	writeJSON(w, http.StatusOK, a)
 }
 
@@ -965,6 +967,7 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.publishAgentsChanged(uid, "deleted", id, nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2539,8 +2542,10 @@ func (s *Server) handleCreateChannel(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.AddChannelMember(uid, c.ID, aid)
 	}
 	// Reload members and bind a real conversation so sidebar 群聊 opens like a thread.
-	c, _ = s.db.GetChannel(uid, c.ID)
+	createdID := c.ID
+	c, _ = s.db.GetChannel(uid, createdID)
 	if c == nil {
+		s.publishChannelsChanged(uid, "created", createdID)
 		writeJSON(w, http.StatusCreated, body)
 		return
 	}
@@ -2563,6 +2568,7 @@ func (s *Server) handleCreateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	c.ConversationID = conv.ID
 	s.enrichChannelOnline(uid, c)
+	s.publishChannelsChanged(uid, "created", c.ID)
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -2577,6 +2583,7 @@ func (s *Server) handleDeleteChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.publishChannelsChanged(uid, "deleted", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2641,6 +2648,7 @@ func (s *Server) handlePatchChannel(w http.ResponseWriter, r *http.Request) {
 		c.ConversationID = conv.ID
 	}
 	s.enrichChannelOnline(uid, c)
+	s.publishChannelsChanged(uid, "updated", c.ID)
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -2664,6 +2672,7 @@ func (s *Server) handleAddChannelMember(w http.ResponseWriter, r *http.Request) 
 	}
 	c, err := s.db.GetChannel(uid, id)
 	if err != nil {
+		s.publishChannelsChanged(uid, "member_added", id)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
@@ -2680,6 +2689,7 @@ func (s *Server) handleAddChannelMember(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	s.enrichChannelOnline(uid, c)
+	s.publishChannelsChanged(uid, "member_added", c.ID)
 	writeJSON(w, http.StatusOK, c)
 }
 
@@ -2697,6 +2707,7 @@ func (s *Server) handleRemoveChannelMember(w http.ResponseWriter, r *http.Reques
 	}
 	c, err := s.db.GetChannel(uid, id)
 	if err != nil {
+		s.publishChannelsChanged(uid, "member_removed", id)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 		return
 	}
@@ -2704,6 +2715,7 @@ func (s *Server) handleRemoveChannelMember(w http.ResponseWriter, r *http.Reques
 		c.ConversationID = conv.ID
 	}
 	s.enrichChannelOnline(uid, c)
+	s.publishChannelsChanged(uid, "member_removed", c.ID)
 	writeJSON(w, http.StatusOK, c)
 }
 

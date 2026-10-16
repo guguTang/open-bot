@@ -27,6 +27,7 @@ export function useChatEventsSocket(deps: {
   applyReactionEvent: (evt: ReactionUpdatedEvent) => void;
   applyBotOnline: (id: string, on: boolean) => void;
   refreshAgents: () => Promise<unknown>;
+  refreshChannels: () => Promise<unknown>;
   lastRequestIdRef: React.RefObject<string>;
   setHostActivity: (label: string) => void;
 }) {
@@ -82,7 +83,9 @@ export function useChatEventsSocket(deps: {
       const ws = new WebSocket(chatEventsWebSocketUrl(d.token!));
       socket = ws;
       ws.onopen = () => {
-        void depsRef.current.refreshAgents().catch(() => {});
+        const live = depsRef.current;
+        void live.refreshAgents().catch(() => {});
+        void live.refreshChannels().catch(() => {});
         pullOpen();
       };
       ws.onmessage = (ev) => {
@@ -147,6 +150,14 @@ export function useChatEventsSocket(deps: {
           }
           return;
         }
+        if (data.type === "agents_changed") {
+          void live.refreshAgents().catch(() => {});
+          return;
+        }
+        if (data.type === "channels_changed") {
+          void live.refreshChannels().catch(() => {});
+          return;
+        }
         if (data.type === "reaction_updated") {
           const evt = data as ReactionUpdatedEvent;
           if (evt.message_id && evt.emoji) {
@@ -163,7 +174,9 @@ export function useChatEventsSocket(deps: {
     connect();
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        void depsRef.current.refreshAgents().catch(() => {});
+        const live = depsRef.current;
+        void live.refreshAgents().catch(() => {});
+        void live.refreshChannels().catch(() => {});
         pullOpen();
       }
     };

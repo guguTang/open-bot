@@ -178,3 +178,37 @@ func (s *Server) publishTaskStatus(userID, conversationID, agentID, channelID, s
 		"label":           label,
 	})
 }
+
+func (s *Server) publishAgentsChanged(userID, reason, agentID string, extra map[string]any) {
+	if s.events == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	payload := map[string]any{
+		"type":   "agents_changed",
+		"reason": reason,
+	}
+	if id := strings.TrimSpace(agentID); id != "" {
+		payload["agent_id"] = id
+	}
+	for k, v := range extra {
+		if strings.TrimSpace(k) == "" || v == nil {
+			continue
+		}
+		payload[k] = v
+	}
+	s.events.Publish(userID, payload)
+}
+
+func (s *Server) publishChannelsChanged(userID, reason, channelID string) {
+	if s.events == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	payload := map[string]any{
+		"type":   "channels_changed",
+		"reason": reason,
+	}
+	if id := strings.TrimSpace(channelID); id != "" {
+		payload["channel_id"] = id
+	}
+	s.events.Publish(userID, payload)
+}

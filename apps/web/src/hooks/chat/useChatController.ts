@@ -193,6 +193,7 @@ export function useChatController(p: ChatControllerParams) {
     applyReactionEvent: p.applyReactionEvent,
     applyBotOnline: p.applyBotOnline,
     refreshAgents: p.refreshAgents,
+    refreshChannels: p.refreshChannels,
     lastRequestIdRef,
     setHostActivity: p.setHostActivity,
   });
