@@ -80,6 +80,43 @@ fn scan_apps(dir: &Path, query: &str, depth: u8, exact: &mut Option<PathBuf>, fu
     }
 }
 
+
+#[cfg(target_os = "macos")]
+fn defaults_read_info(app: &Path, key: &str) -> Option<String> {
+    let info = app.join("Contents").join("Info");
+    let output = Command::new("defaults")
+        .arg("read")
+        .arg(&info)
+        .arg(key)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
+/// CFBundle* names so callers can match `host_list_windows` owners (e.g. Lark.app → Feishu).
+#[cfg(target_os = "macos")]
+fn macos_app_name_fields(app: &Path) -> serde_json::Map<String, Value> {
+    let mut m = serde_json::Map::new();
+    if let Some(v) = defaults_read_info(app, "CFBundleName") {
+        m.insert("bundle_name".into(), json!(v));
+    }
+    if let Some(v) = defaults_read_info(app, "CFBundleDisplayName") {
+        m.insert("display_name".into(), json!(v));
+    }
+    if let Some(v) = defaults_read_info(app, "CFBundleExecutable") {
+        m.insert("executable_name".into(), json!(v));
+    }
+    m
+}
+
 fn find_macos_app(query: &str) -> Option<PathBuf> {
     let query = query.trim().trim_end_matches(".app");
     let mut dirs = vec![
@@ -106,12 +143,18 @@ pub fn host_find_app(name: String) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
         return Ok(match find_macos_app(&name) {
-            Some(app) => json!({
-                "ok": true,
-                "found": true,
-                "name": name,
-                "app": app.display().to_string()
-            }),
+            Some(app) => {
+                let mut out = json!({
+                    "ok": true,
+                    "found": true,
+                    "name": name,
+                    "app": app.display().to_string()
+                });
+                if let Some(obj) = out.as_object_mut() {
+                    obj.extend(macos_app_name_fields(&app));
+                }
+                out
+            }
             None => json!({ "ok": true, "found": false, "name": name }),
         });
     }
@@ -166,12 +209,17 @@ pub fn host_open(name: String) -> Result<Value, String> {
         if let Some(app) = find_macos_app(&name) {
             cmd.arg(&app);
             command_ok(&mut cmd)?;
-            return Ok(json!({
+            let mut out = json!({
                 "ok": true,
                 "found": true,
                 "name": name,
-                "app": app.display().to_string()
-            }));
+                "app": app.display().to_string(),
+                "next": "host_list_windows again, match windows[].app/title to name/bundle_name/display_name, then host_screenshot(window_id=…). Do not use scope=main for a named-app capture."
+            });
+            if let Some(obj) = out.as_object_mut() {
+                obj.extend(macos_app_name_fields(&app));
+            }
+            return Ok(out);
         }
         cmd.arg(&name);
         command_ok(&mut cmd)?;

@@ -56,7 +56,16 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 ### 1. 看屏幕
 
-`host_screenshot`：用户要看**某个 App / 某个窗口**时（例如「截 VLC」「截这个窗口」），先 `host_list_windows`，再 `host_screenshot(window_id=…)`，不要只传 `scope=main/all`（那是整屏）。只有用户明确要整屏桌面时才用默认主屏或 `scope=all`。图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
+`host_screenshot`：用户要看**某个 App / 某个窗口**时（例如「去 Lark」「截 VLC」「截这个窗口」）：
+
+1. 若还没打开：`host_find_app` → `host_open`。
+2. **打开后再** `host_list_windows`（open 之前的列表没有新窗口，不能复用）。
+3. 在列表里用 **不区分大小写的包含匹配** 找 `windows[].app` / `title`：进程名可能和 `.app` 名不同（例：`Lark.app` 的窗口 `app` 常是 `Feishu`；也对照 `host_find_app` / `host_open` 返回的 `bundle_name` / `display_name`）。
+4. 对上了再 `host_screenshot(window_id=…)`。
+
+**禁止**在「去某 App / 截某 App」场景只用 `scope=main/all` 充数——那是整屏桌面，不是该 App。只有用户明确要整屏桌面时才用默认主屏或 `scope=all`。列表里暂时没有目标窗口：再说一声在等窗口，或再 list 一次，不要拿整屏截图假装成功。
+
+图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
 
 记下 `frame_id`。需要结构化目标时：
 

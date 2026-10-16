@@ -1103,7 +1103,8 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "Check whether a named desktop app is installed on a connected computer without opening it. "
                 "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code). "
                 "On Mac this resolves the .app under ~/Applications, /Applications, and /System/Applications. "
-                "Result includes found (boolean) and app (bundle/path when found). "
+                "Result includes found (boolean), app (bundle/path when found), and on Mac bundle_name / "
+                "display_name / executable_name for matching host_list_windows owners (Lark.app → Feishu). "
                 "Use this — not host_open, host_shell, or mdfind — for install / “is it installed?” checks. "
                 "To open the app, call host_open separately. "
                 "Pass machine_id when the user named a computer; otherwise omit it to use the current session computer."
@@ -1127,9 +1128,11 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "name": "host_open",
             "description": (
                 "Open a named desktop app on a connected computer. "
-                "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code). "
+                "Pass the app name the user said (微信, Safari, VLC, Visual Studio Code, Lark). "
                 "On Mac this resolves the .app under ~/Applications, /Applications, and /System/Applications, then launches it. "
-                "A result that includes app is the bundle that was opened. "
+                "A result that includes app is the bundle that was opened; bundle_name / display_name help match host_list_windows "
+                "(window owner may differ from the .app name, e.g. Lark.app → app=Feishu). "
+                "After open, call host_list_windows again then host_screenshot(window_id=…) for a named-app view — not scope=main. "
                 "Use this — not host_shell or mdfind — for “open X”. "
                 "To only check whether an app is installed without launching, call host_find_app instead. "
                 "Pass machine_id when the user named a computer; otherwise omit it to use the current session computer."
@@ -1160,6 +1163,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "scope main (default) is the main display; all captures every display; "
                 "display is a 1-based index and overrides scope; "
                 "window_id from host_list_windows captures that window and wins over display/scope. "
+                "For a named app (e.g. “go to Lark” / “screenshot VLC”): host_list_windows AFTER host_open, "
+                "match windows[].app/title loosely (Lark.app windows often have app=Feishu), then pass window_id. "
+                "Do NOT use scope=main/all as a stand-in for a named-app capture. "
                 "The result includes frame_id, width, height, scale, and actionable. "
                 "Window shots have scope=window and are clickable (origin is the window bounds). "
                 "Later clicks, scrolls, and mouse moves use image pixels in that width×height "
@@ -1221,6 +1227,9 @@ TOOL_DEFS: list[dict[str, Any]] = [
             "description": (
                 "List on-screen windows on a connected desktop (macOS, Windows, or Linux): app, title, pid, window_id, bounds. "
                 "Pass frame_id from host_screenshot to also get x,y,width,height in that image's pixels. "
+                "After host_open, call this again before host_screenshot(window_id=…). "
+                "Match app/title with case-insensitive substring; owner name may differ from .app "
+                "(Lark.app windows often have app=Feishu — also use bundle_name/display_name from find/open). "
                 "Read-only. macOS can post background input to pid; Windows PostMessage and Linux XSendEvent are best-effort. "
                 "Empty titles on macOS usually mean Screen Recording is not granted."
             ),
