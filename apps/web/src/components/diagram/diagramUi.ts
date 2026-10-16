@@ -143,7 +143,10 @@ export const diagramWarningClass = cn(
 );
 
 export const diagramFsBackdropClass = cn(
-  "fixed inset-0 z-[90] grid place-items-center bg-slate-900/55",
+  // h/w-full: native <dialog> UA is width/height:fit-content; with m-0 that
+  // pins the box top-left. Match dialog.modal-backdrop so inset-0 fills the
+  // viewport and grid place-items-center can center the shell.
+  "fixed inset-0 z-[90] grid h-full w-full place-items-center bg-slate-900/55",
 );
 
 export const diagramFsBackdropImageClass = "bg-black/[0.82]";

@@ -63,7 +63,7 @@ export function DiagramFullscreenShell({
     <dialog
       ref={dialogRef}
       className={cn(
-        "relative m-0 max-h-none max-w-none border-none p-0 text-inherit",
+        "m-0 max-h-none max-w-none border-none p-0 text-inherit",
         diagramFsBackdropClass,
         variant === "image" && diagramFsBackdropImageClass,
       )}
