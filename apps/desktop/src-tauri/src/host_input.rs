@@ -852,7 +852,7 @@ pub fn host_ax(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::ax_query(AxQuery {
+        return Ok(mac::ax_query(mac::AxQuery {
             frame_id: opt_str(&frame_id),
             app: opt_str(&app),
             pid,
@@ -911,7 +911,7 @@ pub fn host_click(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::click(ClickReq {
+        return Ok(mac::click(mac::ClickReq {
             frame_id: opt_str(&frame_id),
             x,
             y,
@@ -955,7 +955,7 @@ pub fn host_type(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::type_text(TypeReq {
+        return Ok(mac::type_text(mac::TypeReq {
             frame_id: opt_str(&frame_id),
             text: text.unwrap_or_default(),
             element_ref: opt_str(&element_ref),
@@ -996,7 +996,7 @@ pub fn host_key(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::press_key(KeyReq {
+        return Ok(mac::press_key(mac::KeyReq {
             frame_id: opt_str(&frame_id),
             key: key.unwrap_or_default(),
             modifiers: modifiers.unwrap_or_default(),
@@ -1041,7 +1041,7 @@ pub fn host_scroll(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::scroll(ScrollReq {
+        return Ok(mac::scroll(mac::ScrollReq {
             frame_id: opt_str(&frame_id),
             x,
             y,
@@ -1083,7 +1083,7 @@ pub fn host_mouse_move(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::mouse_move(MoveReq {
+        return Ok(mac::mouse_move(mac::MoveReq {
             frame_id: opt_str(&frame_id),
             x,
             y,
@@ -1125,7 +1125,7 @@ pub fn host_drag(
 ) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
     {
-        return Ok(mac::drag(DragReq {
+        return Ok(mac::drag(mac::DragReq {
             frame_id: opt_str(&frame_id),
             x,
             y,
