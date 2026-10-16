@@ -15,8 +15,8 @@ use std::time::Duration;
 use super::{
     background_target, button_name, click_count, clamp_scroll, cu_error, element_center, frame_point,
     load_frame, map_image_point, modifier_flag, parse_keystroke, point_error, publish_element,
-    require_anchor, screen_rect_to_image, windows_vk, CapturedShot, ShotError, FLAG_COMMAND,
-    FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, MAX_TYPE_CHARS, MISSING_FRAME_MSG,
+    require_anchor, screen_rect_to_image, windows_vk, CapturedShot, CapturedWindowShot, ShotError,
+    FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, MAX_TYPE_CHARS, MISSING_FRAME_MSG,
     WIN_ACCESSIBILITY_DENIED_MSG, WIN_EVENT_POSTING_DENIED_MSG, WIN_SCREEN_DENIED_MSG,
 };
 use serde_json::{json, Value};
@@ -25,8 +25,8 @@ use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM, POINT, RECT, T
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, EnumDisplayMonitors,
-    GetDC, GetDIBits, GetMonitorInfoW, ReleaseDC, ScreenToClient, SelectObject, BITMAPINFO,
-    BITMAPINFOHEADER, DIB_RGB_COLORS, HDC, HMONITOR, MONITORINFO, SRCCOPY,
+    GetDC, GetDIBits, GetMonitorInfoW, GetWindowDC, ReleaseDC, ScreenToClient, SelectObject,
+    BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, HDC, HMONITOR, MONITORINFO, SRCCOPY,
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::StationsAndDesktops::{CloseDesktop, OpenInputDesktop, DESKTOP_READOBJECTS};
@@ -47,7 +47,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW,
-    GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, MONITORINFOF_PRIMARY, PostMessageW,
+    GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible, MONITORINFOF_PRIMARY, PostMessageW,
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_CHAR, WM_KEYDOWN,
     WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP,
 };
@@ -225,6 +225,129 @@ pub fn capture_shot(scope: &str, display: Option<u32>, max_bytes: usize) -> Resu
             message,
         })?;
     Ok(CapturedShot { bytes, width, height })
+}
+
+fn grab_hwnd(hwnd: HWND) -> Result<(Vec<u8>, i32, i32, i32, i32), ShotError> {
+    unsafe {
+        if !IsWindow(hwnd).as_bool() {
+            return Err(ShotError {
+                code: "window_not_found",
+                message: "找不到这个窗口。请先 host_list_windows，再用返回的 window_id。".into(),
+            });
+        }
+        let mut rect = RECT::default();
+        if GetWindowRect(hwnd, &mut rect).is_err() {
+            return Err(ShotError {
+                code: "window_not_found",
+                message: "找不到这个窗口。请先 host_list_windows，再用返回的 window_id。".into(),
+            });
+        }
+        let x = rect.left;
+        let y = rect.top;
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        if width <= 0 || height <= 0 || width > 16384 || height > 16384 {
+            return Err(ShotError {
+                code: "screenshot_failed",
+                message: "窗口尺寸无效".into(),
+            });
+        }
+        let window_dc = GetWindowDC(hwnd);
+        if window_dc.is_invalid() {
+            return Err(ShotError {
+                code: "screen_recording_denied",
+                message: WIN_SCREEN_DENIED_MSG.to_string(),
+            });
+        }
+        let mem = CreateCompatibleDC(window_dc);
+        let bmp = CreateCompatibleBitmap(window_dc, width, height);
+        if mem.is_invalid() || bmp.is_invalid() {
+            let _ = ReleaseDC(hwnd, window_dc);
+            return Err(ShotError {
+                code: "screenshot_failed",
+                message: "截取窗口失败".into(),
+            });
+        }
+        let old = SelectObject(mem, bmp);
+        let copied = BitBlt(mem, 0, 0, width, height, window_dc, 0, 0, SRCCOPY);
+        let mut info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: 0,
+                ..BITMAPINFOHEADER::default()
+            },
+            ..BITMAPINFO::default()
+        };
+        let mut bgra = vec![0u8; (width as usize) * (height as usize) * 4];
+        let rows = GetDIBits(
+            mem,
+            bmp,
+            0,
+            height as u32,
+            Some(bgra.as_mut_ptr() as *mut _),
+            &mut info,
+            DIB_RGB_COLORS,
+        );
+        if !old.is_invalid() {
+            let _ = SelectObject(mem, old);
+        }
+        let _ = DeleteObject(bmp);
+        let _ = DeleteDC(mem);
+        let _ = ReleaseDC(hwnd, window_dc);
+        if copied.is_err() || rows == 0 {
+            return Err(ShotError {
+                code: "screenshot_failed",
+                message: "截取窗口失败。窗口可能已最小化或不可见。".into(),
+            });
+        }
+        let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
+        for (i, px) in bgra.chunks_exact(4).enumerate() {
+            let di = i * 3;
+            if di + 2 >= rgb.len() {
+                break;
+            }
+            rgb[di] = px[2];
+            rgb[di + 1] = px[1];
+            rgb[di + 2] = px[0];
+        }
+        Ok((rgb, x, y, width, height))
+    }
+}
+
+pub fn capture_window_shot(window_id: i64, max_bytes: usize) -> Result<CapturedWindowShot, ShotError> {
+    prepare_dpi();
+    if window_id == 0 {
+        return Err(ShotError {
+            code: "invalid_window",
+            message: "window_id 无效。请用 host_list_windows 返回的 window_id".into(),
+        });
+    }
+    let hwnd = hwnd_of(window_id as isize);
+    let (rgb, x, y, width, height) = grab_hwnd(hwnd)?;
+    let (bytes, out_w, out_h) =
+        crate::host_raster::rgb_to_jpeg_budget(&rgb, width as u32, height as u32, max_bytes).map_err(
+            |message| ShotError {
+                code: if message.contains("太大") {
+                    "screenshot_too_large"
+                } else {
+                    "screenshot_failed"
+                },
+                message,
+            },
+        )?;
+    Ok(CapturedWindowShot {
+        bytes,
+        width: out_w,
+        height: out_h,
+        origin_x: x as f64,
+        origin_y: y as f64,
+        width_pt: width as f64,
+        height_pt: height as f64,
+    })
 }
 
 fn input_allowed() -> bool {

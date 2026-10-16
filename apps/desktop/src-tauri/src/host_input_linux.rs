@@ -19,8 +19,8 @@ use std::time::Duration;
 use super::{
     background_target, button_name, click_count, cu_error, element_center, frame_point,
     linux_keysym, load_frame, map_image_point, parse_keystroke, point_error,
-    publish_element, require_anchor, screen_rect_to_image, CapturedShot, ShotError,
-    FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, LINUX_ACCESSIBILITY_DENIED_MSG,
+    publish_element, require_anchor, screen_rect_to_image, CapturedShot, CapturedWindowShot,
+    ShotError, FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, LINUX_ACCESSIBILITY_DENIED_MSG,
     LINUX_EVENT_POSTING_DENIED_MSG, LINUX_SCREEN_DENIED_MSG, MAX_TYPE_CHARS,
 };
 use serde_json::{json, Value};
@@ -112,6 +112,17 @@ impl X11 {
     }
 
     fn grab(&self, x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, ShotError> {
+        self.grab_drawable(self.root, x, y, width, height)
+    }
+
+    fn grab_drawable(
+        &self,
+        drawable: Window,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>, ShotError> {
         if width == 0 || height == 0 || width > 16384 || height > 16384 {
             return Err(ShotError {
                 code: "screenshot_failed",
@@ -134,7 +145,7 @@ impl X11 {
                 .conn
                 .get_image(
                     ImageFormat::Z_PIXMAP,
-                    self.root,
+                    drawable,
                     x as i16,
                     (y + row as i32) as i16,
                     width as u16,
@@ -296,6 +307,54 @@ pub fn capture_shot(scope: &str, display: Option<u32>, max_bytes: usize) -> Resu
             message,
         })?;
     Ok(CapturedShot { bytes, width, height })
+}
+
+pub fn capture_window_shot(window_id: i64, max_bytes: usize) -> Result<CapturedWindowShot, ShotError> {
+    if window_id <= 0 || window_id > u32::MAX as i64 {
+        return Err(ShotError {
+            code: "invalid_window",
+            message: "window_id 无效。请用 host_list_windows 返回的 window_id".into(),
+        });
+    }
+    let x11 = X11::connect()?;
+    let window = window_id as Window;
+    let hit = windows(&x11)
+        .into_iter()
+        .find(|w| w.window == window)
+        .ok_or_else(|| ShotError {
+            code: "window_not_found",
+            message: "找不到这个窗口。请先 host_list_windows，再用返回的 window_id。".into(),
+        })?;
+    let width = hit.w as u32;
+    let height = hit.h as u32;
+    if width < 2 || height < 2 || width > u16::MAX as u32 || height > u16::MAX as u32 {
+        return Err(ShotError {
+            code: "screenshot_failed",
+            message: "窗口尺寸无效".into(),
+        });
+    }
+    let rgb = x11.grab_drawable(window, 0, 0, width, height).or_else(|_| {
+        // Fallback: capture from the root at the window's screen position.
+        x11.grab(hit.x as i32, hit.y as i32, width, height)
+    })?;
+    let (bytes, out_w, out_h) = crate::host_raster::rgb_to_jpeg_budget(&rgb, width, height, max_bytes)
+        .map_err(|message| ShotError {
+            code: if message.contains("太大") {
+                "screenshot_too_large"
+            } else {
+                "screenshot_failed"
+            },
+            message,
+        })?;
+    Ok(CapturedWindowShot {
+        bytes,
+        width: out_w,
+        height: out_h,
+        origin_x: hit.x as f64,
+        origin_y: hit.y as f64,
+        width_pt: hit.w as f64,
+        height_pt: hit.h as f64,
+    })
 }
 
 fn coord(v: f64) -> Result<i16, Value> {

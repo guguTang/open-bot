@@ -48,18 +48,19 @@ description: Drive a connected desktop GUI (macOS, Windows, or Linux) with host_
 
 - `x`、`y` 是**这张图的像素**，左上角 `(0, 0)`，范围是 `width` × `height`（模型看见的 JPEG，不是屏幕点）。
 - 把同一个 `frame_id` 传给后续动作。**不要乘 `scale`，也不要加 `origin`。**
-- `scope=all` 的图 `actionable=false`，不能用来点击。先对单个显示器截（默认主屏，或 `display` 从 1 起）。
+- `scope=all` 的图 `actionable=false`，不能用来点击。先对单个显示器截（默认主屏，或 `display` 从 1 起），或传 `window_id` 截单个窗口。
+- `window_id`（来自 `host_list_windows`）优先于 `display` / `scope`；结果 `scope=window` 且可点击，原点是该窗口边界。
 - 画面过几分钟过期（`stale_frame` / `missing_frame`）。过期或对不上就重新截，再用新的 `frame_id`。不要拿旧坐标点新画面。
 
 ## 标准流程
 
 ### 1. 看屏幕
 
-`host_screenshot`（默认主屏幕）。图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
+`host_screenshot`（默认主屏幕；或先 `host_list_windows` 再 `host_screenshot(window_id=…)` 截单个窗口）。图像附在这次工具结果上，下一轮你能看见画面；同一张图也会自动出现在对话气泡里给用户看。根据画面回答，不要说自己看不到图。
 
 记下 `frame_id`。需要结构化目标时：
 
-- `host_list_windows`（可带这个 `frame_id`）：应用名、标题、`pid`、`window_id`，以及这张图上的矩形。标题为空通常是还没开屏幕录制。
+- `host_list_windows`（可带这个 `frame_id`）：应用名、标题、`pid`、`window_id`，以及这张图上的矩形。标题为空通常是还没开屏幕录制。再用同一个 `window_id` 调 `host_screenshot` 可只看该窗口。
 - `host_ax`：读辅助功能树，拿 `element_ref`。可指定 `app` / `pid` / `window_id`；省略则看前台。`max_depth` 默认 2（最大 3），`limit` 默认 60。也可以带 `frame_id` 和像素 `x,y` 做命中测试。
 
 菜单栏不在这棵树里。菜单用 `host_key` 快捷键。

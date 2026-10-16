@@ -1308,29 +1308,49 @@ async def openai_path(
                     path = _host_delete_paths(args)
                     dest = str(args.get("dest") or "")
                 elif name == "host_screenshot":
-                    scope = str(args.get("scope") or "main").strip().lower() or "main"
-                    if scope not in ("main", "all"):
-                        return json.dumps(
-                            {"ok": False, "error": "scope 只能是 main 或 all"},
-                            ensure_ascii=False,
-                        )
-                    path = scope
+                    path = "main"
                     dest = ""
-                    raw_display = args.get("display")
-                    if raw_display is not None and str(raw_display).strip() != "":
+                    cu_args = None
+                    raw_window = args.get("window_id")
+                    if raw_window is not None and str(raw_window).strip() != "":
                         try:
-                            display = int(raw_display)
+                            window_id = int(raw_window)
                         except (TypeError, ValueError):
                             return json.dumps(
-                                {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                {"ok": False, "error": "window_id 无效。请用 host_list_windows 返回的 window_id"},
                                 ensure_ascii=False,
                             )
-                        if display < 1 or display > 16:
+                        if window_id <= 0:
                             return json.dumps(
-                                {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                {"ok": False, "error": "window_id 无效。请用 host_list_windows 返回的 window_id"},
                                 ensure_ascii=False,
                             )
-                        dest = str(display)
+                        # window_id wins over display and scope=all.
+                        path = "window"
+                        cu_args = {"window_id": window_id}
+                    else:
+                        scope = str(args.get("scope") or "main").strip().lower() or "main"
+                        if scope not in ("main", "all"):
+                            return json.dumps(
+                                {"ok": False, "error": "scope 只能是 main 或 all；截窗口请传 window_id"},
+                                ensure_ascii=False,
+                            )
+                        path = scope
+                        raw_display = args.get("display")
+                        if raw_display is not None and str(raw_display).strip() != "":
+                            try:
+                                display = int(raw_display)
+                            except (TypeError, ValueError):
+                                return json.dumps(
+                                    {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                    ensure_ascii=False,
+                                )
+                            if display < 1 or display > 16:
+                                return json.dumps(
+                                    {"ok": False, "error": "display 需为 1 到 16 的整数"},
+                                    ensure_ascii=False,
+                                )
+                            dest = str(display)
                 elif name in ("host_open", "host_find_app"):
                     path = str(args.get("name") or args.get("path") or "").strip()
                     dest = ""

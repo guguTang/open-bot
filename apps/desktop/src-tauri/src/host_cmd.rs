@@ -466,8 +466,24 @@ fn screenshot_error(code: &str, error: &str) -> Value {
     json!({ "ok": false, "error": error, "code": code })
 }
 
-/// `screencapture` argv. `display` (1-based) wins over scope. Empty scope is main.
-fn screenshot_capture_args(scope: &str, display: Option<u32>, out_path: &str) -> Result<Vec<String>, String> {
+/// `screencapture` argv.
+/// `window_id` wins over `display` and scope. `display` (1-based) wins over scope. Empty scope is main.
+fn screenshot_capture_args(
+    scope: &str,
+    display: Option<u32>,
+    window_id: Option<u32>,
+    out_path: &str,
+) -> Result<Vec<String>, String> {
+    let mut args = vec!["-x".to_string(), "-t".to_string(), "jpg".to_string()];
+    if let Some(wid) = window_id {
+        if wid == 0 {
+            return Err("window_id 无效".into());
+        }
+        args.push("-l".to_string());
+        args.push(wid.to_string());
+        args.push(out_path.to_string());
+        return Ok(args);
+    }
     let scope = scope.trim().to_ascii_lowercase();
     if !scope.is_empty() && scope != "main" && scope != "all" {
         return Err("scope 只能是 main 或 all".into());
@@ -477,7 +493,6 @@ fn screenshot_capture_args(scope: &str, display: Option<u32>, out_path: &str) ->
             return Err("display 需为 1 到 16".into());
         }
     }
-    let mut args = vec!["-x".to_string(), "-t".to_string(), "jpg".to_string()];
     if let Some(d) = display {
         args.push("-D".to_string());
         args.push(d.to_string());
@@ -537,6 +552,16 @@ fn parse_display_index(display: Option<i64>) -> Result<Option<u32>, String> {
     };
     if !(1..=16).contains(&raw) {
         return Err("display 需为 1 到 16".into());
+    }
+    Ok(Some(raw as u32))
+}
+
+fn parse_window_id(window_id: Option<i64>) -> Result<Option<u32>, String> {
+    let Some(raw) = window_id else {
+        return Ok(None);
+    };
+    if raw <= 0 || raw > u32::MAX as i64 {
+        return Err("window_id 无效。请用 host_list_windows 返回的 window_id".into());
     }
     Ok(Some(raw as u32))
 }
@@ -653,7 +678,7 @@ fn jpeg_pixels(path: &Path) -> (Option<u32>, Option<u32>) {
 }
 
 #[cfg(target_os = "macos")]
-fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
+fn capture_screen(scope: &str, display: Option<u32>, window_id: Option<u32>) -> Result<Value, String> {
     let (allowed, did_request) = screen_access::ensure_screen_recording();
     if !allowed {
         let msg = if did_request {
@@ -665,6 +690,19 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
         };
         return Ok(screenshot_error("screen_recording_denied", &msg));
     }
+    let window_bounds = if let Some(wid) = window_id {
+        match crate::host_input::mac_window_bounds(wid as i64) {
+            Some(b) => Some(b),
+            None => {
+                return Ok(screenshot_error(
+                    "window_not_found",
+                    "找不到这个窗口。请先 host_list_windows，再用返回的 window_id。",
+                ));
+            }
+        }
+    } else {
+        None
+    };
     let file_name = format!(
         "open-bot-shot-{}-{}.jpg",
         std::process::id(),
@@ -682,7 +720,7 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
         }
     }
     let _cleanup = ShotFile(path.clone());
-    let args = screenshot_capture_args(scope, display, &path_str)?;
+    let args = screenshot_capture_args(scope, display, window_id, &path_str)?;
     let mut cmd = Command::new("screencapture");
     cmd.args(&args);
     let output = run_timed(&mut cmd, Duration::from_secs(SCREENSHOT_TIMEOUT_SECS))?;
@@ -703,10 +741,12 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
         } else {
             stderr
         };
-        return Ok(screenshot_error(
-            "screenshot_failed",
-            &format!("截屏失败。若系统设置里尚未允许 Open Bot 的屏幕录制，请先授权再试。{detail}"),
-        ));
+        let msg = if window_id.is_some() {
+            format!("截取窗口失败。窗口可能已关闭，或系统设置里尚未允许 Open Bot 的屏幕录制。{detail}")
+        } else {
+            format!("截屏失败。若系统设置里尚未允许 Open Bot 的屏幕录制，请先授权再试。{detail}")
+        };
+        return Ok(screenshot_error("screenshot_failed", &msg));
     }
     shrink_jpeg(&path)?;
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
@@ -718,16 +758,19 @@ fn capture_screen(scope: &str, display: Option<u32>) -> Result<Value, String> {
     }
     let (width, height) = jpeg_pixels(&path);
     Ok(screenshot_body(
-        screenshot_scope_out(scope, display),
+        screenshot_scope_out(scope, display, window_id),
         display,
         width,
         height,
         &bytes,
+        window_bounds,
     ))
 }
 
-fn screenshot_scope_out(scope: &str, display: Option<u32>) -> &'static str {
-    if display.is_some() {
+fn screenshot_scope_out(scope: &str, display: Option<u32>, window_id: Option<u32>) -> &'static str {
+    if window_id.is_some() {
+        "window"
+    } else if display.is_some() {
         "display"
     } else if scope.trim().eq_ignore_ascii_case("all") {
         "all"
@@ -736,8 +779,24 @@ fn screenshot_scope_out(scope: &str, display: Option<u32>) -> &'static str {
     }
 }
 
-fn screenshot_body(scope_out: &str, display: Option<u32>, width: Option<u32>, height: Option<u32>, bytes: &[u8]) -> Value {
-    let frame = crate::host_input::bind_screenshot_frame(scope_out, display, width, height);
+fn screenshot_body(
+    scope_out: &str,
+    display: Option<u32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    bytes: &[u8],
+    window_bounds: Option<(f64, f64, f64, f64)>,
+) -> Value {
+    let frame = match window_bounds {
+        Some(bounds) => crate::host_input::bind_screenshot_frame_at(
+            scope_out,
+            display,
+            width,
+            height,
+            Some(bounds),
+        ),
+        None => crate::host_input::bind_screenshot_frame(scope_out, display, width, height),
+    };
     json!({
         "ok": true,
         "mime": "image/jpeg",
@@ -760,45 +819,74 @@ fn screenshot_body(scope_out: &str, display: Option<u32>, width: Option<u32>, he
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-fn capture_screen_cross(scope: &str, display: Option<u32>) -> Result<Value, String> {
+fn capture_screen_cross(scope: &str, display: Option<u32>, window_id: Option<u32>) -> Result<Value, String> {
+    if let Some(wid) = window_id {
+        return match crate::host_input::capture_window_shot(wid as i64, SCREENSHOT_MAX_BYTES) {
+            Ok(shot) => Ok(screenshot_body(
+                "window",
+                None,
+                Some(shot.width),
+                Some(shot.height),
+                &shot.bytes,
+                Some((shot.origin_x, shot.origin_y, shot.width_pt, shot.height_pt)),
+            )),
+            Err(err) => Ok(screenshot_error(err.code, &err.message)),
+        };
+    }
     match crate::host_input::capture_shot(scope, display, SCREENSHOT_MAX_BYTES) {
         Ok(shot) => Ok(screenshot_body(
-            screenshot_scope_out(scope, display),
+            screenshot_scope_out(scope, display, None),
             display,
             Some(shot.width),
             Some(shot.height),
             &shot.bytes,
+            None,
         )),
         Err(err) => Ok(screenshot_error(err.code, &err.message)),
     }
 }
 
-/// Capture the desktop and return JPEG bytes the agent runtime attaches as vision.
-/// macOS uses `screencapture`. Windows uses GDI. Linux uses X11 `GetImage`.
+/// Capture the desktop (or one window) and return JPEG bytes the agent runtime attaches as vision.
+/// macOS uses `screencapture` (`-l` for a CGWindowID). Windows uses GDI / window DC.
+/// Linux uses X11 `GetImage` on the root or the window drawable.
 #[tauri::command]
-pub fn host_screenshot(scope: Option<String>, display: Option<i64>) -> Result<Value, String> {
-    let scope = scope.unwrap_or_else(|| "main".to_string());
-    let display = match parse_display_index(display) {
+pub fn host_screenshot(
+    scope: Option<String>,
+    display: Option<i64>,
+    window_id: Option<i64>,
+) -> Result<Value, String> {
+    let window_id = match parse_window_id(window_id) {
         Ok(v) => v,
-        Err(e) => return Ok(screenshot_error("invalid_display", &e)),
+        Err(e) => return Ok(screenshot_error("invalid_window", &e)),
     };
-    if screenshot_capture_args(&scope, display, "/tmp/open-bot-shot.jpg").is_err() {
+    // window_id wins over display and scope=all.
+    let (scope, display) = if window_id.is_some() {
+        ("main".to_string(), None)
+    } else {
+        let scope = scope.unwrap_or_else(|| "main".to_string());
+        let display = match parse_display_index(display) {
+            Ok(v) => v,
+            Err(e) => return Ok(screenshot_error("invalid_display", &e)),
+        };
+        (scope, display)
+    };
+    if screenshot_capture_args(&scope, display, window_id, "/tmp/open-bot-shot.jpg").is_err() {
         return Ok(screenshot_error(
             "invalid_scope",
-            "scope 只能是 main 或 all",
+            "scope 只能是 main 或 all；截窗口请传 window_id",
         ));
     }
     #[cfg(target_os = "macos")]
     {
-        return capture_screen(&scope, display);
+        return capture_screen(&scope, display, window_id);
     }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
-        return capture_screen_cross(&scope, display);
+        return capture_screen_cross(&scope, display, window_id);
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
-        let _ = (scope, display);
+        let _ = (scope, display, window_id);
         Ok(screenshot_error(
             "unsupported_platform",
             "当前系统暂不支持截屏（需要 macOS、Windows 或 Linux 桌面端）",
@@ -867,17 +955,21 @@ mod tests {
 
     #[test]
     fn screenshot_args_main_display_and_all() {
-        let main = screenshot_capture_args("main", None, "/tmp/a.jpg").unwrap();
+        let main = screenshot_capture_args("main", None, None, "/tmp/a.jpg").unwrap();
         assert!(main.contains(&"-m".to_string()));
-        assert!(!main.iter().any(|a| a == "-D"));
+        assert!(!main.iter().any(|a| a == "-D" || a == "-l"));
         assert_eq!(main.last().map(String::as_str), Some("/tmp/a.jpg"));
-        let all = screenshot_capture_args("all", None, "/tmp/a.jpg").unwrap();
-        assert!(!all.iter().any(|a| a == "-m" || a == "-D"));
-        let display = screenshot_capture_args("main", Some(2), "/tmp/a.jpg").unwrap();
-        assert!(!display.iter().any(|a| a == "-m"));
+        let all = screenshot_capture_args("all", None, None, "/tmp/a.jpg").unwrap();
+        assert!(!all.iter().any(|a| a == "-m" || a == "-D" || a == "-l"));
+        let display = screenshot_capture_args("main", Some(2), None, "/tmp/a.jpg").unwrap();
+        assert!(!display.iter().any(|a| a == "-m" || a == "-l"));
         assert!(display.windows(2).any(|w| w[0] == "-D" && w[1] == "2"));
-        assert!(screenshot_capture_args("window", None, "/tmp/a.jpg").is_err());
-        assert!(screenshot_capture_args("main", Some(0), "/tmp/a.jpg").is_err());
+        let window = screenshot_capture_args("all", Some(2), Some(42), "/tmp/a.jpg").unwrap();
+        assert!(window.windows(2).any(|w| w[0] == "-l" && w[1] == "42"));
+        assert!(!window.iter().any(|a| a == "-m" || a == "-D"));
+        assert!(screenshot_capture_args("window", None, None, "/tmp/a.jpg").is_err());
+        assert!(screenshot_capture_args("main", Some(0), None, "/tmp/a.jpg").is_err());
+        assert!(screenshot_capture_args("main", None, Some(0), "/tmp/a.jpg").is_err());
     }
 
     #[test]

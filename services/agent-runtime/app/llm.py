@@ -1152,17 +1152,19 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "host_screenshot",
             "description": (
-                "Capture the screen of a connected desktop (macOS, Windows, or Linux) and attach the image "
-                "to this tool result so you can see it; the same image is also shown to the user in chat. "
+                "Capture the screen or one window of a connected desktop (macOS, Windows, or Linux) and attach "
+                "the image to this tool result so you can see it; the same image is also shown to the user in chat. "
                 "Prefer this over host_shell screencapture, grim, or xdotool. "
-                "macOS uses screencapture; Windows uses GDI on the interactive desktop; Linux uses X11 GetImage "
+                "macOS uses screencapture (-l for a window); Windows uses GDI / window DC; Linux uses X11 GetImage "
                 "(XWayland counts). Wayland without XWayland cannot capture. "
                 "scope main (default) is the main display; all captures every display; "
-                "display is a 1-based index and overrides scope. "
-                "The result includes frame_id, width, height, and scale. "
+                "display is a 1-based index and overrides scope; "
+                "window_id from host_list_windows captures that window and wins over display/scope. "
+                "The result includes frame_id, width, height, scale, and actionable. "
+                "Window shots have scope=window and are clickable (origin is the window bounds). "
                 "Later clicks, scrolls, and mouse moves use image pixels in that width×height "
                 "(top-left is 0,0) plus the same frame_id. Do not multiply by scale and do not add origin. "
-                "scope=all is not clickable; screenshot one display first. Frames expire after a few minutes. "
+                "scope=all is not clickable; screenshot one display or one window first. Frames expire after a few minutes. "
                 "Describe what is on screen from the attached image. "
                 "If screen recording was denied: macOS 系统设置 → 隐私与安全性 → 屏幕录制; "
                 "Windows has no separate toggle (Open Bot must be on the unlocked interactive desktop); "
@@ -1176,11 +1178,18 @@ TOOL_DEFS: list[dict[str, Any]] = [
                     "scope": {
                         "type": "string",
                         "enum": ["main", "all"],
-                        "description": "main (default) or all displays",
+                        "description": "main (default) or all displays. Ignored when window_id is set.",
                     },
                     "display": {
                         "type": "integer",
-                        "description": "1-based display index. Overrides scope.",
+                        "description": "1-based display index. Overrides scope. Ignored when window_id is set.",
+                    },
+                    "window_id": {
+                        "type": "integer",
+                        "description": (
+                            "Window id from host_list_windows. Captures that window only; "
+                            "wins over display and scope."
+                        ),
                     },
                 },
                 "required": [],

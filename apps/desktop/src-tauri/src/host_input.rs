@@ -288,18 +288,49 @@ fn finite(n: f64, fallback: f64) -> f64 {
     if n.is_finite() { n } else { fallback }
 }
 
-/// Record the screenshot the model is about to see. `scope` is `main`, `display`, or `all`.
+/// Record the screenshot the model is about to see. `scope` is `main`, `display`, `all`, or `window`.
+/// Pass `window_bounds` as (origin_x, origin_y, width_pt, height_pt) for `scope=window`.
 pub fn bind_screenshot_frame(
     scope: &str,
     display: Option<u32>,
     image_w: Option<u32>,
     image_h: Option<u32>,
 ) -> FrameMeta {
+    bind_screenshot_frame_at(scope, display, image_w, image_h, None)
+}
+
+/// Like [`bind_screenshot_frame`], but binds a window origin when `window_bounds` is set.
+pub fn bind_screenshot_frame_at(
+    scope: &str,
+    display: Option<u32>,
+    image_w: Option<u32>,
+    image_h: Option<u32>,
+    window_bounds: Option<(f64, f64, f64, f64)>,
+) -> FrameMeta {
     let (iw, ih) = match (image_w, image_h) {
         (Some(w), Some(h)) if w > 0 && h > 0 => (w, h),
         _ => (0, 0),
     };
-    let geom = capture_geom(scope, display, iw, ih);
+    let geom = if let Some((ox, oy, wp, hp)) = window_bounds {
+        let actionable = iw > 0 && ih > 0 && wp > 1.0 && hp > 1.0;
+        let scale = if actionable && wp > 1.0 {
+            iw as f64 / wp
+        } else {
+            1.0
+        };
+        DisplayGeom {
+            image_width: iw,
+            image_height: ih,
+            origin_x: ox,
+            origin_y: oy,
+            width_pt: wp,
+            height_pt: hp,
+            scale: if scale.is_finite() && scale > 0.0 { scale } else { 1.0 },
+            actionable,
+        }
+    } else {
+        capture_geom(scope, display, iw, ih)
+    };
     let scale = finite(geom.scale, 1.0);
     let (frame_id, _) = remember_frame(geom.clone());
     FrameMeta {
@@ -361,6 +392,18 @@ pub struct CapturedShot {
     pub height: u32,
 }
 
+/// Window capture: JPEG pixels plus screen-point bounds for [`bind_screenshot_frame_at`].
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub struct CapturedWindowShot {
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub origin_x: f64,
+    pub origin_y: f64,
+    pub width_pt: f64,
+    pub height_pt: f64,
+}
+
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub struct ShotError {
     pub code: &'static str,
@@ -377,6 +420,25 @@ pub fn capture_shot(scope: &str, display: Option<u32>, max_bytes: usize) -> Resu
     {
         win::capture_shot(scope, display, max_bytes)
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub fn capture_window_shot(window_id: i64, max_bytes: usize) -> Result<CapturedWindowShot, ShotError> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::capture_window_shot(window_id, max_bytes)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        win::capture_window_shot(window_id, max_bytes)
+    }
+}
+
+
+/// Look up on-screen window bounds (points) by `host_list_windows` window_id.
+#[cfg(target_os = "macos")]
+pub fn mac_window_bounds(window_id: i64) -> Option<(f64, f64, f64, f64)> {
+    mac::window_bounds(window_id)
 }
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -2220,6 +2282,18 @@ mod mac {
             }
         }
         out
+    }
+
+
+    /// Screen-point bounds for a CGWindowID from `host_list_windows`.
+    pub fn window_bounds(window_id: i64) -> Option<(f64, f64, f64, f64)> {
+        if window_id <= 0 {
+            return None;
+        }
+        copy_windows()
+            .into_iter()
+            .find(|w| w.window_id == window_id)
+            .map(|w| (w.x, w.y, w.w, w.h))
     }
 
     pub fn list_windows(frame_id: String) -> Value {

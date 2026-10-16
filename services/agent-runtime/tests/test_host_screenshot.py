@@ -40,6 +40,8 @@ def test_tool_def_and_label() -> None:
     _ok("shown to the user" in desc or "user in chat" in desc, "description says image is shown in chat")
     _ok("screencapture" in desc, "description tells the model not to use blind screencapture")
     _ok("scope" in props and "display" in props, "optional scope and display")
+    _ok("window_id" in props, "optional window_id")
+    _ok("window_id" in desc, "description mentions window_id")
     _ok(tool_display_label("host_screenshot") == "截取屏幕", "status label")
 
 
