@@ -1,7 +1,7 @@
 # open-bot 微应用（Micro App）技术架构与能力实现路径
 
-> 状态：**Phase 0–4 已按本文在 `develop` 落地**（本地 commit，默认不推）；系统级 Widget / 团队模板分发为**延期项**（§10.5）  
-> 日期：2026-10-19（Asia/Shanghai）  
+> 状态：**Phase 0–5 已按本文在 `develop` 落地**（本地 commit，默认不推）；系统级 Widget / 团队模板分发为**延期项**（§10.5）；完整模型侧双闸门见 Phase 6  
+> 日期：2026-10-20（Asia/Shanghai）  
 > 校对原则：以仓内现实现为准；改 API/表/能力时同步改本文。
 
 ---
@@ -133,7 +133,7 @@ Placement 只指向 MicroApp.id
 ### 3.3 `micro_app_grants`
 
 `user_id`, `micro_app_id`, `capability`, `machine_id`, `decision`（`allow_once` / `always_allow` / `deny`；API 也接受别名 `allow_always`）, `expires_at`, `command_allowlist_json`（**Phase 3**，仅 `host.shell.run`）  
-高敏默认建议 `allow_once`：`host.shell.run`、`host.clipboard.read`、`device.mic` 等（见 `DefaultGrantDecisionForCapability`）。无记录 = 每次弹窗（默认「仅一次」）。
+高敏默认建议 `allow_once`：`host.shell.run`、`host.clipboard.read`/`write`、`device.mic`、`device.geo` 等（见 `DefaultGrantDecisionForCapability`）。无记录 = 每次弹窗（默认「仅一次」）。
 
 ### 3.3.1 迁移（Phase 3）
 
@@ -208,11 +208,14 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 | `routine.manage` | 全端（需已 pin 的 kind=routine） | **Phase 4**：enable/disable/update/run_now + Grant |
 | `host.app.find` / `open` | desktop | **Phase 4（可选）**：`runLocalHostOp(find_app|open)` |
 | `account.profile` | 全端 | **Phase 4（可选）**：只读 `GET /v1/me` |
+| `agent.invoke` | 全端（需绑定 `agent_id`） | **Phase 5**：仅本微应用 `agent_id`；Grant + **每次运行前**用户确认弹窗；`openPrimaryConversation` + `sendMessageStream` |
+| `skill.toggle` | 全端 | **Phase 5**：`setSkillEnabled` / `setAgentSkill`；**禁止**关闭 `always_on`（含 find-skills；客户端拦截 + 服务端 `skill_disable_blocked`） |
+| `host.fs.workspace` | 全端 | **Phase 5**：经沙箱 API 读写，路径必须落在 `/workspace`（`resolveBotWorkspacePath`）；Grant 三态 |
 
 ### 5.2 灰显规则（`lib/microApp/capabilities.ts` + `MicroAppCapabilityMatrix`）
 
-- Capacitor / 纯浏览器：`host.*`（除文件选择器）→ 灰显「需要已连接的电脑；手机登录 ≠ host」。
-- `device.camera` / `device.notify` / `device.share`：非原生壳或 `Capacitor.Plugins` 未注册 → 灰显。
+- Capacitor / 纯浏览器：`host.*`（除文件选择器与 `host.fs.workspace`）→ 灰显「需要已连接的电脑；手机登录 ≠ host」。
+- `device.camera` / `device.notify` / `device.share` / `device.mic` / `device.geo`：非原生壳或 `Capacitor.Plugins` 未注册 → 灰显。
 - 未声明 → 矩阵标不可用；RPC 拒绝。
 
 ### 5.3 Device P1（Android / iOS）
@@ -222,8 +225,10 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 | `device.camera` | `Capacitor.Plugins.Camera` | 有则 `getPhoto`；无则灰显 |
 | `device.notify` | `LocalNotifications` | `schedule` |
 | `device.share` | `Share` | 系统分享 |
+| `device.mic` | `Microphone` / `VoiceRecorder` / `SpeechRecognition` | **Phase 5**：运行时探测；Grant（高敏默认 allow_once）+ OS 权限；无插件灰显 |
+| `device.geo` | `Geolocation` | **Phase 5**：`getCurrentPosition`；Grant（高敏）+ OS 权限；无插件灰显 |
 
-实现：`apps/web/src/lib/microApp/deviceBridge.ts`（运行时探测，不强制 npm 插件进 web 包）。
+实现：`apps/web/src/lib/microApp/deviceBridge.ts`（运行时探测，不强制 npm 插件进 web 包）。**缺口**：`apps/mobile/package.json` 尚未声明 `@capacitor/geolocation` / 录音类插件；与 Phase 2 相机相同——壳接入插件并 `cap sync` 后自动亮起，否则矩阵灰显。
 
 ### 5.4 kind=skill
 
@@ -247,7 +252,7 @@ Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `a
 **仍占位/未做**：
 
 - 事件型触发依赖用户先在「设置 → 例行任务」配好入站 Hook；微应用不代建 Hook。
-- OS Widget、团队模板、`host.fs.workspace`、`agent.invoke` / `skill.toggle`、mic/geo、入站 Hook 代建（见 §10 / 跳过清单）。
+- OS Widget、团队模板、入站 Hook 代建、完整模型侧双闸门（见 §10.5 / Phase 6）。
 
 ### 5.6 后续
 
@@ -393,7 +398,26 @@ bundle.zip
 | Host Bridge `routine.manage` | ✅ | enable/disable/update/run_now + Grant |
 | Host Bridge `host.clipboard.read` / `write` | ✅ | Grant 默认 `allow_once`（高敏目录） |
 | `host.app.find` / `open`、`account.profile` | ✅（可选） | Tauri find/open；profile 只读 |
-| 跳过 | — | OS Widget、模板、inbound hooks、dual-gate、mic/geo、agent.invoke、skill.toggle、fs.workspace |
+| 跳过 | — | OS Widget、模板、inbound hooks、dual-gate、mic/geo、agent.invoke、skill.toggle、fs.workspace（由 Phase 5 承接） |
+
+### Phase 5 — agent / skill / workspace / mic·geo ✅（本迭代）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| `agent.invoke` | ✅ | 仅 `micro_apps.agent_id`；Grant + 每次运行前 ConfirmProvider 确认；打开主会话并 `sendMessageStream` |
+| `skill.toggle` | ✅ | 现有 `PUT /v1/skills/{name}` / `PUT /v1/agents/{id}/skills/{name}`；禁用 always_on（find-skills）客户端+服务端双拦 |
+| `host.fs.workspace` | ✅ | 沙箱 `listSandbox` / `readSandboxFile` / `writeSandboxFile`；路径闸门 `/workspace`；Grant 三态 |
+| `device.mic` / `device.geo` | ✅ | deviceBridge 运行时探测 + Grant + OS `requestPermissions`；无插件/非原生壳灰显（同 camera） |
+| 跳过 / 延期 | — | OS Widget、团队模板、入站 Hook 代建、**完整模型侧双闸门**（Phase 6） |
+
+### Phase 6 — 模型侧双闸门（延期，仅文档）
+
+**目标**：Bot 工具策略（模型/runtime 声明哪些工具可被微应用触发）∩ MicroApp Grant（入口×设备）双闸门，避免「仅 Grant 通过即可代用户调高敏工具」。
+
+**缺口（当前栈）**：
+
+- Runtime `TOOL_DEFS` / tool policy 尚未按 `micro_app_id` 做第二道允许列表；Phase 5 的 `agent.invoke` 走正常会话工具环，**不**额外限制模型工具集。
+- 需：会话/微应用上下文注入、工具白名单与 Grant 能力映射、审计日志。立项前置：tool policy schema + runtime 注入点。
 
 ### 10.5 延期项（仅文档，不实现）
 
@@ -427,6 +451,10 @@ bundle.zip
 12. （Phase 4）无 `user_intent` 调 draft/pin 工具或 API → 拒绝；模型不能静默建库。
 13. （Phase 4）pinned routine：PATCH `routine_config.prompt` 后对应 `/v1/routines` 行 prompt 一致；UpdateRoutine 失败时 PATCH 返回错误。
 14. （Phase 4）iframe `routine.manage` run_now / enable 经 Grant；`host.clipboard.read` 无授权时弹窗默认「仅一次」。
+15. （Phase 5）`agent.invoke`：无 `agent_id` 或 params 指向其他 Bot → 拒绝；有授权仍弹出「开始运行」确认，取消则不发消息。
+16. （Phase 5）`skill.toggle` 关闭 `find-skills`（或其它 always_on）→ 拒绝（客户端文案 + API `skill_disable_blocked`）。
+17. （Phase 5）`host.fs.workspace`：`../etc/passwd` 或非 `/workspace` 前缀 → 拒绝；`read`/`write`/`ls` 经 Grant。
+18. （Phase 5）非 Capacitor 或未注册 Mic/Geo 插件 → 矩阵灰显；原生壳接入插件后 RPC 可走 Grant + 系统权限框。
 
 ---
 
@@ -436,7 +464,8 @@ bundle.zip
 2. **`host.shell.run` 不默认关**：可声明；闸门 = 声明 ∩ 端能力 ∩ Grant 三态；高敏默认倾向 `allow_once`，不做「永远默认关 / 仅管理端白名单」。Phase 3：白名单是**用户在每个应用 Grant 上自配**的，不是管理端白名单。
 4. **Phase 3 范围**（PM 拍板）：应用内快捷区（非 OS Widget）；shell 三态打磨 + 每应用白名单；kind=routine（复用现有 routines，缺口标占位）；OS Widget 与团队模板分发仅文档延期。
 5. **Phase 4 范围**：Runtime draft/pin 工具；PATCH routine_config 同步 UpdateRoutine；Host Bridge routine.manage + clipboard；可选 app.find/open、account.profile。跳过 OS Widget / 模板 / hooks / dual-gate / mic·geo / agent.invoke / skill.toggle / fs.workspace。
-3. **draft 时机**：不在「实现完」时静默建库。仅当用户保存/固定意图，或 bot 询问且用户同意后，才 `user_intent` 建 draft 并进入 pin。
+6. **Phase 5 范围（产品确认）**：`agent.invoke`（仅绑定 agent_id + 运行前确认）、`skill.toggle`（禁 always_on）、`host.fs.workspace`（/workspace + Grant）、`device.mic`/`device.geo`（Capacitor + Grant + OS 权限，无能力灰显）。不做 OS Widget / 团队模板 / store / 入站 Hook 代建 / 完整模型侧双闸门（Phase 6）。
+3. **draft 时机**：不在「实现完」时静默建库。仅当用户保存/固定意图，或 bot 询问且用户同意后，才 `user_intent` 建 draft 并进入 pin。draft/pin 的 `user_intent` 门在 Phase 5 保持不变。
 
 ---
 

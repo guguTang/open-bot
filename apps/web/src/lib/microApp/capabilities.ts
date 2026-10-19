@@ -14,19 +14,35 @@ const HOST_CAPS = new Set([
   "host.screenshot",
   "host.clipboard.read",
   "host.clipboard.write",
-  "host.fs.workspace",
   "host.app.find",
   "host.app.open",
   "host.shell.run",
 ]);
 
+/** Bot workspace (/workspace) via sandbox APIs — all clients; path must stay under root. */
+const WORKSPACE_CAPS = new Set(["host.fs.workspace"]);
+
 /** File picker based — works on web without Tauri. */
 const FILE_PICKER_CAPS = new Set(["host.fs.read", "host.fs.write"]);
 
-const ALWAYS_OK = new Set(["ui.notify", "chat.attach", "cloud.http", "account.profile"]);
+const ALWAYS_OK = new Set([
+  "ui.notify",
+  "chat.attach",
+  "cloud.http",
+  "account.profile",
+  "agent.invoke",
+  "skill.toggle",
+  "routine.manage",
+]);
 
 /** Android / iOS P1 device caps — wired when Capacitor plugin bridge exists. */
-export const DEVICE_CAPS = new Set(["device.camera", "device.notify", "device.share"]);
+export const DEVICE_CAPS = new Set([
+  "device.camera",
+  "device.notify",
+  "device.share",
+  "device.mic",
+  "device.geo",
+]);
 
 export function isHostEnvironment(client?: ClientContext | null): boolean {
   if (client?.capabilities?.host_tools) return true;
@@ -58,6 +74,15 @@ export function devicePluginAvailable(capability: string): boolean {
       );
     case "device.share":
       return typeof plugins.Share?.share === "function";
+    case "device.mic":
+      return (
+        typeof plugins.Microphone?.requestPermissions === "function" ||
+        typeof plugins.Microphone?.startRecording === "function" ||
+        typeof plugins.VoiceRecorder?.startRecording === "function" ||
+        typeof plugins.SpeechRecognition?.start === "function"
+      );
+    case "device.geo":
+      return typeof plugins.Geolocation?.getCurrentPosition === "function";
     default:
       return false;
   }
@@ -77,7 +102,7 @@ export function capabilityAvailability(
       device_required: DEVICE_CAPS.has(cap),
     };
   }
-  if (ALWAYS_OK.has(cap) || FILE_PICKER_CAPS.has(cap)) {
+  if (ALWAYS_OK.has(cap) || FILE_PICKER_CAPS.has(cap) || WORKSPACE_CAPS.has(cap)) {
     return { capability: cap, available: true, host_required: false };
   }
   if (HOST_CAPS.has(cap)) {
@@ -107,7 +132,7 @@ export function capabilityAvailability(
       return {
         capability: cap,
         available: false,
-        reason: "原生插件未接入（Camera / LocalNotifications / Share）；接入后自动可用",
+        reason: "原生插件未接入（Camera / LocalNotifications / Share / Mic / Geo）；接入后自动可用",
         host_required: false,
         device_required: true,
       };
@@ -149,6 +174,7 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   "host.clipboard.write": "写入剪贴板",
   "host.fs.read": "读取所选文件",
   "host.fs.write": "保存到所选位置",
+  "host.fs.workspace": "读写 Bot 工作区",
   "host.app.find": "查找本机应用",
   "host.app.open": "打开本机应用",
   "host.shell.run": "本机命令",
@@ -157,7 +183,11 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   "chat.attach": "发到会话",
   "account.profile": "账号资料（只读）",
   "routine.manage": "管理例行任务",
+  "agent.invoke": "唤起绑定 Bot 一轮对话",
+  "skill.toggle": "开关技能",
   "device.camera": "相机",
   "device.notify": "系统通知",
   "device.share": "系统分享",
+  "device.mic": "麦克风",
+  "device.geo": "定位",
 };

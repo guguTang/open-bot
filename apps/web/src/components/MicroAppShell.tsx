@@ -14,12 +14,14 @@ import {
   createMicroAppMessageHandler,
   type GrantPromptOptions,
   type GrantPromptResult,
+  type ActionConfirmOptions,
 } from "../lib/microApp/hostBridge";
 import { useWorkspaceStore } from "../stores/workspace";
 import { Button } from "@/components/ui/button";
 import { MicroAppGrantDialog } from "./MicroAppGrantDialog";
 import { MicroAppShellGrantPanel } from "./MicroAppShellGrantPanel";
 import { MicroAppRoutinePanel } from "./MicroAppRoutinePanel";
+import { useConfirm } from "./ConfirmProvider";
 
 type Props = {
   app: MicroApp;
@@ -33,6 +35,7 @@ type GrantPromptState = GrantPromptOptions & {
 
 export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
   const conversation = useWorkspaceStore((s) => s.conversation);
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [srcdoc, setSrcdoc] = useState<string | null>(null);
@@ -95,16 +98,26 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
   }, [app.id, app.bundle_hash, app.updated_at]);
 
   useEffect(() => {
+    const promptActionConfirm = (opts: ActionConfirmOptions) =>
+      confirm({
+        title: opts.title,
+        description: opts.description,
+        confirmLabel: opts.confirmLabel || "确认",
+        cancelLabel: opts.cancelLabel || "取消",
+      });
+
     const handler = createMicroAppMessageHandler({
       microAppId: app.id,
       declared: app.capabilities || [],
+      agentId: app.agent_id || null,
       conversationId: conversation?.id,
       client,
       promptGrant,
+      promptActionConfirm,
     });
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [app.id, app.capabilities, conversation?.id, client]);
+  }, [app.id, app.agent_id, app.capabilities, conversation?.id, client, confirm]);
 
   async function onUpload(file: File) {
     setUploading(true);

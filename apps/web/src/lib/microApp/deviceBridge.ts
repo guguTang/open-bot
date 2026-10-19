@@ -1,7 +1,8 @@
 /**
  * Capacitor device bridges for micro-app RPCs.
  * Uses runtime Plugins registry — works when native shell registers
- * Camera / LocalNotifications / Share; otherwise callers grey out via capabilities.ts.
+ * Camera / LocalNotifications / Share / Microphone|VoiceRecorder|SpeechRecognition / Geolocation;
+ * otherwise callers grey out via capabilities.ts.
  */
 
 type CapPlugins = Record<string, Record<string, (...args: unknown[]) => Promise<unknown>>>;
@@ -56,5 +57,67 @@ export async function deviceShare(params: Record<string, unknown> = {}): Promise
     text: params.text != null ? String(params.text) : params.message != null ? String(params.message) : undefined,
     url: params.url != null ? String(params.url) : undefined,
     dialogTitle: params.dialogTitle != null ? String(params.dialogTitle) : undefined,
+  });
+}
+
+export async function deviceMicCapture(params: Record<string, unknown> = {}): Promise<unknown> {
+  const p = plugins();
+  if (!p) throw new Error("麦克风插件未接入");
+
+  // Prefer dedicated Microphone / VoiceRecorder; fall back to SpeechRecognition start/stop.
+  const Microphone = p.Microphone || p.VoiceRecorder;
+  if (Microphone) {
+    if (typeof Microphone.requestPermissions === "function") {
+      await Microphone.requestPermissions();
+    }
+    if (typeof Microphone.startRecording === "function") {
+      await Microphone.startRecording(params);
+      const stop =
+        typeof Microphone.stopRecording === "function"
+          ? Microphone.stopRecording
+          : typeof Microphone.stop === "function"
+            ? Microphone.stop
+            : null;
+      if (!stop) throw new Error("Microphone.stopRecording 不可用");
+      // Caller may pass duration_ms; otherwise stop immediately after start (plugin-dependent).
+      const waitMs = Number(params.duration_ms ?? params.durationMs ?? 0);
+      if (waitMs > 0) {
+        await new Promise((r) => setTimeout(r, Math.min(waitMs, 60_000)));
+      }
+      return stop.call(Microphone);
+    }
+  }
+
+  const Speech = p.SpeechRecognition;
+  if (Speech && typeof Speech.start === "function") {
+    if (typeof Speech.requestPermissions === "function") {
+      await Speech.requestPermissions();
+    }
+    return Speech.start({
+      language: String(params.language || "zh-CN"),
+      maxResults: Number(params.maxResults ?? 1),
+      prompt: params.prompt != null ? String(params.prompt) : undefined,
+      partialResults: Boolean(params.partialResults ?? false),
+      popup: Boolean(params.popup ?? true),
+    });
+  }
+
+  throw new Error("Microphone / VoiceRecorder / SpeechRecognition 插件未接入");
+}
+
+export async function deviceGeoGetCurrentPosition(
+  params: Record<string, unknown> = {},
+): Promise<unknown> {
+  const Geolocation = plugins()?.Geolocation;
+  if (!Geolocation || typeof Geolocation.getCurrentPosition !== "function") {
+    throw new Error("Geolocation 插件未接入");
+  }
+  if (typeof Geolocation.requestPermissions === "function") {
+    await Geolocation.requestPermissions();
+  }
+  return Geolocation.getCurrentPosition({
+    enableHighAccuracy: Boolean(params.enableHighAccuracy ?? true),
+    timeout: Number(params.timeout ?? 15_000),
+    maximumAge: Number(params.maximumAge ?? 0),
   });
 }

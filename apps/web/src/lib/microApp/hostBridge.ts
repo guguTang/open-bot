@@ -10,11 +10,26 @@ import {
   updateRoutine,
   runRoutine,
   fetchMe,
+  openPrimaryConversation,
+  sendMessageStream,
+  setSkillEnabled,
+  setAgentSkill,
+  listAgentSkills,
+  listSkills,
+  listSandbox,
+  readSandboxFile,
+  writeSandboxFile,
   type MicroAppGrantDecision,
 } from "../../api";
 import { reviewLocalHostOp, runLocalHostOp } from "../hostExecSession";
 import { capabilityAvailability } from "./capabilities";
-import { deviceCameraGetPhoto, deviceNotify, deviceShare } from "./deviceBridge";
+import {
+  deviceCameraGetPhoto,
+  deviceNotify,
+  deviceShare,
+  deviceMicCapture,
+  deviceGeoGetCurrentPosition,
+} from "./deviceBridge";
 import type { ClientContext } from "../clientEnv";
 
 export type GrantPromptOptions = {
@@ -39,13 +54,27 @@ export type GrantPromptResult = {
 
 export type GrantPromptFn = (opts: GrantPromptOptions) => Promise<GrantPromptResult | null>;
 
+/** User-visible confirm before starting an agent run (agent.invoke). */
+export type ActionConfirmOptions = {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+};
+
+export type ActionConfirmFn = (opts: ActionConfirmOptions) => Promise<boolean>;
+
 export type HostBridgeContext = {
   microAppId: string;
   declared: string[];
+  /** Bound Bot id (micro_apps.agent_id); required for agent.invoke. */
+  agentId?: string | null;
   machineId?: string;
   conversationId?: string | null;
   client?: ClientContext | null;
   promptGrant: GrantPromptFn;
+  /** Extra confirm for agent.invoke (always shown before starting a run). */
+  promptActionConfirm?: ActionConfirmFn;
 };
 
 type RpcMessage = {
@@ -182,6 +211,42 @@ async function ensureGrant(
     return { ok: false, error: "用户拒绝了该能力" };
   }
   return { ok: true, grantId: g.id };
+}
+
+
+/** Always-on discovery skills (find-skills) must never be disabled via skill.toggle. */
+const ALWAYS_ON_SKILL_SLUGS = new Set(["find-skills"]);
+
+function isAlwaysOnSkillName(
+  name: string,
+  meta?: { always_on?: boolean; disable_blocked?: boolean } | null,
+): boolean {
+  if (meta?.always_on || meta?.disable_blocked) return true;
+  return ALWAYS_ON_SKILL_SLUGS.has(name.trim());
+}
+
+/**
+ * Resolve a Bot-workspace path. Only paths under /workspace are allowed
+ * (no .., no absolute escape). Relative paths are joined under /workspace.
+ */
+export function resolveBotWorkspacePath(raw: string): string {
+  let p = String(raw || "").trim() || "/workspace";
+  if (p.includes("\0")) throw new Error("路径无效");
+  p = p.replace(/\\/g, "/");
+  if (!p.startsWith("/")) p = `/workspace/${p}`;
+  if (p !== "/workspace" && !p.startsWith("/workspace/")) {
+    throw new Error("host.fs.workspace 仅允许 /workspace 下路径");
+  }
+  const parts: string[] = [];
+  for (const seg of p.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") throw new Error("路径不得包含 ..");
+    parts.push(seg);
+  }
+  if (!parts.length || parts[0] !== "workspace") {
+    throw new Error("host.fs.workspace 仅允许 /workspace 下路径");
+  }
+  return "/" + parts.join("/");
 }
 
 async function executeCapability(
@@ -372,6 +437,152 @@ async function executeCapability(
         return { ok: true, action: "run_now", ...res };
       }
       throw new Error("routine.manage action 须为 enable|disable|update|run_now");
+    }
+    case "host.fs.workspace": {
+      const action = String(params.action || params.op || "read").trim().toLowerCase();
+      const path = resolveBotWorkspacePath(String(params.path || "/workspace"));
+      const agentId = String(ctx.agentId || "").trim() || undefined;
+      const conversationId = String(params.conversation_id || ctx.conversationId || "").trim() || undefined;
+      const opts = { agent_id: agentId, conversation_id: conversationId };
+      if (action === "ls" || action === "list") {
+        return listSandbox(path, opts);
+      }
+      if (action === "read" || action === "get") {
+        return readSandboxFile(path, opts);
+      }
+      if (action === "write" || action === "put") {
+        const content = params.content != null ? String(params.content) : "";
+        return writeSandboxFile(path, content, opts);
+      }
+      throw new Error("host.fs.workspace action 须为 ls|read|write");
+    }
+    case "agent.invoke": {
+      const bound = String(ctx.agentId || "").trim();
+      if (!bound) {
+        throw new Error("该微应用未绑定 agent_id，无法 agent.invoke");
+      }
+      // Only the micro_app's bound agent — ignore any other agent_id in params.
+      const requested = String(params.agent_id || params.agentId || "").trim();
+      if (requested && requested !== bound) {
+        throw new Error("agent.invoke 仅允许调用本微应用绑定的 Bot");
+      }
+      const message = String(params.message || params.prompt || params.text || "").trim();
+      if (!message) throw new Error("message required");
+      const confirmFn = ctx.promptActionConfirm;
+      if (!confirmFn) throw new Error("缺少用户确认入口，无法启动对话");
+      const ok = await confirmFn({
+        title: "确认启动 Bot 对话",
+        description: `将向绑定 Bot 发送并开始一轮运行：\n\n${message.length > 280 ? message.slice(0, 280) + "…" : message}`,
+        confirmLabel: "开始运行",
+        cancelLabel: "取消",
+      });
+      if (!ok) throw new Error("用户取消了 agent.invoke");
+      let conversationId = String(params.conversation_id || "").trim();
+      if (!conversationId) {
+        const conv = await openPrimaryConversation(bound);
+        conversationId = conv.id;
+      }
+      let reply = "";
+      let errMsg = "";
+      await sendMessageStream(
+        conversationId,
+        message,
+        {
+          onToken: (t) => {
+            reply += t;
+          },
+          onError: (msg) => {
+            errMsg = msg || "agent.invoke 失败";
+          },
+        },
+        undefined,
+        undefined,
+        [bound],
+        ctx.client || undefined,
+      );
+      if (errMsg) throw new Error(errMsg);
+      return {
+        ok: true,
+        agent_id: bound,
+        conversation_id: conversationId,
+        reply,
+      };
+    }
+    case "skill.toggle": {
+      const name = String(params.skill || params.name || params.slug || "").trim();
+      if (!name) throw new Error("skill name required");
+      if (params.enabled === undefined && params.enable === undefined) {
+        throw new Error("enabled required");
+      }
+      const enabled = Boolean(params.enabled ?? params.enable);
+      const scope = String(params.scope || "").trim().toLowerCase() || (ctx.agentId ? "agent" : "account");
+
+      // Client-side always_on gate (server also returns skill_disable_blocked).
+      if (!enabled) {
+        if (isAlwaysOnSkillName(name)) {
+          throw new Error("不可关闭 always_on 技能（含 find-skills）");
+        }
+        try {
+          if (scope === "agent" || scope === "both") {
+            const aid = String(ctx.agentId || "").trim();
+            if (aid) {
+              const skills = await listAgentSkills(aid);
+              const hit = skills.find((s) => s.name === name);
+              if (hit && isAlwaysOnSkillName(name, hit)) {
+                throw new Error("不可关闭 always_on 技能（含 find-skills）");
+              }
+            }
+          }
+          if (scope === "account" || scope === "both" || scope === "agent") {
+            const skills = await listSkills();
+            const hit = skills.find((s) => s.name === name) as
+              | { name: string; always_on?: boolean; disable_blocked?: boolean }
+              | undefined;
+            if (hit && isAlwaysOnSkillName(name, hit)) {
+              throw new Error("不可关闭 always_on 技能（含 find-skills）");
+            }
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.includes("always_on")) throw e;
+          // listing failed — still attempt API (server enforces)
+        }
+      }
+
+      const out: Record<string, unknown> = { ok: true, skill: name, enabled, scope };
+      if (scope === "account" || scope === "both") {
+        try {
+          out.account = await setSkillEnabled(name, enabled);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (/always-on|always_on|skill_disable_blocked|disable blocked/i.test(msg)) {
+            throw new Error("不可关闭 always_on 技能（含 find-skills）");
+          }
+          throw e;
+        }
+      }
+      if (scope === "agent" || scope === "both") {
+        const aid = String(ctx.agentId || "").trim();
+        if (!aid) throw new Error("skill.toggle scope=agent 需要微应用绑定 agent_id");
+        try {
+          out.agent = await setAgentSkill(aid, name, enabled);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (/always-on|always_on|skill_disable_blocked|disable blocked/i.test(msg)) {
+            throw new Error("不可关闭 always_on 技能（含 find-skills）");
+          }
+          throw e;
+        }
+      }
+      if (scope !== "account" && scope !== "agent" && scope !== "both") {
+        throw new Error("skill.toggle scope 须为 account|agent|both");
+      }
+      return out;
+    }
+    case "device.mic": {
+      return deviceMicCapture(params);
+    }
+    case "device.geo": {
+      return deviceGeoGetCurrentPosition(params);
     }
     default:
       throw new Error(`unsupported capability: ${capability}`);

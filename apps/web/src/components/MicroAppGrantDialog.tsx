@@ -31,10 +31,22 @@ const LABELS: Record<string, string> = {
   "host.screenshot": "截取屏幕",
   "host.fs.read": "读取你选择的文件",
   "host.fs.write": "保存文件到你选择的位置",
+  "host.fs.workspace": "读写 Bot 工作区文件",
   "host.shell.run": "在本机运行命令",
+  "host.clipboard.read": "读取剪贴板",
+  "host.clipboard.write": "写入剪贴板",
   "cloud.http": "由服务端代发网络请求",
   "chat.attach": "把结果发到当前会话",
   "ui.notify": "显示应用内通知",
+  "account.profile": "读取账号资料",
+  "routine.manage": "管理例行任务",
+  "agent.invoke": "唤起绑定 Bot 对话",
+  "skill.toggle": "开关技能",
+  "device.camera": "使用相机",
+  "device.notify": "系统通知",
+  "device.share": "系统分享",
+  "device.mic": "使用麦克风",
+  "device.geo": "读取定位",
 };
 
 const DECISION_LABEL: Record<string, string> = {

@@ -66,6 +66,7 @@ var MicroAppHighSensitivityCapabilities = map[string]struct{}{
 	"host.shell.run":       {},
 	"device.contacts":      {},
 	"device.mic":           {},
+	"device.geo":           {},
 }
 
 type MicroApp struct {
