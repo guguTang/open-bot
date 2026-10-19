@@ -119,6 +119,8 @@ func (s *Server) handleMicroAppGrantCheck(w http.ResponseWriter, r *http.Request
 	var body struct {
 		Capability string `json:"capability"`
 		MachineID  string `json:"machine_id"`
+		// Command (host.shell.run): evaluated against the grant's command_allowlist.
+		Command string `json:"command"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -144,16 +146,31 @@ func (s *Server) handleMicroAppGrantCheck(w http.ResponseWriter, r *http.Request
 		return
 	}
 	suggested := db.DefaultGrantDecisionForCapability(capName)
+	_, highSens := db.MicroAppHighSensitivityCapabilities[capName]
 	out := map[string]any{
-		"capability":          capName,
-		"decision":            decision, // empty → client should prompt
-		"suggested_decision":  suggested,
-		"needs_prompt":        decision == "",
-		"high_sensitivity":    suggested == db.MicroAppGrantAllowOnce && (capName == "host.shell.run" || capName == "host.clipboard.read" || capName == "device.mic"),
+		"capability":         capName,
+		"suggested_decision": suggested,
+		"high_sensitivity":   highSens,
 	}
 	if grant != nil {
 		out["grant_id"] = grant.ID
+		out["grant_decision"] = grant.Decision
 	}
+	// Phase 3: host.shell.run + always_allow honours the per-grant command allowlist.
+	// Non-matching (or compound) commands fall back to a prompt; deny stays deny.
+	if capName == db.MicroAppShellCapability && grant != nil {
+		out["command_allowlist"] = grant.CommandAllowlist
+		if cmd := strings.TrimSpace(body.Command); cmd != "" {
+			allowed := db.MicroAppShellCommandAllowed(grant.CommandAllowlist, cmd)
+			out["command_allowlisted"] = allowed
+			if decision == db.MicroAppGrantAlwaysAllow && len(grant.CommandAllowlist) > 0 && !allowed {
+				decision = ""
+				out["reason"] = "command_not_in_allowlist"
+			}
+		}
+	}
+	out["decision"] = decision // empty → client should prompt
+	out["needs_prompt"] = decision == ""
 	writeJSON(w, http.StatusOK, out)
 }
 

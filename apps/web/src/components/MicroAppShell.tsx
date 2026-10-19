@@ -5,16 +5,21 @@ import {
   fetchMicroAppRuntime,
   uploadMicroAppBundle,
   type MicroApp,
-  type MicroAppGrantDecision,
 } from "../api";
 import { detectClientContext } from "../lib/clientEnv";
 import { summarizeUnavailable } from "../lib/microApp/capabilities";
 import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
 import { buildMicroAppSrcdoc } from "../lib/microApp/sdk";
-import { createMicroAppMessageHandler } from "../lib/microApp/hostBridge";
+import {
+  createMicroAppMessageHandler,
+  type GrantPromptOptions,
+  type GrantPromptResult,
+} from "../lib/microApp/hostBridge";
 import { useWorkspaceStore } from "../stores/workspace";
 import { Button } from "@/components/ui/button";
 import { MicroAppGrantDialog } from "./MicroAppGrantDialog";
+import { MicroAppShellGrantPanel } from "./MicroAppShellGrantPanel";
+import { MicroAppRoutinePanel } from "./MicroAppRoutinePanel";
 
 type Props = {
   app: MicroApp;
@@ -22,11 +27,8 @@ type Props = {
   onAppUpdated?: (app: MicroApp) => void;
 };
 
-type GrantPromptState = {
-  capability: string;
-  suggested: string;
-  highSensitivity?: boolean;
-  resolve: (d: MicroAppGrantDecision | null) => void;
+type GrantPromptState = GrantPromptOptions & {
+  resolve: (d: GrantPromptResult | null) => void;
 };
 
 export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
@@ -52,16 +54,11 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
     [app.capabilities, client],
   );
 
-  const promptGrant = (opts: {
-    capability: string;
-    suggested: MicroAppGrantDecision | string;
-    highSensitivity?: boolean;
-  }) =>
-    new Promise<MicroAppGrantDecision | null>((resolve) => {
+  const promptGrant = (opts: GrantPromptOptions) =>
+    new Promise<GrantPromptResult | null>((resolve) => {
       setGrantPrompt({
-        capability: opts.capability,
+        ...opts,
         suggested: String(opts.suggested || "allow_once"),
-        highSensitivity: opts.highSensitivity,
         resolve,
       });
     });
@@ -181,8 +178,22 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
         </details>
       ) : null}
 
+      {(app.capabilities || []).includes("host.shell.run") ? (
+        <details className="shrink-0 border-b border-[var(--border)] px-3 py-2">
+          <summary className="cursor-pointer text-xs text-[var(--muted)]">
+            命令授权（host.shell.run · 三态 + 白名单）
+          </summary>
+          <MicroAppShellGrantPanel className="mt-2" microAppId={app.id} />
+        </details>
+      ) : null}
+
       <div className="relative min-h-[320px] flex-1 bg-[var(--bg)]">
-        {app.kind === "skill" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
+        {app.kind === "routine" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto px-6 py-4 text-center">
+            <p className="text-sm font-medium text-[var(--text)]">例行型微应用</p>
+            <MicroAppRoutinePanel app={app} />
+          </div>
+        ) : app.kind === "skill" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-sm font-medium text-[var(--text)]">技能型微应用</p>
             <p className="max-w-sm text-xs text-[var(--muted)]">
@@ -225,6 +236,10 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
         capability={grantPrompt?.capability || ""}
         suggested={grantPrompt?.suggested}
         highSensitivity={grantPrompt?.highSensitivity}
+        command={grantPrompt?.command}
+        suggestedPrefix={grantPrompt?.suggestedPrefix}
+        overridingAlwaysAllow={grantPrompt?.overridingAlwaysAllow}
+        reason={grantPrompt?.reason}
         onCancel={() => {
           grantPrompt?.resolve(null);
           setGrantPrompt(null);

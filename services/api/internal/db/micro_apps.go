@@ -68,28 +68,30 @@ var MicroAppHighSensitivityCapabilities = map[string]struct{}{
 }
 
 type MicroApp struct {
-	ID                   string              `json:"id"`
-	UserID               string              `json:"user_id"`
-	AgentID              string              `json:"agent_id,omitempty"`
-	Title                string              `json:"title"`
-	Description          string              `json:"description"`
-	Icon                 string              `json:"icon,omitempty"`
-	Kind                 string              `json:"kind"`
-	Status               string              `json:"status"`
-	Version              int                 `json:"version"`
-	BundleKey            string              `json:"bundle_key,omitempty"`
-	BundleHash           string              `json:"bundle_hash,omitempty"`
-	Entrypoint           string              `json:"entrypoint,omitempty"`
-	SkillSlug            string              `json:"skill_slug,omitempty"`
-	RoutineID            string              `json:"routine_id,omitempty"`
-	Capabilities         []string            `json:"capabilities"`
-	SourceConversationID string              `json:"source_conversation_id,omitempty"`
-	SourceMessageID      string              `json:"source_message_id,omitempty"`
-	ConfirmedAt          *time.Time          `json:"confirmed_at,omitempty"`
-	ConfirmedBy          string              `json:"confirmed_by,omitempty"`
-	CreatedAt            time.Time           `json:"created_at"`
-	UpdatedAt            time.Time           `json:"updated_at"`
-	Placements           []MicroAppPlacement `json:"placements,omitempty"`
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	AgentID     string `json:"agent_id,omitempty"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Icon        string `json:"icon,omitempty"`
+	Kind        string `json:"kind"`
+	Status      string `json:"status"`
+	Version     int    `json:"version"`
+	BundleKey   string `json:"bundle_key,omitempty"`
+	BundleHash  string `json:"bundle_hash,omitempty"`
+	Entrypoint  string `json:"entrypoint,omitempty"`
+	SkillSlug   string `json:"skill_slug,omitempty"`
+	RoutineID   string `json:"routine_id,omitempty"`
+	// RoutineConfig (Phase 3, kind=routine): schedule/trigger recipe; materialized on pin.
+	RoutineConfig        *MicroAppRoutineConfig `json:"routine_config,omitempty"`
+	Capabilities         []string               `json:"capabilities"`
+	SourceConversationID string                 `json:"source_conversation_id,omitempty"`
+	SourceMessageID      string                 `json:"source_message_id,omitempty"`
+	ConfirmedAt          *time.Time             `json:"confirmed_at,omitempty"`
+	ConfirmedBy          string                 `json:"confirmed_by,omitempty"`
+	CreatedAt            time.Time              `json:"created_at"`
+	UpdatedAt            time.Time              `json:"updated_at"`
+	Placements           []MicroAppPlacement    `json:"placements,omitempty"`
 	// BundleURL is filled by API for get (Phase 0: empty / placeholder).
 	BundleURL string `json:"bundle_url,omitempty"`
 }
@@ -106,15 +108,18 @@ type MicroAppPlacement struct {
 }
 
 type MicroAppGrant struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	MicroAppID string     `json:"micro_app_id"`
-	Capability string     `json:"capability"`
-	MachineID  string     `json:"machine_id,omitempty"`
-	Decision   string     `json:"decision"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID         string `json:"id"`
+	UserID     string `json:"user_id"`
+	MicroAppID string `json:"micro_app_id"`
+	Capability string `json:"capability"`
+	MachineID  string `json:"machine_id,omitempty"`
+	Decision   string `json:"decision"`
+	// CommandAllowlist (Phase 3, host.shell.run only): command prefixes auto-allowed
+	// under always_allow. Empty = any (non hard-denied) command; others re-prompt.
+	CommandAllowlist []string   `json:"command_allowlist"`
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 type MicroAppCreateInput struct {
@@ -129,6 +134,7 @@ type MicroAppCreateInput struct {
 	Entrypoint           string
 	SkillSlug            string
 	RoutineID            string
+	RoutineConfig        *MicroAppRoutineConfig
 	SourceConversationID string
 	SourceMessageID      string
 }
@@ -141,6 +147,8 @@ type MicroAppPatchInput struct {
 	SkillSlug    *string
 	RoutineID    *string
 	Capabilities *[]string
+	// RoutineConfig replaces the recipe when non-nil (kind=routine).
+	RoutineConfig *MicroAppRoutineConfig
 }
 
 func (d *DB) migrateMicroApps() error {
@@ -200,6 +208,10 @@ CREATE TABLE IF NOT EXISTS micro_app_grants (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_micro_app_grants_uniq
   ON micro_app_grants(user_id, micro_app_id, capability, machine_id);
 CREATE INDEX IF NOT EXISTS idx_micro_app_grants_app ON micro_app_grants(micro_app_id);
+
+-- Phase 3: kind=routine recipe + host.shell.run per-grant command allowlist.
+ALTER TABLE micro_apps ADD COLUMN IF NOT EXISTS routine_config_json TEXT NOT NULL DEFAULT '';
+ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEXT NOT NULL DEFAULT '[]';
 `)
 	return err
 }
@@ -261,7 +273,7 @@ func NormalizeMicroAppGrantDecision(d string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(d)) {
 	case MicroAppGrantAllowOnce:
 		return MicroAppGrantAllowOnce, nil
-	case MicroAppGrantAlwaysAllow:
+	case MicroAppGrantAlwaysAllow, "allow_always":
 		return MicroAppGrantAlwaysAllow, nil
 	case MicroAppGrantDeny:
 		return MicroAppGrantDeny, nil
@@ -309,7 +321,8 @@ const microAppSelect = `SELECT id, user_id, COALESCE(agent_id,''), title, descri
   kind, status, version, COALESCE(bundle_key,''), COALESCE(bundle_hash,''), COALESCE(entrypoint,''),
   COALESCE(skill_slug,''), COALESCE(routine_id,''), COALESCE(capabilities_json,'[]'),
   COALESCE(source_conversation_id,''), COALESCE(source_message_id,''),
-  confirmed_at, COALESCE(confirmed_by,''), created_at, updated_at
+  confirmed_at, COALESCE(confirmed_by,''), created_at, updated_at,
+  COALESCE(routine_config_json,'')
  FROM micro_apps`
 
 func scanMicroApp(scanner interface {
@@ -317,6 +330,7 @@ func scanMicroApp(scanner interface {
 }) (*MicroApp, error) {
 	var a MicroApp
 	var capsJSON string
+	var routineCfgJSON string
 	var confirmedAt sql.NullTime
 	if err := scanner.Scan(
 		&a.ID, &a.UserID, &a.AgentID, &a.Title, &a.Description, &a.Icon,
@@ -324,10 +338,12 @@ func scanMicroApp(scanner interface {
 		&a.SkillSlug, &a.RoutineID, &capsJSON,
 		&a.SourceConversationID, &a.SourceMessageID,
 		&confirmedAt, &a.ConfirmedBy, &a.CreatedAt, &a.UpdatedAt,
+		&routineCfgJSON,
 	); err != nil {
 		return nil, err
 	}
 	a.Capabilities = decodeCapabilitiesJSON(capsJSON)
+	a.RoutineConfig = decodeRoutineConfigJSON(routineCfgJSON)
 	if confirmedAt.Valid {
 		t := confirmedAt.Time
 		a.ConfirmedAt = &t
@@ -352,6 +368,24 @@ func (d *DB) CreateMicroApp(userID string, in MicroAppCreateInput) (*MicroApp, e
 	if err != nil {
 		return nil, err
 	}
+	if in.RoutineConfig != nil && kind != MicroAppKindRoutine {
+		return nil, errors.New("routine_config only allowed for kind=routine")
+	}
+	if err := ValidateMicroAppRoutineConfig(in.RoutineConfig); err != nil {
+		return nil, err
+	}
+	if rid := strings.TrimSpace(in.RoutineID); rid != "" && kind == MicroAppKindRoutine {
+		if _, err := d.GetRoutine(userID, rid); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil, fmt.Errorf("routine %q not found for this account", rid)
+			}
+			return nil, err
+		}
+	}
+	routineCfgJSON, err := encodeRoutineConfigJSON(in.RoutineConfig)
+	if err != nil {
+		return nil, err
+	}
 	id := uuid.NewString()
 	bundleKey := strings.TrimSpace(in.BundleKey)
 	if bundleKey == "" {
@@ -366,17 +400,18 @@ func (d *DB) CreateMicroApp(userID string, in MicroAppCreateInput) (*MicroApp, e
 INSERT INTO micro_apps (
   id, user_id, agent_id, title, description, icon, kind, status, version,
   bundle_key, bundle_hash, entrypoint, skill_slug, routine_id, capabilities_json,
-  source_conversation_id, source_message_id, created_at, updated_at
+  source_conversation_id, source_message_id, created_at, updated_at, routine_config_json
 ) VALUES (
   $1,$2,$3,$4,$5,$6,$7,$8,1,
   $9,$10,$11,$12,$13,$14,
-  $15,$16,$17,$17
+  $15,$16,$17,$17,$18
 )`,
 		id, userID, strings.TrimSpace(in.AgentID), title, strings.TrimSpace(in.Description),
 		strings.TrimSpace(in.Icon), kind, MicroAppStatusDraft,
 		bundleKey, strings.TrimSpace(in.BundleHash), entrypoint,
 		strings.TrimSpace(in.SkillSlug), strings.TrimSpace(in.RoutineID), capsJSON,
 		strings.TrimSpace(in.SourceConversationID), strings.TrimSpace(in.SourceMessageID), now,
+		routineCfgJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -484,6 +519,7 @@ func (d *DB) PatchMicroApp(userID, id string, in MicroAppPatchInput) (*MicroApp,
 	entrypoint := cur.Entrypoint
 	skillSlug := cur.SkillSlug
 	routineID := cur.RoutineID
+	routineCfg := cur.RoutineConfig
 	caps := cur.Capabilities
 	if in.Title != nil {
 		title = strings.TrimSpace(*in.Title)
@@ -506,6 +542,19 @@ func (d *DB) PatchMicroApp(userID, id string, in MicroAppPatchInput) (*MicroApp,
 	if in.RoutineID != nil {
 		routineID = strings.TrimSpace(*in.RoutineID)
 	}
+	if in.RoutineConfig != nil {
+		if NormalizeMicroAppKind(cur.Kind) != MicroAppKindRoutine {
+			return nil, errors.New("routine_config only allowed for kind=routine")
+		}
+		if err := ValidateMicroAppRoutineConfig(in.RoutineConfig); err != nil {
+			return nil, err
+		}
+		routineCfg = in.RoutineConfig
+	}
+	routineCfgJSON, err := encodeRoutineConfigJSON(routineCfg)
+	if err != nil {
+		return nil, err
+	}
 	if in.Capabilities != nil {
 		if err := ValidateMicroAppCapabilities(*in.Capabilities); err != nil {
 			return nil, err
@@ -520,9 +569,10 @@ func (d *DB) PatchMicroApp(userID, id string, in MicroAppPatchInput) (*MicroApp,
 	res, err := d.SQL.Exec(`
 UPDATE micro_apps SET
   title = $3, description = $4, icon = $5, entrypoint = $6,
-  skill_slug = $7, routine_id = $8, capabilities_json = $9, updated_at = $10
+  skill_slug = $7, routine_id = $8, capabilities_json = $9, updated_at = $10,
+  routine_config_json = $11
  WHERE id = $1 AND user_id = $2`,
-		id, userID, title, desc, icon, entrypoint, skillSlug, routineID, capsJSON, now,
+		id, userID, title, desc, icon, entrypoint, skillSlug, routineID, capsJSON, now, routineCfgJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -539,6 +589,9 @@ type PinMicroAppOptions struct {
 	// ChatPin adds surface=chat_pin (account-wide when ContextID empty).
 	ChatPin   bool
 	ContextID string
+	// Surfaces (Phase 3): extra in-app entry surfaces chosen in the pin dialog,
+	// e.g. desktop_shortcut / mobile_shortcut. hub is always written.
+	Surfaces []string
 }
 
 // PinMicroApp promotes draft→pinned after explicit user confirm intent.
@@ -560,12 +613,33 @@ func (d *DB) PinMicroApp(userID, id, confirmedBy string, opts *PinMicroAppOption
 	if confirmedBy == "" {
 		confirmedBy = userID
 	}
+	extraSurfaces := make([]string, 0, len(opts.Surfaces))
+	for _, raw := range opts.Surfaces {
+		surf, serr := NormalizeMicroAppSurface(raw)
+		if serr != nil {
+			return nil, serr
+		}
+		if surf == MicroAppSurfaceHub {
+			continue
+		}
+		extraSurfaces = append(extraSurfaces, surf)
+	}
+	// kind=routine: bind / materialize the routine before flipping to pinned.
+	routineID := cur.RoutineID
+	if NormalizeMicroAppKind(cur.Kind) == MicroAppKindRoutine {
+		rid, rerr := d.syncRoutineOnPin(userID, cur)
+		if rerr != nil {
+			return nil, rerr
+		}
+		routineID = rid
+	}
 	_, err = d.SQL.Exec(`
 UPDATE micro_apps SET
   status = $3, confirmed_at = $4, confirmed_by = $5, updated_at = $4,
-  version = CASE WHEN status = $6 THEN version + 1 ELSE version END
+  version = CASE WHEN status = $6 THEN version + 1 ELSE version END,
+  routine_id = $7
  WHERE id = $1 AND user_id = $2`,
-		id, userID, MicroAppStatusPinned, now, confirmedBy, MicroAppStatusDraft,
+		id, userID, MicroAppStatusPinned, now, confirmedBy, MicroAppStatusDraft, routineID,
 	)
 	if err != nil {
 		return nil, err
@@ -575,6 +649,15 @@ UPDATE micro_apps SET
 	}
 	if opts.ChatPin {
 		if err := d.EnsureMicroAppPlacement(id, MicroAppSurfaceChatPin, opts.ContextID, 0, true); err != nil {
+			return nil, err
+		}
+	}
+	for _, surf := range extraSurfaces {
+		ctxID := ""
+		if surf == MicroAppSurfaceChatPin {
+			ctxID = opts.ContextID
+		}
+		if err := d.EnsureMicroAppPlacement(id, surf, ctxID, 0, true); err != nil {
 			return nil, err
 		}
 	}
@@ -637,7 +720,13 @@ UPDATE micro_apps SET status = $3, updated_at = $4
 	}
 	// Disable placements on archive.
 	_, _ = d.SQL.Exec(`UPDATE micro_app_placements SET enabled = FALSE, updated_at = $2 WHERE micro_app_id = $1`, id, now)
-	return d.GetMicroApp(userID, id)
+	app, err := d.GetMicroApp(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	// kind=routine: pause (never delete) the bound routine.
+	d.pauseRoutineOnArchive(userID, app)
+	return app, nil
 }
 
 func (d *DB) ListMicroAppPlacements(microAppID string) ([]MicroAppPlacement, error) {
@@ -725,7 +814,8 @@ func (d *DB) ListMicroAppGrants(userID, microAppID, machineID string) ([]MicroAp
 		return nil, err
 	}
 	q := `
-SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at,
+  COALESCE(command_allowlist_json,'[]')
  FROM micro_app_grants WHERE user_id = $1 AND micro_app_id = $2`
 	args := []any{userID, microAppID}
 	if mid := strings.TrimSpace(machineID); mid != "" {
@@ -740,16 +830,11 @@ SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision,
 	defer rows.Close()
 	var out []MicroAppGrant
 	for rows.Next() {
-		var g MicroAppGrant
-		var exp sql.NullTime
-		if err := rows.Scan(&g.ID, &g.UserID, &g.MicroAppID, &g.Capability, &g.MachineID, &g.Decision, &exp, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		g, err := scanMicroAppGrant(rows)
+		if err != nil {
 			return nil, err
 		}
-		if exp.Valid {
-			t := exp.Time
-			g.ExpiresAt = &t
-		}
-		out = append(out, g)
+		out = append(out, *g)
 	}
 	if out == nil {
 		out = []MicroAppGrant{}
@@ -757,7 +842,9 @@ SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision,
 	return out, rows.Err()
 }
 
-func (d *DB) UpsertMicroAppGrant(userID, microAppID, capability, machineID, decision string, expiresAt *time.Time) (*MicroAppGrant, error) {
+// UpsertMicroAppGrant writes the tri-state decision. commandAllowlist (host.shell.run only):
+// nil keeps the stored list; non-nil replaces it (empty slice clears = any command).
+func (d *DB) UpsertMicroAppGrant(userID, microAppID, capability, machineID, decision string, expiresAt *time.Time, commandAllowlist *[]string) (*MicroAppGrant, error) {
 	app, err := d.GetMicroApp(userID, microAppID)
 	if err != nil {
 		return nil, err
@@ -784,39 +871,47 @@ func (d *DB) UpsertMicroAppGrant(userID, microAppID, capability, machineID, deci
 	if err != nil {
 		return nil, err
 	}
+	allowJSON := "[]"
+	replaceAllow := false
+	if commandAllowlist != nil {
+		list, aerr := NormalizeMicroAppShellAllowlist(*commandAllowlist)
+		if aerr != nil {
+			return nil, aerr
+		}
+		if len(list) > 0 && capability != MicroAppShellCapability {
+			return nil, fmt.Errorf("command_allowlist only applies to %s", MicroAppShellCapability)
+		}
+		allowJSON = encodeStringListJSON(list)
+		replaceAllow = true
+	}
 	machineID = strings.TrimSpace(machineID)
 	now := Now()
 	id := uuid.NewString()
+	allowUpdate := ""
+	if replaceAllow {
+		allowUpdate = ",\n  command_allowlist_json = EXCLUDED.command_allowlist_json"
+	}
 	_, err = d.SQL.Exec(`
-INSERT INTO micro_app_grants (id, user_id, micro_app_id, capability, machine_id, decision, expires_at, created_at, updated_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+INSERT INTO micro_app_grants (id, user_id, micro_app_id, capability, machine_id, decision, expires_at, created_at, updated_at, command_allowlist_json)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9)
 ON CONFLICT (user_id, micro_app_id, capability, machine_id) DO UPDATE SET
   decision = EXCLUDED.decision,
   expires_at = EXCLUDED.expires_at,
-  updated_at = EXCLUDED.updated_at`,
-		id, userID, microAppID, capability, machineID, dec, expiresAt, now,
+  updated_at = EXCLUDED.updated_at`+allowUpdate,
+		id, userID, microAppID, capability, machineID, dec, expiresAt, now, allowJSON,
 	)
 	if err != nil {
 		return nil, err
 	}
 	row := d.SQL.QueryRow(`
-SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at,
+  COALESCE(command_allowlist_json,'[]')
  FROM micro_app_grants
  WHERE user_id = $1 AND micro_app_id = $2 AND capability = $3 AND machine_id = $4`,
 		userID, microAppID, capability, machineID,
 	)
-	var g MicroAppGrant
-	var exp sql.NullTime
-	if err := row.Scan(&g.ID, &g.UserID, &g.MicroAppID, &g.Capability, &g.MachineID, &g.Decision, &exp, &g.CreatedAt, &g.UpdatedAt); err != nil {
-		return nil, err
-	}
-	if exp.Valid {
-		t := exp.Time
-		g.ExpiresAt = &t
-	}
-	return &g, nil
+	return scanMicroAppGrant(row)
 }
-
 
 // SetMicroAppBundle updates object-storage key + content hash after upload.
 func (d *DB) SetMicroAppBundle(userID, id, bundleKey, bundleHash, entrypoint string) (*MicroApp, error) {
@@ -856,7 +951,8 @@ func (d *DB) GetMicroAppGrant(userID, microAppID, capability, machineID string) 
 	machineID = strings.TrimSpace(machineID)
 	capability = strings.TrimSpace(capability)
 	row := d.SQL.QueryRow(`
-SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at,
+  COALESCE(command_allowlist_json,'[]')
  FROM micro_app_grants
  WHERE user_id = $1 AND micro_app_id = $2 AND capability = $3 AND machine_id = $4`,
 		userID, microAppID, capability, machineID,
@@ -872,7 +968,8 @@ SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision,
 		return nil, ErrNotFound
 	}
 	row = d.SQL.QueryRow(`
-SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at,
+  COALESCE(command_allowlist_json,'[]')
  FROM micro_app_grants
  WHERE user_id = $1 AND micro_app_id = $2 AND capability = $3 AND machine_id = ''`,
 		userID, microAppID, capability,
@@ -892,9 +989,11 @@ func scanMicroAppGrant(scanner interface {
 }) (*MicroAppGrant, error) {
 	var g MicroAppGrant
 	var exp sql.NullTime
-	if err := scanner.Scan(&g.ID, &g.UserID, &g.MicroAppID, &g.Capability, &g.MachineID, &g.Decision, &exp, &g.CreatedAt, &g.UpdatedAt); err != nil {
+	var allowJSON string
+	if err := scanner.Scan(&g.ID, &g.UserID, &g.MicroAppID, &g.Capability, &g.MachineID, &g.Decision, &exp, &g.CreatedAt, &g.UpdatedAt, &allowJSON); err != nil {
 		return nil, err
 	}
+	g.CommandAllowlist = decodeCapabilitiesJSON(allowJSON)
 	if exp.Valid {
 		t := exp.Time
 		g.ExpiresAt = &t

@@ -174,6 +174,11 @@ function reviewForRequest(req: HostExecRequest): HostExecReview {
   );
 }
 
+/** Same Auto-review gate the host-exec session uses — micro-app Host Bridge must honour it too. */
+export function reviewLocalHostOp(req: HostExecRequest): HostExecReview {
+  return reviewForRequest(req);
+}
+
 async function refineWriteReview(req: HostExecRequest, base: HostExecReview): Promise<HostExecReview> {
   if (req.op !== "write") return base;
   const invoke = tauriInvoke();

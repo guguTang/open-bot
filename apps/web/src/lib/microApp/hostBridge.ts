@@ -8,16 +8,32 @@ import {
   persistConversationMessage,
   type MicroAppGrantDecision,
 } from "../../api";
-import { runLocalHostOp } from "../hostExecSession";
+import { reviewLocalHostOp, runLocalHostOp } from "../hostExecSession";
 import { capabilityAvailability } from "./capabilities";
 import { deviceCameraGetPhoto, deviceNotify, deviceShare } from "./deviceBridge";
 import type { ClientContext } from "../clientEnv";
 
-export type GrantPromptFn = (opts: {
+export type GrantPromptOptions = {
   capability: string;
   suggested: MicroAppGrantDecision | string;
   highSensitivity?: boolean;
-}) => Promise<MicroAppGrantDecision | null>;
+  /** host.shell.run: the exact command being requested. */
+  command?: string;
+  /** Suggested allowlist prefix for 「始终允许」 (e.g. "git status"). */
+  suggestedPrefix?: string;
+  /** Existing always_allow grant whose allowlist didn't cover this command. */
+  overridingAlwaysAllow?: boolean;
+  /** Why we are prompting (allowlist miss / Auto-review asks to confirm). */
+  reason?: string;
+};
+
+export type GrantPromptResult = {
+  decision: MicroAppGrantDecision;
+  /** host.shell.run + always_allow: prefix to add to command_allowlist; "" = any command. */
+  allowlistEntry?: string;
+};
+
+export type GrantPromptFn = (opts: GrantPromptOptions) => Promise<GrantPromptResult | null>;
 
 export type HostBridgeContext = {
   microAppId: string;
@@ -50,29 +66,114 @@ function reply(
   );
 }
 
+type GrantOutcome = { ok: true; grantId?: string } | { ok: false; error: string };
+
+/** host.shell.run command text from SDK params. */
+export function shellCommandFromParams(params: Record<string, unknown>): string {
+  return String(params.command || params.cmd || "").trim();
+}
+
+/**
+ * Default allowlist prefix suggestion: program + first sub-command word
+ * ("git status -s" → "git status", "ls -la" → "ls"). Empty for compound commands.
+ */
+export function suggestShellAllowPrefix(command: string): string {
+  const cmd = command.trim().replace(/\s+/g, " ");
+  if (!cmd || /[;&|`<>\n\r]|\$\(/.test(cmd)) return "";
+  const words = cmd.split(" ");
+  const first = words[0] || "";
+  const second = words[1] || "";
+  if (second && /^[a-z][a-z0-9._:-]*$/i.test(second) && !second.startsWith("-")) {
+    return `${first} ${second}`;
+  }
+  return first;
+}
+
 async function ensureGrant(
   ctx: HostBridgeContext,
   capability: string,
-): Promise<{ ok: true; grantId?: string } | { ok: false; error: string }> {
-  const check = await microAppGrantCheck(ctx.microAppId, capability, ctx.machineId);
+  params: Record<string, unknown> = {},
+): Promise<GrantOutcome> {
+  const isShell = capability === "host.shell.run";
+  const command = isShell ? shellCommandFromParams(params) : "";
+  if (isShell && !command) return { ok: false, error: "command required" };
+
+  // Host-side Auto-review stays authoritative: hard deny / exec_policy=deny always win,
+  // regardless of any micro-app Grant.
+  let reviewConfirm = false;
+  let reviewReason = "";
+  if (isShell) {
+    const rev = reviewLocalHostOp({
+      type: "exec",
+      req_id: "micro-review",
+      op: "shell",
+      path: command,
+      dest: params.terminal ? "terminal" : undefined,
+    });
+    if (rev.tier === "deny") return { ok: false, error: rev.reason || "Auto-review 拒绝了该命令" };
+    reviewConfirm = rev.tier === "confirm";
+    reviewReason = rev.reason;
+  }
+
+  const check = await microAppGrantCheck(ctx.microAppId, capability, ctx.machineId, command || undefined);
   if (check.decision === "deny") {
     return { ok: false, error: "用户已拒绝该能力" };
   }
-  if (check.decision === "always_allow" || check.decision === "allow_once") {
+  if (check.decision === "allow_once") {
     return { ok: true, grantId: check.grant_id };
   }
-  const decision = await ctx.promptGrant({
+  if (check.decision === "always_allow") {
+    // Shell: an empty allowlist means "any command" — but commands Auto-review wants
+    // confirmed still prompt unless the user explicitly allowlisted them.
+    if (!isShell || check.command_allowlisted || !reviewConfirm) {
+      return { ok: true, grantId: check.grant_id };
+    }
+  }
+
+  const overriding = isShell && check.grant_decision === "always_allow";
+  const choice = await ctx.promptGrant({
     capability,
     suggested: check.suggested_decision || "allow_once",
     highSensitivity: check.high_sensitivity,
+    command: command || undefined,
+    suggestedPrefix: isShell ? suggestShellAllowPrefix(command) : undefined,
+    overridingAlwaysAllow: overriding,
+    reason:
+      check.reason === "command_not_in_allowlist"
+        ? "该命令不在此工具的命令白名单内"
+        : reviewConfirm
+          ? reviewReason
+          : undefined,
   });
-  if (!decision) {
+  if (!choice) {
     return { ok: false, error: "用户取消了授权" };
   }
-  const g = await putMicroAppGrant(ctx.microAppId, capability, {
+  const { decision } = choice;
+
+  if (overriding) {
+    // Keep the existing always_allow grant: allow_once / deny apply to this run only;
+    // 「始终允许」 extends the allowlist.
+    if (decision === "deny") return { ok: false, error: "用户拒绝了这次命令" };
+    if (decision === "allow_once") return { ok: true };
+    const entry = (choice.allowlistEntry ?? "").trim();
+    const current = check.command_allowlist || [];
+    const g = await putMicroAppGrant(ctx.microAppId, capability, {
+      decision: "always_allow",
+      machine_id: ctx.machineId || "",
+      command_allowlist: entry ? Array.from(new Set([...current, entry])) : [],
+    });
+    return { ok: true, grantId: g.id };
+  }
+
+  const body: Parameters<typeof putMicroAppGrant>[2] = {
     decision,
     machine_id: ctx.machineId || "",
-  });
+  };
+  if (isShell && decision === "always_allow") {
+    const entry = (choice.allowlistEntry ?? "").trim();
+    body.command_allowlist = entry ? [entry] : [];
+  }
+  const g = await putMicroAppGrant(ctx.microAppId, capability, body);
   if (decision === "deny") {
     return { ok: false, error: "用户拒绝了该能力" };
   }
@@ -135,7 +236,8 @@ async function executeCapability(
       return { ok: true, name };
     }
     case "host.shell.run": {
-      const command = String(params.command || params.cmd || "").trim();
+      // Grant + Auto-review already passed in ensureGrant (hard deny re-checked there).
+      const command = shellCommandFromParams(params);
       if (!command) throw new Error("command required");
       const result = await runLocalHostOp({
         type: "exec",
@@ -260,7 +362,7 @@ export function createMicroAppMessageHandler(ctx: HostBridgeContext) {
         reply(ev.source, id, false, undefined, avail.reason || "capability_unavailable");
         return;
       }
-      const grant = await ensureGrant(ctx, capability);
+      const grant = await ensureGrant(ctx, capability, params);
       if (!grant.ok) {
         reply(ev.source, id, false, undefined, grant.error);
         return;
@@ -269,7 +371,12 @@ export function createMicroAppMessageHandler(ctx: HostBridgeContext) {
       if (grant.grantId) {
         // allow_once: server may already consume on cloud.http; still best-effort.
         try {
-          const check = await microAppGrantCheck(ctx.microAppId, capability, ctx.machineId);
+          const check = await microAppGrantCheck(
+            ctx.microAppId,
+            capability,
+            ctx.machineId,
+            capability === "host.shell.run" ? shellCommandFromParams(params) : undefined,
+          );
           if (check.decision === "allow_once" && check.grant_id) {
             await microAppGrantConsume(ctx.microAppId, check.grant_id);
           }

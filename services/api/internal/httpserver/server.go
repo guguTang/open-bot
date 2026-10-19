@@ -270,6 +270,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/micro-apps/{id}/placements", s.requireAuth(s.handlePutMicroAppPlacements))
 	mux.HandleFunc("GET /v1/micro-apps/{id}/grants", s.requireAuth(s.handleListMicroAppGrants))
 	mux.HandleFunc("PUT /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handlePutMicroAppGrant))
+	mux.HandleFunc("DELETE /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handleDeleteMicroAppGrant))
 	mux.HandleFunc("POST /v1/micro-apps/{id}/session", s.requireAuth(s.handleMicroAppSession))
 	mux.HandleFunc("GET /v1/micro-apps/{id}/bundle", s.requireAuth(s.handleGetMicroAppBundle))
 	mux.HandleFunc("PUT /v1/micro-apps/{id}/bundle", s.requireAuth(s.handlePutMicroAppBundle))

@@ -6,12 +6,14 @@ import {
   pinMicroApp,
   putMicroAppPlacements,
   type MicroApp,
+  type MicroAppSurface,
 } from "../api";
 import { detectClientContext } from "../lib/clientEnv";
 import { useMicroAppsStore } from "../stores/microApps";
 import { Button } from "@/components/ui/button";
 import { MicroAppShell } from "./MicroAppShell";
 import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
+import { MicroAppRoutineCreateForm } from "./MicroAppRoutineCreateForm";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +23,21 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-/** 「我的工具」 hub — list + MicroAppShell + chat_pin / capability matrix (Phase 2). */
+/**
+ * 「我的工具」 hub — list + MicroAppShell + capability matrix.
+ * Entry surfaces: hub (always) / chat_pin (Phase 2) / desktop_shortcut / mobile_shortcut (Phase 3,
+ * in-app shortcut areas — not OS widgets).
+ */
+
+const ENTRY_SURFACES: Array<{ surface: MicroAppSurface; label: string; short: string }> = [
+  { surface: "chat_pin", label: "聊天输入框上方快捷条（chat_pin）", short: "聊天栏" },
+  { surface: "desktop_shortcut", label: "桌面端首页快捷区（desktop_shortcut）", short: "桌面快捷" },
+  { surface: "mobile_shortcut", label: "手机端首页快捷区（mobile_shortcut）", short: "手机快捷" },
+];
+
+function hasSurface(app: MicroApp, surface: MicroAppSurface): boolean {
+  return (app.placements || []).some((pl) => pl.surface === surface && pl.enabled);
+}
 
 type Props = {
   open: boolean;
@@ -37,7 +53,8 @@ export function MicroAppsHub({ open, onClose }: Props) {
   const refresh = useMicroAppsStore((s) => s.refresh);
   const [pinningId, setPinningId] = useState<string | null>(null);
   const [confirmPin, setConfirmPin] = useState<MicroApp | null>(null);
-  const [chatPinOnPin, setChatPinOnPin] = useState(false);
+  const [pinSurfaces, setPinSurfaces] = useState<MicroAppSurface[]>([]);
+  const [creatingRoutine, setCreatingRoutine] = useState(false);
   const client = detectClientContext();
 
   useEffect(() => {
@@ -51,10 +68,13 @@ export function MicroAppsHub({ open, onClose }: Props) {
     if (!confirmPin) return;
     setPinningId(confirmPin.id);
     try {
-      await pinMicroApp(confirmPin.id, "user_pin", { chat_pin: chatPinOnPin });
+      await pinMicroApp(confirmPin.id, "user_pin", {
+        chat_pin: pinSurfaces.includes("chat_pin"),
+        surfaces: pinSurfaces.filter((x) => x !== "chat_pin"),
+      });
       toast.success(`已固定「${confirmPin.title}」到我的工具`);
       setConfirmPin(null);
-      setChatPinOnPin(false);
+      setPinSurfaces([]);
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "固定失败");
@@ -63,9 +83,9 @@ export function MicroAppsHub({ open, onClose }: Props) {
     }
   }
 
-  async function toggleChatPin(app: MicroApp, enabled: boolean) {
+  async function toggleSurface(app: MicroApp, surface: MicroAppSurface, enabled: boolean) {
     const others = (app.placements || [])
-      .filter((p) => p.surface !== "chat_pin")
+      .filter((p) => p.surface !== surface)
       .map((p) => ({
         surface: p.surface,
         context_id: p.context_id || "",
@@ -74,14 +94,15 @@ export function MicroAppsHub({ open, onClose }: Props) {
         id: p.id,
       }));
     if (enabled) {
-      others.push({ surface: "chat_pin", context_id: "", sort_rank: 0, enabled: true, id: "" });
+      others.push({ surface, context_id: "", sort_rank: 0, enabled: true, id: "" });
     }
     if (!others.some((p) => p.surface === "hub")) {
       others.unshift({ surface: "hub", context_id: "", sort_rank: 0, enabled: true, id: "" });
     }
     try {
       await putMicroAppPlacements(app.id, others);
-      toast.success(enabled ? "已加入聊天快捷条" : "已从聊天快捷条移除");
+      const short = ENTRY_SURFACES.find((x) => x.surface === surface)?.short || surface;
+      toast.success(enabled ? `已加入${short}` : `已从${short}移除`);
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "更新入口失败");
@@ -100,7 +121,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
   }
 
   function askPin(app: MicroApp) {
-    setChatPinOnPin(false);
+    setPinSurfaces([]);
     setConfirmPin(app);
   }
 
@@ -122,7 +143,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
               我的工具
             </DialogTitle>
             <DialogDescription className="text-xs text-[var(--muted)]">
-              账号级固定入口。未确认不会自动出现在此列表。可挂到聊天栏（chat_pin）。
+              账号级固定入口。未确认不会自动出现在此列表。可挂到聊天栏、桌面/手机首页快捷区。
             </DialogDescription>
           </DialogHeader>
 
@@ -136,6 +157,27 @@ export function MicroAppsHub({ open, onClose }: Props) {
             />
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+              {creatingRoutine ? (
+                <MicroAppRoutineCreateForm
+                  onCancel={() => setCreatingRoutine(false)}
+                  onCreated={(a) => {
+                    setCreatingRoutine(false);
+                    void refresh().then(() => askPin(a));
+                  }}
+                />
+              ) : (
+                <div className="mb-2 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-[var(--muted)]"
+                    onClick={() => setCreatingRoutine(true)}
+                  >
+                    ＋ 例行工具
+                  </Button>
+                </div>
+              )}
               {loading ? (
                 <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--muted)]">
                   <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -168,9 +210,9 @@ export function MicroAppsHub({ open, onClose }: Props) {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-[var(--text)]">
                             {app.title}
-                            {app.kind === "skill" ? (
+                            {app.kind === "skill" || app.kind === "routine" ? (
                               <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">
-                                skill
+                                {app.kind === "routine" ? "例行" : "skill"}
                               </span>
                             ) : null}
                           </span>
@@ -216,16 +258,19 @@ export function MicroAppsHub({ open, onClose }: Props) {
                         </div>
                       ) : app.status === "pinned" ? (
                         <div className="mb-2 space-y-1 px-3">
-                          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-[var(--muted)]">
-                            <input
-                              type="checkbox"
-                              checked={(app.placements || []).some(
-                                (pl) => pl.surface === "chat_pin" && pl.enabled,
-                              )}
-                              onChange={(e) => void toggleChatPin(app, e.target.checked)}
-                            />
-                            聊天栏快捷入口（chat_pin）
-                          </label>
+                          {ENTRY_SURFACES.map(({ surface, label }) => (
+                            <label
+                              key={surface}
+                              className="flex cursor-pointer items-center gap-2 text-[11px] text-[var(--muted)]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={hasSurface(app, surface)}
+                                onChange={(e) => void toggleSurface(app, surface, e.target.checked)}
+                              />
+                              {label}
+                            </label>
+                          ))}
                           {(app.capabilities?.length || 0) > 0 ? (
                             <details>
                               <summary className="cursor-pointer text-[11px] text-[var(--muted)]">
@@ -266,7 +311,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
         onOpenChange={(v) => {
           if (!v) {
             setConfirmPin(null);
-            setChatPinOnPin(false);
+            setPinSurfaces([]);
           }
         }}
       >
@@ -281,16 +326,37 @@ export function MicroAppsHub({ open, onClose }: Props) {
                   （账号{confirmPin.agent_id ? " + 来源 Bot" : ""}）。
                 </span>
               ) : null}
+              {confirmPin?.kind === "routine" ? (
+                <span className="mt-2 block text-xs">
+                  例行型：
+                  {confirmPin.routine_id
+                    ? "固定后绑定已有例行任务。"
+                    : `固定后按配方创建例行任务${
+                        confirmPin.routine_config?.schedule_cron
+                          ? `（${confirmPin.routine_config.schedule_cron} · ${confirmPin.routine_config.timezone || "Asia/Shanghai"}）`
+                          : ""
+                      }，到点自动运行。`}
+                </span>
+              ) : null}
             </DialogDescription>
           </DialogHeader>
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={chatPinOnPin}
-              onChange={(e) => setChatPinOnPin(e.target.checked)}
-            />
-            同时放到聊天输入框上方快捷条（chat_pin）
-          </label>
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-[var(--muted)]">同时放到（应用内入口，非系统小组件）：</div>
+            {ENTRY_SURFACES.map(({ surface, label }) => (
+              <label key={surface} className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={pinSurfaces.includes(surface)}
+                  onChange={(e) =>
+                    setPinSurfaces((cur) =>
+                      e.target.checked ? [...cur.filter((x) => x !== surface), surface] : cur.filter((x) => x !== surface),
+                    )
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setConfirmPin(null)}>
               取消

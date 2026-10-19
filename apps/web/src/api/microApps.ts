@@ -6,6 +6,30 @@ export type MicroAppStatus = "draft" | "pinned" | "archived" | string;
 export type MicroAppSurface = "hub" | "chat_pin" | "desktop_shortcut" | "mobile_shortcut" | string;
 export type MicroAppGrantDecision = "allow_once" | "always_allow" | "deny";
 
+/** In-app shortcut surfaces selectable at pin time (Phase 3; not OS widgets). */
+export const MICRO_APP_SHORTCUT_SURFACES = ["desktop_shortcut", "mobile_shortcut"] as const;
+
+/** kind=routine recipe — materialized into a /v1/routines row on pin (Phase 3). */
+export type MicroAppRoutineTrigger = {
+  source: "slack" | "github" | "http" | string;
+  type: string;
+  keywords?: string[];
+  actions?: string[];
+  repo?: string;
+};
+
+export type MicroAppRoutineConfig = {
+  name?: string;
+  prompt: string;
+  schedule_cron?: string;
+  timezone?: string;
+  agent_id?: string;
+  triggers?: MicroAppRoutineTrigger[];
+  enabled?: boolean;
+  quiet_unchanged?: boolean;
+  max_retries?: number;
+};
+
 /** User-triggered intent required for draft create / pin (never silent). */
 export type MicroAppUserIntent = "save" | "pin_agree" | "user_save" | "user_pin" | "confirm";
 
@@ -27,6 +51,8 @@ export type MicroAppGrant = {
   capability: string;
   machine_id?: string;
   decision: MicroAppGrantDecision | string;
+  /** host.shell.run only: prefixes auto-allowed under always_allow; empty = any. */
+  command_allowlist?: string[];
   expires_at?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -47,6 +73,7 @@ export type MicroApp = {
   entrypoint?: string;
   skill_slug?: string;
   routine_id?: string;
+  routine_config?: MicroAppRoutineConfig | null;
   capabilities: string[];
   source_conversation_id?: string;
   source_message_id?: string;
@@ -68,6 +95,7 @@ export type MicroAppCreateInput = {
   capabilities?: string[];
   skill_slug?: string;
   routine_id?: string;
+  routine_config?: MicroAppRoutineConfig;
   source_conversation_id?: string;
   source_message_id?: string;
   /** Required: save | pin_agree — API rejects silent draft. */
@@ -119,7 +147,7 @@ export async function createMicroApp(input: MicroAppCreateInput): Promise<MicroA
 export async function pinMicroApp(
   id: string,
   userIntent: MicroAppUserIntent = "user_pin",
-  opts?: { chat_pin?: boolean; context_id?: string },
+  opts?: { chat_pin?: boolean; context_id?: string; surfaces?: MicroAppSurface[] },
 ): Promise<MicroApp> {
   const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/pin`, {
     method: "POST",
@@ -128,6 +156,7 @@ export async function pinMicroApp(
       user_intent: userIntent,
       chat_pin: Boolean(opts?.chat_pin),
       context_id: opts?.context_id || "",
+      surfaces: opts?.surfaces || [],
     }),
   });
   if (!res.ok) throw new Error(await readError(res));
@@ -145,7 +174,9 @@ export async function archiveMicroApp(id: string): Promise<MicroApp> {
 
 export async function updateMicroApp(
   id: string,
-  patch: Partial<Pick<MicroApp, "title" | "description" | "icon" | "entrypoint" | "skill_slug" | "routine_id" | "capabilities">>,
+  patch: Partial<Pick<MicroApp, "title" | "description" | "icon" | "entrypoint" | "skill_slug" | "routine_id" | "capabilities">> & {
+    routine_config?: MicroAppRoutineConfig;
+  },
 ): Promise<MicroApp> {
   const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -185,7 +216,13 @@ export async function listMicroAppGrants(
 export async function putMicroAppGrant(
   id: string,
   capability: string,
-  body: { decision: MicroAppGrantDecision; machine_id?: string; expires_at?: string | null },
+  body: {
+    decision: MicroAppGrantDecision;
+    machine_id?: string;
+    expires_at?: string | null;
+    /** host.shell.run: omit to keep, [] to clear (= any command). */
+    command_allowlist?: string[];
+  },
 ): Promise<MicroAppGrant> {
   const res = await fetch(
     `${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/grants/${encodeURIComponent(capability)}`,
@@ -197,6 +234,16 @@ export async function putMicroAppGrant(
   );
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
+}
+
+/** Reset a capability to "ask every time" (deletes the grant row). */
+export async function deleteMicroAppGrant(id: string, capability: string, machineId?: string): Promise<void> {
+  const q = machineId ? `?machine_id=${encodeURIComponent(machineId)}` : "";
+  const res = await fetch(
+    `${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/grants/${encodeURIComponent(capability)}${q}`,
+    { method: "DELETE", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(await readError(res));
 }
 
 export async function createMicroAppSession(id: string): Promise<MicroAppSession> {
@@ -261,6 +308,8 @@ export async function microAppGrantCheck(
   id: string,
   capability: string,
   machineId?: string,
+  /** host.shell.run: evaluated against the grant's command_allowlist. */
+  command?: string,
 ): Promise<{
   capability: string;
   decision: string;
@@ -268,11 +317,15 @@ export async function microAppGrantCheck(
   needs_prompt: boolean;
   high_sensitivity?: boolean;
   grant_id?: string;
+  grant_decision?: string;
+  command_allowlist?: string[];
+  command_allowlisted?: boolean;
+  reason?: string;
 }> {
   const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/rpc/grant-check`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ capability, machine_id: machineId || "" }),
+    body: JSON.stringify({ capability, machine_id: machineId || "", command: command || "" }),
   });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();

@@ -79,19 +79,21 @@ func (s *Server) handleGetMicroApp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateMicroApp(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	var body struct {
-		Title                string   `json:"title"`
-		Description          string   `json:"description"`
-		Icon                 string   `json:"icon"`
-		Kind                 string   `json:"kind"`
-		AgentID              string   `json:"agent_id"`
-		Capabilities         []string `json:"capabilities"`
-		BundleKey            string   `json:"bundle_key"`
-		BundleHash           string   `json:"bundle_hash"`
-		Entrypoint           string   `json:"entrypoint"`
-		SkillSlug            string   `json:"skill_slug"`
-		RoutineID            string   `json:"routine_id"`
-		SourceConversationID string   `json:"source_conversation_id"`
-		SourceMessageID      string   `json:"source_message_id"`
+		Title        string   `json:"title"`
+		Description  string   `json:"description"`
+		Icon         string   `json:"icon"`
+		Kind         string   `json:"kind"`
+		AgentID      string   `json:"agent_id"`
+		Capabilities []string `json:"capabilities"`
+		BundleKey    string   `json:"bundle_key"`
+		BundleHash   string   `json:"bundle_hash"`
+		Entrypoint   string   `json:"entrypoint"`
+		SkillSlug    string   `json:"skill_slug"`
+		RoutineID    string   `json:"routine_id"`
+		// RoutineConfig (Phase 3, kind=routine): fixed schedule/trigger recipe.
+		RoutineConfig        *db.MicroAppRoutineConfig `json:"routine_config"`
+		SourceConversationID string                    `json:"source_conversation_id"`
+		SourceMessageID      string                    `json:"source_message_id"`
 		// UserIntent gates draft creation: save | pin_agree (bot asked + user agreed).
 		UserIntent string `json:"user_intent"`
 	}
@@ -115,6 +117,7 @@ func (s *Server) handleCreateMicroApp(w http.ResponseWriter, r *http.Request) {
 		Entrypoint:           body.Entrypoint,
 		SkillSlug:            body.SkillSlug,
 		RoutineID:            body.RoutineID,
+		RoutineConfig:        body.RoutineConfig,
 		SourceConversationID: body.SourceConversationID,
 		SourceMessageID:      body.SourceMessageID,
 	})
@@ -134,6 +137,8 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 		// ChatPin explicitly mounts surface=chat_pin (hub always written).
 		ChatPin   bool   `json:"chat_pin"`
 		ContextID string `json:"context_id"`
+		// Surfaces (Phase 3): extra in-app entries, e.g. desktop_shortcut / mobile_shortcut.
+		Surfaces []string `json:"surfaces"`
 	}
 	if r.Body != nil && r.ContentLength != 0 {
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -148,6 +153,7 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 	app, err := s.db.PinMicroApp(uid, id, uid, &db.PinMicroAppOptions{
 		ChatPin:   body.ChatPin || r.URL.Query().Get("chat_pin") == "1",
 		ContextID: body.ContextID,
+		Surfaces:  body.Surfaces,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -161,6 +167,9 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 	if app.SkillSlug != "" {
 		extra["skill_slug"] = app.SkillSlug
 	}
+	if app.RoutineID != "" {
+		extra["routine_id"] = app.RoutineID
+	}
 	s.publishMicroAppsChanged(uid, "pinned", app.ID, extra)
 	writeJSON(w, http.StatusOK, app)
 }
@@ -169,26 +178,28 @@ func (s *Server) handlePatchMicroApp(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	id := r.PathValue("id")
 	var body struct {
-		Title        *string   `json:"title"`
-		Description  *string   `json:"description"`
-		Icon         *string   `json:"icon"`
-		Entrypoint   *string   `json:"entrypoint"`
-		SkillSlug    *string   `json:"skill_slug"`
-		RoutineID    *string   `json:"routine_id"`
-		Capabilities *[]string `json:"capabilities"`
+		Title         *string                   `json:"title"`
+		Description   *string                   `json:"description"`
+		Icon          *string                   `json:"icon"`
+		Entrypoint    *string                   `json:"entrypoint"`
+		SkillSlug     *string                   `json:"skill_slug"`
+		RoutineID     *string                   `json:"routine_id"`
+		Capabilities  *[]string                 `json:"capabilities"`
+		RoutineConfig *db.MicroAppRoutineConfig `json:"routine_config"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
 	app, err := s.db.PatchMicroApp(uid, id, db.MicroAppPatchInput{
-		Title:        body.Title,
-		Description:  body.Description,
-		Icon:         body.Icon,
-		Entrypoint:   body.Entrypoint,
-		SkillSlug:    body.SkillSlug,
-		RoutineID:    body.RoutineID,
-		Capabilities: body.Capabilities,
+		Title:         body.Title,
+		Description:   body.Description,
+		Icon:          body.Icon,
+		Entrypoint:    body.Entrypoint,
+		SkillSlug:     body.SkillSlug,
+		RoutineID:     body.RoutineID,
+		Capabilities:  body.Capabilities,
+		RoutineConfig: body.RoutineConfig,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -256,11 +267,14 @@ func (s *Server) handleListMicroAppGrants(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"grants": list,
-		// Phase 0 hint for clients: high-sens defaults.
+		// Hint for clients: high-sens defaults (no row = prompt, suggested allow_once).
 		"defaults": map[string]string{
 			"host.shell.run":      db.MicroAppGrantAllowOnce,
 			"host.clipboard.read": db.MicroAppGrantAllowOnce,
 		},
+		// Phase 3: host.shell.run always_allow honours command_allowlist (prefix match,
+		// compound commands always re-prompt; host Auto-review hard-deny still wins).
+		"shell_allowlist_semantics": "prefix_word_boundary; empty=any; compound=prompt",
 	})
 }
 
@@ -272,12 +286,14 @@ func (s *Server) handlePutMicroAppGrant(w http.ResponseWriter, r *http.Request) 
 		Decision  string     `json:"decision"`
 		MachineID string     `json:"machine_id"`
 		ExpiresAt *time.Time `json:"expires_at"`
+		// CommandAllowlist (host.shell.run): omit to keep, [] to clear.
+		CommandAllowlist *[]string `json:"command_allowlist"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	g, err := s.db.UpsertMicroAppGrant(uid, id, capability, body.MachineID, body.Decision, body.ExpiresAt)
+	g, err := s.db.UpsertMicroAppGrant(uid, id, capability, body.MachineID, body.Decision, body.ExpiresAt, body.CommandAllowlist)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -292,6 +308,24 @@ func (s *Server) handlePutMicroAppGrant(w http.ResponseWriter, r *http.Request) 
 	}
 	s.publishMicroAppsChanged(uid, "grants", id, map[string]any{"capability": capability})
 	writeJSON(w, http.StatusOK, g)
+}
+
+// DELETE /v1/micro-apps/{id}/grants/{capability}?machine_id= — reset to "ask every time".
+func (s *Server) handleDeleteMicroAppGrant(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	capability := r.PathValue("capability")
+	machineID := strings.TrimSpace(r.URL.Query().Get("machine_id"))
+	if err := s.db.DeleteMicroAppGrant(uid, id, capability, machineID); err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "grants", id, map[string]any{"capability": capability})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleMicroAppSession(w http.ResponseWriter, r *http.Request) {
@@ -325,4 +359,3 @@ func (s *Server) handleMicroAppSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetMicroAppBundle / handlePutMicroAppBundle live in micro_app_bundle.go
-

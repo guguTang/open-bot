@@ -21,6 +21,8 @@ import { botIsOnline, usePresenceStore } from "../../stores/presence";
 import { sessionActions } from "../../stores/sessionActions";
 import { useShellStore } from "../../stores/shell";
 import { useMicroAppsStore } from "../../stores/microApps";
+import { MicroAppShortcuts } from "../MicroAppShortcuts";
+import { isCapacitorNative } from "../../lib/microApp/capabilities";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { agentNameMap, channelMemberProfiles, resolveActiveAgent } from "../../lib/app/workspaceDerived";
 import { cn } from "@/lib/utils";
@@ -251,6 +253,9 @@ function AppSidebarInner() {
           </InputGroup>
         </div>
       )}
+
+      {/* Phase 3 in-app shortcut area (not OS widgets): mobile sheet home vs desktop sidebar. */}
+      <MicroAppShortcuts surface={sheetForm || isCapacitorNative() ? "mobile_shortcut" : "desktop_shortcut"} />
 
       <nav className={sidebarListClass(sheetForm)} aria-label="会话列表">
         {agents.length === 0 && channels.length === 0 ? (
