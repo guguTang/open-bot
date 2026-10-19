@@ -2483,8 +2483,28 @@ func microAppGrantRuntimeNote(content string) string {
 	case "":
 		status = "未知"
 	}
-	note := "[微应用授权] capability=" + cap + " 结果=" + status +
-		"。这是系统记录。禁止编造与此相反的批准/拒绝。授权后用户需再说一次才能继续原操作（本回合不自动重试）。"
+	note := "[微应用授权] capability=" + cap + " 结果=" + status
+	if tool := strings.TrimSpace(payload.Tool); tool != "" {
+		note += " tool=" + tool
+	}
+	if cmd := strings.TrimSpace(payload.Command); cmd != "" {
+		note += " command=" + cmd
+	}
+	note += "。这是系统记录。禁止编造与此相反的批准/拒绝。"
+	switch strings.TrimSpace(payload.Status) {
+	case "allowed":
+		note += "用户已授权；请立即重试原工具调用（客户端会自动续跑），勿再索要授权。"
+		if args := strings.TrimSpace(payload.PendingArgs); args != "" {
+			if len(args) > 400 {
+				args = args[:400] + "…"
+			}
+			note += " pending_args=" + args
+		}
+	case "denied":
+		note += "用户已拒绝；停止该操作，勿重试。"
+	default:
+		note += "授权通过后将自动重试原工具；拒绝则停止。"
+	}
 	return note
 }
 

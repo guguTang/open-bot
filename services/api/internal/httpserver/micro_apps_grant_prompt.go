@@ -13,19 +13,23 @@ import (
 // microAppGrantPromptPayload is stored as messages.role = micro_app_grant.
 // Model-path dual-gate surfaces this as a chat approval card (minimal UX).
 type microAppGrantPromptPayload struct {
-	ReqID              string `json:"req_id"`
-	MicroAppID         string `json:"micro_app_id"`
-	Capability         string `json:"capability"`
-	Tool               string `json:"tool,omitempty"`
-	Command            string `json:"command,omitempty"`
-	MachineID          string `json:"machine_id,omitempty"`
-	Reason             string `json:"reason,omitempty"`
-	SuggestedDecision  string `json:"suggested_decision,omitempty"`
-	HighSensitivity    bool   `json:"high_sensitivity,omitempty"`
-	SuggestedPrefix    string `json:"suggested_prefix,omitempty"`
-	Status             string `json:"status"` // pending | allowed | denied
-	Decision           string `json:"decision,omitempty"`
-	AllowlistEntry     string `json:"allowlist_entry,omitempty"`
+	ReqID             string `json:"req_id"`
+	MicroAppID        string `json:"micro_app_id"`
+	Capability        string `json:"capability"`
+	Tool              string `json:"tool,omitempty"`
+	Command           string `json:"command,omitempty"`
+	MachineID         string `json:"machine_id,omitempty"`
+	Reason            string `json:"reason,omitempty"`
+	SuggestedDecision string `json:"suggested_decision,omitempty"`
+	HighSensitivity   bool   `json:"high_sensitivity,omitempty"`
+	SuggestedPrefix   string `json:"suggested_prefix,omitempty"`
+	// PendingArgs / RunRequestID preserve the blocked tool call so allow can auto-retry.
+	PendingArgs    string `json:"pending_args,omitempty"`
+	RunRequestID   string `json:"run_request_id,omitempty"`
+	AutoRetry      bool   `json:"auto_retry,omitempty"` // set true after allow when client/API will resume
+	Status         string `json:"status"`               // pending | allowed | denied
+	Decision       string `json:"decision,omitempty"`
+	AllowlistEntry string `json:"allowlist_entry,omitempty"`
 }
 
 // POST /internal/micro-apps/grant-prompt — runtime surfaces a client approval card.
@@ -44,6 +48,8 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 		SuggestedDecision string `json:"suggested_decision"`
 		HighSensitivity   bool   `json:"high_sensitivity"`
 		ReqID             string `json:"req_id"`
+		PendingArgs       string `json:"pending_args"`
+		RequestID         string `json:"request_id"` // durable run / turn request_id
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -89,7 +95,7 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 	}
 	reason := strings.TrimSpace(body.Reason)
 	if reason == "" {
-		reason = "模型路径需要微应用授权后才能继续（授权后请再说一次）"
+		reason = "模型路径需要微应用授权后才能继续（允许后将自动重试）"
 	}
 	prefix := ""
 	if cap == db.MicroAppShellCapability && cmd != "" {
@@ -120,6 +126,11 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 		}
 	}
 
+	runReqID := strings.TrimSpace(body.RequestID)
+	pendingArgs := strings.TrimSpace(body.PendingArgs)
+	if len(pendingArgs) > 4000 {
+		pendingArgs = pendingArgs[:4000] + "…"
+	}
 	payload := microAppGrantPromptPayload{
 		ReqID:             reqID,
 		MicroAppID:        appID,
@@ -131,6 +142,8 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 		SuggestedDecision: suggested,
 		HighSensitivity:   highSens,
 		SuggestedPrefix:   prefix,
+		PendingArgs:       pendingArgs,
+		RunRequestID:      runReqID,
 		Status:            "pending",
 	}
 	raw, err := json.Marshal(payload)
@@ -138,7 +151,9 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	msg, err := s.db.AddMessage(convID, "micro_app_grant", string(raw))
+	msg, err := s.db.AddMessageWithOpts(convID, "micro_app_grant", string(raw), db.AddMessageOpts{
+		RequestID: runReqID,
+	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -248,6 +263,8 @@ func (s *Server) handleDecideMicroAppGrantPrompt(w http.ResponseWriter, r *http.
 	payload.Status = status
 	payload.Decision = decision
 	payload.AllowlistEntry = entry
+	// Signal clients/history that allow should auto-retry the pending host_* call.
+	payload.AutoRetry = decision != db.MicroAppGrantDeny && (strings.TrimSpace(payload.Tool) != "" || strings.TrimSpace(payload.Command) != "")
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -290,4 +307,3 @@ func (s *Server) recordMicroAppGateAudit(userID, microAppID, conversationID, too
 	}
 	_ = s.db.InsertMicroAppGateAudit(userID, microAppID, conversationID, tool, capability, allowed, errorCode, decision, machineID, meta)
 }
-

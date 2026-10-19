@@ -10,7 +10,7 @@ export type MicroAppGrantCardDecision = {
 
 /**
  * Chat-inline approval card for model-path grant_required (Phase 6 gap-close).
- * Writes MicroApp Grant via decide API; does not auto-retry the tool turn.
+ * Writes MicroApp Grant via decide API; allow_once/always_allow triggers auto-retry.
  */
 export function MicroAppGrantConfirmCard({
   item,
@@ -56,10 +56,10 @@ export function MicroAppGrantConfirmCard({
       {item.reason ? <div className="host-confirm-reason">{item.reason}</div> : null}
       {item.high_sensitivity ? (
         <div className="host-confirm-reason host-confirm-risk-hint">
-          高敏感能力：默认「仅一次」。授权后请再说一次让助手继续（本回合不自动重试）。
+          高敏感能力：默认「仅一次」。允许后将自动重试原工具调用；拒绝则停止。
         </div>
       ) : (
-        <div className="host-confirm-reason">授权后请再说一次让助手继续（本回合不自动重试）。</div>
+        <div className="host-confirm-reason">允许后将自动重试原工具调用；拒绝则停止。</div>
       )}
       {isShell && item.command ? (
         <pre className="host-confirm-preview">{item.command}</pre>

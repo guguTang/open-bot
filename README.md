@@ -10,7 +10,7 @@
 - **存储**：PostgreSQL（用户 / LLM 连接 / 会话消息 / 助手人设）
 - **协议**：MCP Client（stdio/sse/http）；技能格式 [Agent Skills](https://agentskills.io)
 
-详情见 [docs/技术方案.md](docs/技术方案.md)、[docs/目录说明.md](docs/目录说明.md)。微应用（Phase 0–6）见 [docs/micro-app-architecture-v1.md](docs/micro-app-architecture-v1.md)。
+详情见 [docs/技术方案.md](docs/技术方案.md)、[docs/目录说明.md](docs/目录说明.md)。微应用（Phase 0–6 + 授权后续跑）见 [docs/micro-app-architecture-v1.md](docs/micro-app-architecture-v1.md)。
 
 ## E2E 测试
 

@@ -142,6 +142,19 @@ def check_tool_gate(
     return obapi._post("/internal/micro-apps/tool-gate", payload, timeout=15.0)
 
 
+def _compact_pending_args(args: dict[str, Any] | None) -> str:
+    """Serialize tool args for grant-card resume (cap size)."""
+    if not isinstance(args, dict) or not args:
+        return ""
+    try:
+        raw = json.dumps(args, ensure_ascii=False, default=str)
+    except Exception:  # noqa: BLE001
+        return ""
+    if len(raw) > 2000:
+        return raw[:2000] + "…"
+    return raw
+
+
 def surface_grant_prompt(
     *,
     user_id: str,
@@ -154,8 +167,13 @@ def surface_grant_prompt(
     reason: str = "",
     suggested_decision: str = "",
     high_sensitivity: bool = False,
+    pending_args: str = "",
+    request_id: str = "",
 ) -> None:
-    """Best-effort: insert a micro_app_grant chat card for the client approval UX."""
+    """Best-effort: insert a micro_app_grant chat card for the client approval UX.
+
+    Stores pending tool/args/request_id so allow_once|always_allow can auto-retry.
+    """
     conv = (conversation_id or "").strip()
     if not conv or not (user_id or "").strip() or not (micro_app_id or "").strip():
         return
@@ -173,9 +191,11 @@ def surface_grant_prompt(
                 "command": command or "",
                 "machine_id": machine_id or "",
                 "reason": reason
-                or "模型路径需要微应用授权。授权后请再说一次以继续（本回合不自动重试）。",
+                or "模型路径需要微应用授权。允许后将自动重试原工具调用。",
                 "suggested_decision": suggested_decision or "",
                 "high_sensitivity": bool(high_sensitivity),
+                "pending_args": pending_args or "",
+                "request_id": request_id or "",
             },
             timeout=10.0,
         )
@@ -324,6 +344,7 @@ def enforce_dual_gate_with_grant(
     args: dict[str, Any] | None,
     client: ClientContext | None,
     conversation_id: str = "",
+    request_id: str = "",
 ) -> tuple[str | None, str]:
     """Like enforce_dual_gate but also returns grant_id when allowed (for allow_once)."""
     mid = (micro_app_id or "").strip()
@@ -405,6 +426,8 @@ def enforce_dual_gate_with_grant(
             reason=reason,
             suggested_decision=str(result.get("suggested_decision") or ""),
             high_sensitivity=bool(result.get("high_sensitivity")),
+            pending_args=_compact_pending_args(args),
+            request_id=str(request_id or "").strip(),
         )
 
     return (

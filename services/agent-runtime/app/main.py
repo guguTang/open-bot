@@ -1282,6 +1282,11 @@ async def openai_path(
             if _ma_id:
                 from . import micro_app_gate as micro_gate
 
+                _rid = ""
+                if turn is not None:
+                    _rid = str(getattr(turn, "request_id", "") or "").strip()
+                if not _rid:
+                    _rid = str(durable_run_id or "").strip()
                 _reject, _ma_grant_id = micro_gate.enforce_dual_gate_with_grant(
                     user_id=str(user_id or ""),
                     micro_app_id=_ma_id,
@@ -1289,6 +1294,7 @@ async def openai_path(
                     args=args,
                     client=client,
                     conversation_id=str(conversation_id or ""),
+                    request_id=_rid,
                 )
                 if _reject:
                     return _reject

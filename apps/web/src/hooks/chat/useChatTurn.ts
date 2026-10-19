@@ -19,7 +19,7 @@ import { useConversationRuns } from "./useConversationRuns";
 export type SendUserTextFn = (
   rawContent: string,
   filesToSend?: PendingFile[],
-  opts?: { onboarding?: boolean },
+  opts?: { onboarding?: boolean; microAppId?: string },
 ) => Promise<void>;
 
 export type ChatTurnRunsParams = {

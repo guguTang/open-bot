@@ -147,7 +147,8 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 		return
 	}
 	if decision == "" {
-		// Model path: client shows micro_app_grant card (via grant-prompt); still returns grant_required to the model.
+		// Model path: client shows micro_app_grant card (via grant-prompt); still returns grant_required
+		// to the model. After allow, client auto-retries with micro_app_id (new turn).
 		out["allowed"] = false
 		out["error_code"] = "grant_required"
 		out["error"] = "grant_required"
