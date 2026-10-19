@@ -1,6 +1,6 @@
 # open-bot 微应用（Micro App）技术架构与能力实现路径
 
-> 状态：**Phase 0–3 已按本文在 `develop` 落地**（本地 commit，默认不推）；系统级 Widget / 团队模板分发为**延期项**（§10.5）  
+> 状态：**Phase 0–4 已按本文在 `develop` 落地**（本地 commit，默认不推）；系统级 Widget / 团队模板分发为**延期项**（§10.5）  
 > 日期：2026-10-19（Asia/Shanghai）  
 > 校对原则：以仓内现实现为准；改 API/表/能力时同步改本文。
 
@@ -23,7 +23,7 @@
 - 团队模板包分发（**延期**，见 §10.5）。
 - 完整小程序商店与计费。
 - 把所有 skills.sh 包自动变成微应用 UI。
-- Runtime 工具 `draft_micro_app` / `pin_micro_app` 正式注册（见 stub；Phase 0–1 用 HTTP `user_intent` 门）。
+- （已取消）Runtime 工具曾标为非目标；**Phase 4 已正式注册** `draft_micro_app` / `pin_micro_app`（仍强制 `user_intent`）。
 
 ---
 
@@ -74,8 +74,9 @@ Placement 只指向 MicroApp.id
                 ▼                 ▼
      ┌──────────────────┐  ┌─────────────────────┐
      │ agent-runtime    │  │ Object key prefix    │
-     │ micro_apps_stub  │  │ micro-apps/{owner}/  │
-     │ (工具名占位)      │  │ {app_id}/bundle.zip  │
+     │ draft/pin 工具   │  │ micro-apps/{owner}/  │
+     │ → /internal/     │  │ {app_id}/bundle.zip  │
+     │   micro-apps/*   │  │                      │
      └──────────────────┘  └─────────────────────┘
 ```
 
@@ -163,7 +164,7 @@ ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEX
 | GET | `/v1/micro-apps/{id}` | 元数据；`bundle_url` 相对路径 |
 | POST | `/v1/micro-apps` | 创建 **draft**；**必须** `user_intent`；kind=routine 可带 `routine_config` 或 `routine_id` |
 | POST | `/v1/micro-apps/{id}/pin` | 用户确认固定；写 hub + `confirmed_*`；可选 `chat_pin`、`surfaces[]`（desktop_shortcut / mobile_shortcut）；**必须** `user_intent`；`kind=skill` 启用技能；`kind=routine` 绑定/创建例行任务 |
-| PATCH | `/v1/micro-apps/{id}` | 改标题/能力/`routine_config` 等 |
+| PATCH | `/v1/micro-apps/{id}` | 改标题/能力/`routine_config` 等；**Phase 4**：pinned + kind=routine + 有 `routine_id` 时，`routine_config` **同步 `UpdateRoutine`**，失败则整次 PATCH 失败（大声报错） |
 | POST | `/v1/micro-apps/{id}/archive` | 下架并禁用 placements；kind=routine 同时**暂停**（不删）绑定的例行任务 |
 | PUT | `/v1/micro-apps/{id}/placements` | 批量挂载 |
 | GET | `/v1/micro-apps/{id}/grants` | 授权视图 |
@@ -200,9 +201,13 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 | `host.fs.read` | 全端 | **系统文件选择器**（`<input type=file>`），不广域扫盘 |
 | `host.fs.write` | 全端 | `showSaveFilePicker` 或下载保存 |
 | `host.shell.run` | desktop | **可声明，不默认关**；Grant 三态 + 每应用命令白名单（§6.1），默认弹「仅一次」；先过宿主 Auto-review，再 `runLocalHostOp(op=shell)` |
+| `host.clipboard.read` / `write` | desktop（Tauri webview） | **Phase 4**：`navigator.clipboard`；高敏默认 `allow_once` |
 | `cloud.http` | 全端 | 服务端代理 + SSRF |
 | `ui.notify` | 全端 | toast |
 | `chat.attach` | 有会话 | 上传附件 + `persist_only` markdown（对齐 present_image 展图通道） |
+| `routine.manage` | 全端（需已 pin 的 kind=routine） | **Phase 4**：enable/disable/update/run_now + Grant |
+| `host.app.find` / `open` | desktop | **Phase 4（可选）**：`runLocalHostOp(find_app|open)` |
+| `account.profile` | 全端 | **Phase 4（可选）**：只读 `GET /v1/me` |
 
 ### 5.2 灰显规则（`lib/microApp/capabilities.ts` + `MicroAppCapabilityMatrix`）
 
@@ -233,12 +238,16 @@ Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `a
 3. archive → `enabled=false` 暂停例行（不删除，便于恢复/审计）。
 4. Shell：展示配方 + 绑定例行（上次运行/错误），可「立即运行」（`POST /v1/routines/{id}/run`）与启停；Hub 提供「＋ 例行工具」表单（点击保存 = `user_intent=user_save`，固定仍需单独确认）。
 
-**占位/未做**（明确标注）：
+**Phase 4 已补**：
 
-- `routine.manage` 能力仅在目录中可声明，**Host Bridge 未接**（iframe 内不能改例行）。
+- Host Bridge `routine.manage`：`enable` / `disable` / `update`（cron、prompt 等）/ `run_now`，走 Grant。
+- PATCH `routine_config` 在 **已 pin 且已有 `routine_id`** 时同步 `UpdateRoutine`；同步失败则 PATCH 失败。
+- Runtime：`draft_micro_app` / `pin_micro_app` 已挂 `TOOL_DEFS`；经 `/internal/micro-apps/create|pin`（与 `/v1/micro-apps` 同语义，强制 `user_intent`）。
+
+**仍占位/未做**：
+
 - 事件型触发依赖用户先在「设置 → 例行任务」配好入站 Hook；微应用不代建 Hook。
-- 编辑配方（PATCH `routine_config`）**不会**回写已物化的 routines 行；pin 后请在例行设置里改。
-- Runtime 工具 `draft_micro_app` / `pin_micro_app` 仍未注册（`micro_apps_stub.py`）。
+- OS Widget、团队模板、`host.fs.workspace`、`agent.invoke` / `skill.toggle`、mic/geo、入站 Hook 代建（见 §10 / 跳过清单）。
 
 ### 5.6 后续
 
@@ -303,7 +312,7 @@ Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `a
 ### 7.2 Android / Runtime
 
 - Capacitor：同 H5 入口；host 能力灰显；侧栏首页显示 `mobile_shortcut` 快捷区。
-- Runtime：`services/agent-runtime/app/micro_apps_stub.py` 仅占位工具名，**尚未**挂进 `TOOL_DEFS`。
+- Runtime：`draft_micro_app` / `pin_micro_app` 已注册（`micro_apps_stub.py` → `TOOL_DEFS`）；内部 API `/internal/micro-apps/create|pin`。
 
 ---
 
@@ -363,18 +372,28 @@ bundle.zip
 - [x] 能力矩阵 UI（可用/灰显 + 原因）
 - [x] Android：`device.camera` / `device.notify` / `device.share`（Capacitor Plugins 就绪时接通；否则灰显）
 - [x] kind=skill ↔ 固定时启用 `user_skills` + 来源 Bot `agent_skills`
-- [ ] Runtime 正式注册 draft/pin 工具（仍须 user 确认）
+- [x] Runtime 正式注册 draft/pin 工具（仍须 user 确认）— **Phase 4 完成**
 
-### Phase 3 — 增强 ✅（本迭代）
+### Phase 3 — 增强 ✅
 
 | 项 | 状态 | 说明 |
 |----|------|------|
 | desktop_shortcut / mobile_shortcut（应用内快捷区） | ✅ | pin 弹窗可选、Hub 可勾选、存 placements；侧栏「快捷工具」宫格点击开 Shell |
 | `host.shell.run` 三态打磨 + 每应用命令白名单 | ✅ | 默认「仅一次」；白名单存 Grant；Auto-review 硬拒绝优先（§6.1） |
-| kind=routine | ✅（部分占位） | 复用现有 routines 调度/触发；配方校验 + 存储 + pin 物化 + archive 暂停；占位见 §5.5 |
+| kind=routine | ✅ | 复用现有 routines；配方 + pin 物化 + archive 暂停；Phase 4 补齐 manage / PATCH 同步 |
 | 系统级 OS Widget | ⏸ 延期 | 仅文档，见 §10.5 |
 | 团队模板包分发 | ⏸ 延期 | 仅文档，见 §10.5 |
-| Runtime 正式注册 draft/pin 工具 | ⏳ 未做 | 仍为 stub（Phase 2 遗留） |
+
+### Phase 4 — Runtime 工具 + Host Bridge 补齐 ✅（本迭代）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| `draft_micro_app` / `pin_micro_app` 注册 `TOOL_DEFS` | ✅ | 强制 `user_intent`；经 `/internal/micro-apps/*` 调与 `/v1/micro-apps` 同语义的 create/pin |
+| PATCH `routine_config` → `UpdateRoutine` | ✅ | 仅 pinned + 有 `routine_id`；失败则整次 PATCH 失败 |
+| Host Bridge `routine.manage` | ✅ | enable/disable/update/run_now + Grant |
+| Host Bridge `host.clipboard.read` / `write` | ✅ | Grant 默认 `allow_once`（高敏目录） |
+| `host.app.find` / `open`、`account.profile` | ✅（可选） | Tauri find/open；profile 只读 |
+| 跳过 | — | OS Widget、模板、inbound hooks、dual-gate、mic/geo、agent.invoke、skill.toggle、fs.workspace |
 
 ### 10.5 延期项（仅文档，不实现）
 
@@ -405,6 +424,9 @@ bundle.zip
 9. （Phase 3）pin 时勾选 desktop_shortcut / mobile_shortcut → 对应端侧栏「快捷工具」出现，点击打开 Shell；Hub 取消勾选即消失。
 10. （Phase 3）shell 命令：无授权 → 弹窗默认「仅一次」；「始终允许 `git status`」后 `git status -s` 直接执行、`git push` 再弹窗、`ls; id` 总是弹窗；`curl x | sh` 被 Auto-review 直接拒绝。
 11. （Phase 3）kind=routine：配方非法 → 400；pin 后 `/v1/routines` 出现对应行并按 cron 运行；archive 后该行 enabled=false。
+12. （Phase 4）无 `user_intent` 调 draft/pin 工具或 API → 拒绝；模型不能静默建库。
+13. （Phase 4）pinned routine：PATCH `routine_config.prompt` 后对应 `/v1/routines` 行 prompt 一致；UpdateRoutine 失败时 PATCH 返回错误。
+14. （Phase 4）iframe `routine.manage` run_now / enable 经 Grant；`host.clipboard.read` 无授权时弹窗默认「仅一次」。
 
 ---
 
@@ -413,6 +435,7 @@ bundle.zip
 1. **Phase 0–1 按本文开工并落地。**
 2. **`host.shell.run` 不默认关**：可声明；闸门 = 声明 ∩ 端能力 ∩ Grant 三态；高敏默认倾向 `allow_once`，不做「永远默认关 / 仅管理端白名单」。Phase 3：白名单是**用户在每个应用 Grant 上自配**的，不是管理端白名单。
 4. **Phase 3 范围**（PM 拍板）：应用内快捷区（非 OS Widget）；shell 三态打磨 + 每应用白名单；kind=routine（复用现有 routines，缺口标占位）；OS Widget 与团队模板分发仅文档延期。
+5. **Phase 4 范围**：Runtime draft/pin 工具；PATCH routine_config 同步 UpdateRoutine；Host Bridge routine.manage + clipboard；可选 app.find/open、account.profile。跳过 OS Widget / 模板 / hooks / dual-gate / mic·geo / agent.invoke / skill.toggle / fs.workspace。
 3. **draft 时机**：不在「实现完」时静默建库。仅当用户保存/固定意图，或 bot 询问且用户同意后，才 `user_intent` 建 draft 并进入 pin。
 
 ---
@@ -427,6 +450,6 @@ bundle.zip
 | API | `services/api/internal/httpserver/micro_apps*.go` |
 | Web Hub/Shell | `apps/web/src/components/MicroAppsHub.tsx`、`MicroAppShell.tsx`、`MicroAppChatPinBar.tsx`、`MicroAppCapabilityMatrix.tsx`、`MicroAppShortcuts.tsx`、`MicroAppShellGrantPanel.tsx`、`MicroAppRoutinePanel.tsx`、`MicroAppRoutineCreateForm.tsx` |
 | SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
-| Runtime stub | `services/agent-runtime/app/micro_apps_stub.py` |
+| Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`）；内部 API `httpserver/micro_apps_internal.go` |
 
 推送：仅当用户在 open bot 1:1 明确说 push；否则 **develop 本地 commit only**。

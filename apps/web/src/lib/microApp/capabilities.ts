@@ -145,12 +145,18 @@ export function capabilityMatrix(
 
 export const CAPABILITY_LABELS: Record<string, string> = {
   "host.screenshot": "截屏",
+  "host.clipboard.read": "读取剪贴板",
+  "host.clipboard.write": "写入剪贴板",
   "host.fs.read": "读取所选文件",
   "host.fs.write": "保存到所选位置",
+  "host.app.find": "查找本机应用",
+  "host.app.open": "打开本机应用",
   "host.shell.run": "本机命令",
   "cloud.http": "云端 HTTP",
   "ui.notify": "应用内通知",
   "chat.attach": "发到会话",
+  "account.profile": "账号资料（只读）",
+  "routine.manage": "管理例行任务",
   "device.camera": "相机",
   "device.notify": "系统通知",
   "device.share": "系统分享",

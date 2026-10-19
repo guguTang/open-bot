@@ -145,6 +145,64 @@ func (d *DB) syncRoutineOnPin(userID string, app *MicroApp) (string, error) {
 	return rt.ID, nil
 }
 
+
+// syncPinnedRoutineFromConfig pushes recipe fields into the bound routines row when a
+// pinned kind=routine app is PATCHed with routine_config. Fails loudly (no silent skip)
+// if UpdateRoutine errors — callers must not pretend the recipe and scheduler agree.
+func (d *DB) syncPinnedRoutineFromConfig(userID string, app *MicroApp, cfg *MicroAppRoutineConfig) error {
+	if app == nil || cfg == nil {
+		return nil
+	}
+	if NormalizeMicroAppKind(app.Kind) != MicroAppKindRoutine {
+		return nil
+	}
+	if app.Status != MicroAppStatusPinned {
+		return nil
+	}
+	rid := strings.TrimSpace(app.RoutineID)
+	if rid == "" {
+		return nil
+	}
+	if err := ValidateMicroAppRoutineConfig(cfg); err != nil {
+		return err
+	}
+	name := strings.TrimSpace(cfg.Name)
+	if name == "" {
+		name = strings.TrimSpace(app.Title)
+	}
+	agentID := strings.TrimSpace(cfg.AgentID)
+	if agentID == "" {
+		agentID = strings.TrimSpace(app.AgentID)
+	}
+	triggersJSON, err := EncodeTriggersJSON(cfg.Triggers)
+	if err != nil {
+		return fmt.Errorf("sync UpdateRoutine: encode triggers: %w", err)
+	}
+	upd := RoutineUpdate{
+		Prompt:         &cfg.Prompt,
+		ScheduleCron:   &cfg.ScheduleCron,
+		Timezone:       &cfg.Timezone,
+		TriggersJSON:   &triggersJSON,
+		QuietUnchanged: &cfg.QuietUnchanged,
+	}
+	if name != "" {
+		upd.Name = &name
+	}
+	if agentID != "" {
+		upd.AgentID = &agentID
+	}
+	if cfg.Enabled != nil {
+		upd.Enabled = cfg.Enabled
+	}
+	if cfg.MaxRetries != nil {
+		upd.MaxRetries = cfg.MaxRetries
+	}
+	if _, err := d.UpdateRoutine(userID, rid, upd); err != nil {
+		return fmt.Errorf("sync UpdateRoutine for micro-app %s routine %s: %w", app.ID, rid, err)
+	}
+	return nil
+}
+
 // pauseRoutineOnArchive disables (never deletes) the bound routine when a routine app is archived.
 func (d *DB) pauseRoutineOnArchive(userID string, app *MicroApp) {
 	if app == nil || NormalizeMicroAppKind(app.Kind) != MicroAppKindRoutine {

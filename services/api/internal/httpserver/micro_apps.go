@@ -269,8 +269,9 @@ func (s *Server) handleListMicroAppGrants(w http.ResponseWriter, r *http.Request
 		"grants": list,
 		// Hint for clients: high-sens defaults (no row = prompt, suggested allow_once).
 		"defaults": map[string]string{
-			"host.shell.run":      db.MicroAppGrantAllowOnce,
-			"host.clipboard.read": db.MicroAppGrantAllowOnce,
+			"host.shell.run":       db.MicroAppGrantAllowOnce,
+			"host.clipboard.read":  db.MicroAppGrantAllowOnce,
+			"host.clipboard.write": db.MicroAppGrantAllowOnce,
 		},
 		// Phase 3: host.shell.run always_allow honours command_allowlist (prefix match,
 		// compound commands always re-prompt; host Auto-review hard-deny still wins).

@@ -61,10 +61,11 @@ var MicroAppKnownCapabilities = map[string]struct{}{
 
 // High-sensitivity capabilities: default Grant decision suggestion is allow_once.
 var MicroAppHighSensitivityCapabilities = map[string]struct{}{
-	"host.clipboard.read": {},
-	"host.shell.run":      {},
-	"device.contacts":     {},
-	"device.mic":          {},
+	"host.clipboard.read":  {},
+	"host.clipboard.write": {},
+	"host.shell.run":       {},
+	"device.contacts":      {},
+	"device.mic":           {},
 }
 
 type MicroApp struct {
@@ -547,6 +548,14 @@ func (d *DB) PatchMicroApp(userID, id string, in MicroAppPatchInput) (*MicroApp,
 			return nil, errors.New("routine_config only allowed for kind=routine")
 		}
 		if err := ValidateMicroAppRoutineConfig(in.RoutineConfig); err != nil {
+			return nil, err
+		}
+		// Phase 4: pinned routine apps keep routines row in sync; fail before saving if sync fails.
+		effective := *cur
+		effective.Title = title
+		effective.RoutineID = routineID
+		effective.AgentID = cur.AgentID
+		if err := d.syncPinnedRoutineFromConfig(userID, &effective, in.RoutineConfig); err != nil {
 			return nil, err
 		}
 		routineCfg = in.RoutineConfig

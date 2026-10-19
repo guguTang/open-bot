@@ -6,6 +6,10 @@ import {
   putMicroAppGrant,
   uploadConversationAttachment,
   persistConversationMessage,
+  getMicroApp,
+  updateRoutine,
+  runRoutine,
+  fetchMe,
   type MicroAppGrantDecision,
 } from "../../api";
 import { reviewLocalHostOp, runLocalHostOp } from "../hostExecSession";
@@ -291,6 +295,83 @@ async function executeCapability(
       // Align with present_image: persist a user-visible message with attachment markdown.
       const msg = await persistConversationMessage(convId, md);
       return { ok: true, attachment: meta, message: msg, markdown: md };
+    }
+    case "host.clipboard.read": {
+      if (!navigator.clipboard?.readText) throw new Error("剪贴板读取不可用");
+      const text = await navigator.clipboard.readText();
+      return { text };
+    }
+    case "host.clipboard.write": {
+      if (!navigator.clipboard?.writeText) throw new Error("剪贴板写入不可用");
+      const text = String(params.text ?? params.content ?? "");
+      await navigator.clipboard.writeText(text);
+      return { ok: true, bytes: text.length };
+    }
+    case "host.app.find": {
+      const name = String(params.name || params.query || "").trim();
+      if (!name) throw new Error("name required");
+      const result = await runLocalHostOp({
+        type: "exec",
+        req_id: `micro-find-${Date.now()}`,
+        op: "find_app",
+        path: name,
+        preconfirmed: true,
+      });
+      if (result.ok === false) throw new Error(String(result.error || "find_app failed"));
+      return result;
+    }
+    case "host.app.open": {
+      const name = String(params.name || params.path || "").trim();
+      if (!name) throw new Error("name required");
+      const result = await runLocalHostOp({
+        type: "exec",
+        req_id: `micro-open-${Date.now()}`,
+        op: "open",
+        path: name,
+        preconfirmed: true,
+      });
+      if (result.ok === false) throw new Error(String(result.error || "open failed"));
+      return result;
+    }
+    case "account.profile": {
+      const me = await fetchMe();
+      return {
+        id: me.id,
+        username: me.username,
+        email: me.email || "",
+        org_id: me.org_id || "",
+        role: me.role || "",
+      };
+    }
+    case "routine.manage": {
+      const app = await getMicroApp(ctx.microAppId);
+      const rid = String(app.routine_id || "").trim();
+      if (!rid) throw new Error("该微应用未绑定例行任务（需 kind=routine 且已 pin）");
+      const action = String(params.action || "").trim().toLowerCase();
+      if (action === "enable" || action === "disable") {
+        const enabled = action === "enable" ? true : action === "disable" ? false : Boolean(params.enabled);
+        const rt = await updateRoutine(rid, { enabled });
+        return { ok: true, action, routine: rt };
+      }
+      if (action === "update") {
+        const patch: Parameters<typeof updateRoutine>[1] = {};
+        if (params.prompt != null) patch.prompt = String(params.prompt);
+        if (params.schedule_cron != null) patch.schedule_cron = String(params.schedule_cron);
+        if (params.timezone != null) patch.timezone = String(params.timezone);
+        if (params.name != null) patch.name = String(params.name);
+        if (params.enabled != null) patch.enabled = Boolean(params.enabled);
+        if (params.max_retries != null) patch.max_retries = Number(params.max_retries);
+        if (params.quiet_unchanged != null) patch.quiet_unchanged = Boolean(params.quiet_unchanged);
+        if (params.triggers != null) patch.triggers = params.triggers as never;
+        if (Object.keys(patch).length === 0) throw new Error("update 需要 prompt / schedule_cron / timezone 等字段");
+        const rt = await updateRoutine(rid, patch);
+        return { ok: true, action: "update", routine: rt };
+      }
+      if (action === "run_now" || action === "run") {
+        const res = await runRoutine(rid);
+        return { ok: true, action: "run_now", ...res };
+      }
+      throw new Error("routine.manage action 须为 enable|disable|update|run_now");
     }
     default:
       throw new Error(`unsupported capability: ${capability}`);

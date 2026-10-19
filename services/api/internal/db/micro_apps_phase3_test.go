@@ -91,3 +91,23 @@ func TestGrantDecisionAllowAlwaysAlias(t *testing.T) {
 		t.Fatalf("got %q %v", d, err)
 	}
 }
+
+func TestSyncPinnedRoutineFromConfigNoop(t *testing.T) {
+	d := &DB{}
+	if err := d.syncPinnedRoutineFromConfig("u", nil, &MicroAppRoutineConfig{Prompt: "x", ScheduleCron: "0 9 * * *", Timezone: "Asia/Shanghai"}); err != nil {
+		t.Fatal(err)
+	}
+	draft := &MicroApp{Kind: MicroAppKindRoutine, Status: MicroAppStatusDraft, RoutineID: "r1"}
+	cfg := &MicroAppRoutineConfig{Prompt: "hi", ScheduleCron: "0 9 * * *", Timezone: "Asia/Shanghai"}
+	if err := d.syncPinnedRoutineFromConfig("u", draft, cfg); err != nil {
+		t.Fatal("draft should skip sync:", err)
+	}
+	ui := &MicroApp{Kind: MicroAppKindUI, Status: MicroAppStatusPinned, RoutineID: "r1"}
+	if err := d.syncPinnedRoutineFromConfig("u", ui, cfg); err != nil {
+		t.Fatal("non-routine should skip:", err)
+	}
+	pinnedNoRID := &MicroApp{Kind: MicroAppKindRoutine, Status: MicroAppStatusPinned}
+	if err := d.syncPinnedRoutineFromConfig("u", pinnedNoRID, cfg); err != nil {
+		t.Fatal("pinned without routine_id should skip:", err)
+	}
+}

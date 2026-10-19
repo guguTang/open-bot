@@ -333,6 +333,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/routines/create", s.requireInternal(s.handleInternalCreateRoutine))
 	mux.HandleFunc("POST /internal/routines/update", s.requireInternal(s.handleInternalUpdateRoutine))
 	mux.HandleFunc("POST /internal/routines/delete", s.requireInternal(s.handleInternalDeleteRoutine))
+	mux.HandleFunc("POST /internal/micro-apps/create", s.requireInternal(s.handleInternalCreateMicroApp))
+	mux.HandleFunc("POST /internal/micro-apps/pin", s.requireInternal(s.handleInternalPinMicroApp))
 	mux.HandleFunc("POST /internal/agents/clone", s.requireInternal(s.handleInternalCloneAgent))
 	mux.HandleFunc("POST /internal/agents/ask", s.requireInternal(s.handleInternalAskAgent))
 

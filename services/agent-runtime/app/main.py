@@ -1465,6 +1465,31 @@ async def openai_path(
                 return json.dumps(obapi.create_routine(str(user_id or ""), **fields), ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "draft_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args = dict(args or {})
+                if not args.get("source_conversation_id") and conversation_id:
+                    args["source_conversation_id"] = str(conversation_id)
+                if not args.get("agent_id") and agent_id:
+                    args["agent_id"] = str(agent_id)
+                return json.dumps(
+                    micro_apps.draft_micro_app(str(user_id or ""), args),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "pin_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                return json.dumps(
+                    micro_apps.pin_micro_app(str(user_id or ""), dict(args or {})),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name in ("update_routine", "pause_routine", "resume_routine"):
             from . import openbot_api as obapi
 
