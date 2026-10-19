@@ -266,5 +266,13 @@ export {
   putMicroAppGrant,
   createMicroAppSession,
   fetchMicroAppBundle,
+  type MicroAppRuntimeFile,
+  type MicroAppRuntime,
+  uploadMicroAppBundle,
+  downloadMicroAppBundle,
+  fetchMicroAppRuntime,
+  microAppGrantCheck,
+  microAppGrantConsume,
+  microAppCloudHTTP,
 } from "./api/microApps";
 

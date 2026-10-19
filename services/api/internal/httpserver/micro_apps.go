@@ -12,9 +12,9 @@ import (
 	"github.com/tangxin/open-bot/services/api/internal/db"
 )
 
-// Phase 0 micro-apps API under /v1/micro-apps.
+// Micro-apps API under /v1/micro-apps.
 // Pin/draft require explicit user confirm intent — never silent.
-// Phase 1 iframe/SDK/host bridge: stubs only (see handleMicroAppBundle / session comments).
+// Phase 1: MinIO bundle + runtime pack; iframe SDK lives in apps/web.
 
 func (s *Server) publishMicroAppsChanged(userID, reason, appID string, extra map[string]any) {
 	if s.events == nil || strings.TrimSpace(userID) == "" {
@@ -70,8 +70,7 @@ func (s *Server) handleGetMicroApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	// Phase 0: no signed MinIO URL yet; expose object key + relative bundle route for Phase 1.
-	if app.BundleKey != "" {
+		if app.BundleKey != "" {
 		app.BundleURL = "/v1/micro-apps/" + app.ID + "/bundle"
 	}
 	writeJSON(w, http.StatusOK, app)
@@ -311,28 +310,9 @@ func (s *Server) handleMicroAppSession(w http.ResponseWriter, r *http.Request) {
 		"micro_app_id": app.ID,
 		"token":        token,
 		"expires_at":   expires.Format(time.RFC3339Nano),
-		"note":         "Phase 0 stub session; Phase 1 wires iframe SDK + host bridge",
+		"note":         "Scoped micro-app session token (not a full user JWT); host RPC stays in parent shell",
 	})
 }
 
-func (s *Server) handleMicroAppBundle(w http.ResponseWriter, r *http.Request) {
-	uid := userIDFrom(r.Context())
-	id := r.PathValue("id")
-	app, err := s.db.GetMicroApp(uid, id)
-	if err != nil {
-		if errors.Is(err, db.ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	// Phase 0: object storage not wired. Placeholder metadata only — no half-built iframe/SDK.
-	// Phase 1: stream zip from MinIO key app.BundleKey (micro-apps/{owner}/{id}/).
-	writeJSON(w, http.StatusNotImplemented, map[string]any{
-		"error":      "bundle_not_available",
-		"message":    "Phase 0 placeholder: MinIO bundle download lands in Phase 1",
-		"bundle_key": app.BundleKey,
-		"entrypoint": app.Entrypoint,
-	})
-}
+// handleGetMicroAppBundle / handlePutMicroAppBundle live in micro_app_bundle.go
+

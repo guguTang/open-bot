@@ -461,3 +461,8 @@ export async function resolveDefaultMachineLabel(
 ): Promise<string> {
   return resolveDeviceDisplayName(client);
 }
+
+/** True when running inside Tauri desktop shell (host tools available locally). */
+export function hasTauriLike(): boolean {
+  return hasTauri();
+}

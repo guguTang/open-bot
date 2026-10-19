@@ -203,10 +203,99 @@ export async function createMicroAppSession(id: string): Promise<MicroAppSession
   return res.json();
 }
 
-/**
- * Phase 1 stub — do not half-build iframe/SDK here.
- * Bundle download returns 501 until MinIO wiring ships.
- */
-export async function fetchMicroAppBundle(_id: string): Promise<never> {
-  throw new Error("Phase 1: sandbox iframe + bundle download not implemented");
+export type MicroAppRuntimeFile = {
+  encoding: "utf8" | "base64" | string;
+  mime: string;
+  content: string;
+};
+
+export type MicroAppRuntime = {
+  micro_app_id: string;
+  title: string;
+  entrypoint: string;
+  capabilities: string[];
+  bundle_hash?: string;
+  files: Record<string, MicroAppRuntimeFile>;
+};
+
+export async function uploadMicroAppBundle(id: string, file: Blob | File): Promise<{
+  micro_app: MicroApp;
+  files: number;
+  entrypoint: string;
+  bundle_hash: string;
+}> {
+  const form = new FormData();
+  const name = file instanceof File ? file.name : "bundle.zip";
+  form.append("bundle", file, name);
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/bundle`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: form,
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function downloadMicroAppBundle(id: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/bundle`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.blob();
+}
+
+export async function fetchMicroAppRuntime(id: string): Promise<MicroAppRuntime> {
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/runtime`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function microAppGrantCheck(
+  id: string,
+  capability: string,
+  machineId?: string,
+): Promise<{
+  capability: string;
+  decision: string;
+  suggested_decision: MicroAppGrantDecision | string;
+  needs_prompt: boolean;
+  high_sensitivity?: boolean;
+  grant_id?: string;
+}> {
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/rpc/grant-check`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ capability, machine_id: machineId || "" }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function microAppGrantConsume(id: string, grantId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/rpc/grant-consume`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ grant_id: grantId }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function microAppCloudHTTP(
+  id: string,
+  body: { url: string; method?: string; headers?: Record<string, string>; body?: string; machine_id?: string },
+): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/rpc/cloud.http`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+/** @deprecated use downloadMicroAppBundle */
+export async function fetchMicroAppBundle(id: string): Promise<Blob> {
+  return downloadMicroAppBundle(id);
 }

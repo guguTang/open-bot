@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Pin, Wrench, X } from "lucide-react";
+import { Loader2, Pin, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import {
   archiveMicroApp,
@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { useMicroAppsStore } from "../stores/microApps";
 import { Button } from "@/components/ui/button";
+import { MicroAppShell } from "./MicroAppShell";
 import {
   Dialog,
   DialogContent,
@@ -17,10 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-/**
- * Phase 0 empty shell for 「我的工具」.
- * Phase 1: MicroAppShell iframe + openbot.micro SDK + HostBridge — stubs only below.
- */
+/** 「我的工具」 hub — list + MicroAppShell (sandboxed iframe + SDK). */
 
 type Props = {
   open: boolean;
@@ -94,9 +92,12 @@ export function MicroAppsHub({ open, onClose }: Props) {
           </DialogHeader>
 
           {openApp ? (
-            <MicroAppShellStub
+            <MicroAppShell
               app={openApp}
               onBack={() => setOpenAppId(null)}
+              onAppUpdated={(a) => {
+                void refresh().then(() => setOpenAppId(a.id));
+              }}
             />
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -216,40 +217,6 @@ function EmptyHub() {
       <p className="max-w-xs text-xs leading-relaxed text-[var(--muted)]">
         在对话里让助手做好一个小工具后，明确说「固定到我的工具」，或点确认卡同意后，才会出现在这里。
       </p>
-    </div>
-  );
-}
-
-/** Phase 0 empty shell — Phase 1 replaces with sandboxed iframe + SDK. */
-function MicroAppShellStub({ app, onBack }: { app: MicroApp; onBack: () => void }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
-        <Button type="button" size="sm" variant="ghost" className="h-8 px-2" onClick={onBack}>
-          ← 返回
-        </Button>
-        <div className="min-w-0 flex-1 truncate text-sm font-medium">{app.title}</div>
-        <Button type="button" size="icon" variant="ghost" className="size-8" onClick={onBack} aria-label="关闭">
-          <X className="size-4" />
-        </Button>
-      </div>
-      <div className="flex min-h-[280px] flex-1 flex-col items-center justify-center gap-2 bg-[var(--bg)] px-6 text-center">
-        <p className="text-sm text-[var(--muted)]">空壳预览（Phase 0）</p>
-        <p className="max-w-sm text-xs leading-relaxed text-[var(--muted)]">
-          Phase 1 将在此加载沙箱 iframe（CSP + sandbox）与 openbot.micro SDK；
-          host.shell.run 等能力经「声明 ∩ 端能力 ∩ Grant 三态」闸门，高敏默认 allow_once。
-        </p>
-        {/*
-          Phase 1 stubs (do not half-build):
-          - <iframe sandbox="allow-scripts allow-forms" srcDoc={bundle} />
-          - window.addEventListener('message', hostBridge)
-          - openbot.micro.request(capability, params)
-        */}
-        <code className="mt-2 rounded bg-[var(--bg-soft)] px-2 py-1 text-[10px] text-[var(--muted)]">
-          {app.kind} · {app.status} · v{app.version}
-          {app.capabilities?.length ? ` · ${app.capabilities.join(", ")}` : ""}
-        </code>
-      </div>
     </div>
   );
 }

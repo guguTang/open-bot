@@ -42,6 +42,9 @@ type Server struct {
 	runs            *activeRuns
 	// Last published owner-host online bit (bot_online SSE dedupe).
 	botOnline *botOnlineCache
+	// Micro-app MinIO / local object store (lazy).
+	microAppStoreOnce sync.Once
+	microAppStore     *microAppObjectStore
 }
 
 func Listen(addr, runtimeURL string, database *db.DB) error {
@@ -268,7 +271,12 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/micro-apps/{id}/grants", s.requireAuth(s.handleListMicroAppGrants))
 	mux.HandleFunc("PUT /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handlePutMicroAppGrant))
 	mux.HandleFunc("POST /v1/micro-apps/{id}/session", s.requireAuth(s.handleMicroAppSession))
-	mux.HandleFunc("GET /v1/micro-apps/{id}/bundle", s.requireAuth(s.handleMicroAppBundle))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/bundle", s.requireAuth(s.handleGetMicroAppBundle))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/bundle", s.requireAuth(s.handlePutMicroAppBundle))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/runtime", s.requireAuth(s.handleGetMicroAppRuntime))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/cloud.http", s.requireAuth(s.handleMicroAppCloudHTTP))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/grant-check", s.requireAuth(s.handleMicroAppGrantCheck))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/grant-consume", s.requireAuth(s.handleMicroAppGrantConsume))
 
 	mux.HandleFunc("POST /v1/webhooks/slack/{token}", s.handleSlackWebhook)
 	mux.HandleFunc("POST /v1/webhooks/github/{token}", s.handleGitHubWebhook)

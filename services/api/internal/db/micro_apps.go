@@ -763,3 +763,115 @@ SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision,
 	}
 	return &g, nil
 }
+
+
+// SetMicroAppBundle updates object-storage key + content hash after upload.
+func (d *DB) SetMicroAppBundle(userID, id, bundleKey, bundleHash, entrypoint string) (*MicroApp, error) {
+	cur, err := d.GetMicroApp(userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if cur.Status == MicroAppStatusArchived {
+		return nil, errors.New("archived micro-app cannot accept bundle")
+	}
+	bundleKey = strings.TrimSpace(bundleKey)
+	if bundleKey == "" {
+		bundleKey = MicroAppObjectKey(userID, id)
+	}
+	entrypoint = strings.TrimSpace(entrypoint)
+	if entrypoint == "" {
+		entrypoint = cur.Entrypoint
+	}
+	if entrypoint == "" {
+		entrypoint = "index.html"
+	}
+	now := Now()
+	_, err = d.SQL.Exec(`
+UPDATE micro_apps SET bundle_key = $3, bundle_hash = $4, entrypoint = $5,
+  version = version + 1, updated_at = $6
+ WHERE id = $1 AND user_id = $2`,
+		id, userID, bundleKey, strings.TrimSpace(bundleHash), entrypoint, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetMicroApp(userID, id)
+}
+
+// GetMicroAppGrant looks up one grant row (exact machine, then machine-empty fallback).
+func (d *DB) GetMicroAppGrant(userID, microAppID, capability, machineID string) (*MicroAppGrant, error) {
+	machineID = strings.TrimSpace(machineID)
+	capability = strings.TrimSpace(capability)
+	row := d.SQL.QueryRow(`
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+ FROM micro_app_grants
+ WHERE user_id = $1 AND micro_app_id = $2 AND capability = $3 AND machine_id = $4`,
+		userID, microAppID, capability, machineID,
+	)
+	g, err := scanMicroAppGrant(row)
+	if err == nil {
+		return g, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if machineID == "" {
+		return nil, ErrNotFound
+	}
+	row = d.SQL.QueryRow(`
+SELECT id, user_id, micro_app_id, capability, COALESCE(machine_id,''), decision, expires_at, created_at, updated_at
+ FROM micro_app_grants
+ WHERE user_id = $1 AND micro_app_id = $2 AND capability = $3 AND machine_id = ''`,
+		userID, microAppID, capability,
+	)
+	g, err = scanMicroAppGrant(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return g, nil
+}
+
+func scanMicroAppGrant(scanner interface {
+	Scan(dest ...any) error
+}) (*MicroAppGrant, error) {
+	var g MicroAppGrant
+	var exp sql.NullTime
+	if err := scanner.Scan(&g.ID, &g.UserID, &g.MicroAppID, &g.Capability, &g.MachineID, &g.Decision, &exp, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if exp.Valid {
+		t := exp.Time
+		g.ExpiresAt = &t
+	}
+	return &g, nil
+}
+
+// ConsumeAllowOnceGrant expires an allow_once grant after one successful use.
+func (d *DB) ConsumeAllowOnceGrant(userID, grantID string) error {
+	now := Now()
+	_, err := d.SQL.Exec(`
+UPDATE micro_app_grants SET expires_at = $3, updated_at = $3
+ WHERE id = $1 AND user_id = $2 AND decision = $4`,
+		grantID, userID, now, MicroAppGrantAllowOnce,
+	)
+	return err
+}
+
+// EvaluateMicroAppGrant returns decision for capability, or empty if prompt needed.
+// Expired grants are treated as missing.
+func (d *DB) EvaluateMicroAppGrant(userID, microAppID, capability, machineID string) (decision string, grant *MicroAppGrant, err error) {
+	g, err := d.GetMicroAppGrant(userID, microAppID, capability, machineID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return "", nil, nil
+		}
+		return "", nil, err
+	}
+	if g.ExpiresAt != nil && !g.ExpiresAt.After(Now()) {
+		return "", nil, nil
+	}
+	return g.Decision, g, nil
+}
