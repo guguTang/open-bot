@@ -13,6 +13,8 @@ import type { AppSettingsBundle } from "../../hooks/useAppSettings";
 import { sessionActions } from "../../stores/sessionActions";
 import { setShell, useShellStore } from "../../stores/shell";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { useMicroAppsStore } from "../../stores/microApps";
+import { MicroAppsHub } from "../MicroAppsHub";
 
 export type ConvSheetTarget =
   | { kind: "agent"; agent: Agent }
@@ -31,6 +33,7 @@ export function AppOverlays({ settings }: { settings: AppSettingsBundle }) {
   const feedbackTarget = useShellStore((s) => s.feedbackTarget);
   const trainAgent = useShellStore((s) => s.trainAgent);
   const trainReload = useShellStore((s) => s.trainReload);
+  const microAppsHubOpen = useMicroAppsStore((s) => s.hubOpen);
 
   const { shell, secrets } = settings;
   const { secretPrompt, setSecretPrompt, setShow: setShowSettings } = shell;
@@ -38,6 +41,11 @@ export function AppOverlays({ settings }: { settings: AppSettingsBundle }) {
 
   return (
     <>
+      <MicroAppsHub
+        open={microAppsHubOpen}
+        onClose={() => useMicroAppsStore.getState().setHubOpen(false)}
+      />
+
       <CreateActionSheet
         open={createSheetOpen}
         onClose={() => sessionActions().setCreateSheetOpen(false)}

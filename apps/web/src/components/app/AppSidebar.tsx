@@ -20,6 +20,7 @@ import { useChatStore } from "../../stores/chat";
 import { botIsOnline, usePresenceStore } from "../../stores/presence";
 import { sessionActions } from "../../stores/sessionActions";
 import { useShellStore } from "../../stores/shell";
+import { useMicroAppsStore } from "../../stores/microApps";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { agentNameMap, channelMemberProfiles, resolveActiveAgent } from "../../lib/app/workspaceDerived";
 import { cn } from "@/lib/utils";
@@ -423,6 +424,7 @@ function AppSidebarInner() {
             llm={defaultLLM}
             onOpenSettings={() => void sessionActions().openSettings("general")}
             onChangeModel={() => void sessionActions().openSettings("llm")}
+            onOpenMicroApps={() => useMicroAppsStore.getState().setHubOpen(true)}
             onLogout={() => sessionActions().onLogout()}
           />
         </div>

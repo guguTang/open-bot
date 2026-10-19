@@ -243,3 +243,28 @@ export {
   startGmailConnect,
   disconnectGmail,
 } from "./api/gmail";
+
+export {
+  type MicroAppKind,
+  type MicroAppStatus,
+  type MicroAppSurface,
+  type MicroAppGrantDecision,
+  type MicroAppUserIntent,
+  type MicroAppPlacement,
+  type MicroAppGrant,
+  type MicroApp,
+  type MicroAppCreateInput,
+  type MicroAppSession,
+  listMicroApps,
+  getMicroApp,
+  createMicroApp,
+  pinMicroApp,
+  archiveMicroApp,
+  updateMicroApp,
+  putMicroAppPlacements,
+  listMicroAppGrants,
+  putMicroAppGrant,
+  createMicroAppSession,
+  fetchMicroAppBundle,
+} from "./api/microApps";
+

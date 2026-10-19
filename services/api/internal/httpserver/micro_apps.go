@@ -1,0 +1,338 @@
+package httpserver
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/tangxin/open-bot/services/api/internal/db"
+)
+
+// Phase 0 micro-apps API under /v1/micro-apps.
+// Pin/draft require explicit user confirm intent — never silent.
+// Phase 1 iframe/SDK/host bridge: stubs only (see handleMicroAppBundle / session comments).
+
+func (s *Server) publishMicroAppsChanged(userID, reason, appID string, extra map[string]any) {
+	if s.events == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	payload := map[string]any{
+		"type":   "micro_apps_changed",
+		"reason": reason,
+	}
+	if id := strings.TrimSpace(appID); id != "" {
+		payload["micro_app_id"] = id
+	}
+	for k, v := range extra {
+		if strings.TrimSpace(k) == "" || v == nil {
+			continue
+		}
+		payload[k] = v
+	}
+	s.events.Publish(userID, payload)
+}
+
+func requireMicroAppUserIntent(intent string) error {
+	intent = strings.ToLower(strings.TrimSpace(intent))
+	switch intent {
+	case "save", "pin_agree", "user_save", "user_pin", "confirm":
+		return nil
+	default:
+		return errors.New("user_intent required (save|pin_agree); draft/pin must not be silent")
+	}
+}
+
+func (s *Server) handleListMicroApps(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	surface := strings.TrimSpace(r.URL.Query().Get("surface"))
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	list, err := s.db.ListMicroApps(uid, surface, status)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"micro_apps": list})
+}
+
+func (s *Server) handleGetMicroApp(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	app, err := s.db.GetMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Phase 0: no signed MinIO URL yet; expose object key + relative bundle route for Phase 1.
+	if app.BundleKey != "" {
+		app.BundleURL = "/v1/micro-apps/" + app.ID + "/bundle"
+	}
+	writeJSON(w, http.StatusOK, app)
+}
+
+func (s *Server) handleCreateMicroApp(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	var body struct {
+		Title                string   `json:"title"`
+		Description          string   `json:"description"`
+		Icon                 string   `json:"icon"`
+		Kind                 string   `json:"kind"`
+		AgentID              string   `json:"agent_id"`
+		Capabilities         []string `json:"capabilities"`
+		BundleKey            string   `json:"bundle_key"`
+		BundleHash           string   `json:"bundle_hash"`
+		Entrypoint           string   `json:"entrypoint"`
+		SkillSlug            string   `json:"skill_slug"`
+		RoutineID            string   `json:"routine_id"`
+		SourceConversationID string   `json:"source_conversation_id"`
+		SourceMessageID      string   `json:"source_message_id"`
+		// UserIntent gates draft creation: save | pin_agree (bot asked + user agreed).
+		UserIntent string `json:"user_intent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if err := requireMicroAppUserIntent(body.UserIntent); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	app, err := s.db.CreateMicroApp(uid, db.MicroAppCreateInput{
+		Title:                body.Title,
+		Description:          body.Description,
+		Icon:                 body.Icon,
+		Kind:                 body.Kind,
+		AgentID:              body.AgentID,
+		Capabilities:         body.Capabilities,
+		BundleKey:            body.BundleKey,
+		BundleHash:           body.BundleHash,
+		Entrypoint:           body.Entrypoint,
+		SkillSlug:            body.SkillSlug,
+		RoutineID:            body.RoutineID,
+		SourceConversationID: body.SourceConversationID,
+		SourceMessageID:      body.SourceMessageID,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "created", app.ID, map[string]any{"status": app.Status})
+	writeJSON(w, http.StatusCreated, app)
+}
+
+func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	var body struct {
+		UserIntent string `json:"user_intent"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	if err := requireMicroAppUserIntent(body.UserIntent); err != nil {
+		// Also accept bare POST with user_intent query for simple clients.
+		if qerr := requireMicroAppUserIntent(r.URL.Query().Get("user_intent")); qerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	app, err := s.db.PinMicroApp(uid, id, uid)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "pinned", app.ID, map[string]any{"status": app.Status})
+	writeJSON(w, http.StatusOK, app)
+}
+
+func (s *Server) handlePatchMicroApp(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	var body struct {
+		Title        *string   `json:"title"`
+		Description  *string   `json:"description"`
+		Icon         *string   `json:"icon"`
+		Entrypoint   *string   `json:"entrypoint"`
+		SkillSlug    *string   `json:"skill_slug"`
+		RoutineID    *string   `json:"routine_id"`
+		Capabilities *[]string `json:"capabilities"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	app, err := s.db.PatchMicroApp(uid, id, db.MicroAppPatchInput{
+		Title:        body.Title,
+		Description:  body.Description,
+		Icon:         body.Icon,
+		Entrypoint:   body.Entrypoint,
+		SkillSlug:    body.SkillSlug,
+		RoutineID:    body.RoutineID,
+		Capabilities: body.Capabilities,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "updated", app.ID, nil)
+	writeJSON(w, http.StatusOK, app)
+}
+
+func (s *Server) handleArchiveMicroApp(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	app, err := s.db.ArchiveMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "archived", app.ID, map[string]any{"status": app.Status})
+	writeJSON(w, http.StatusOK, app)
+}
+
+func (s *Server) handlePutMicroAppPlacements(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	var body struct {
+		Placements []db.MicroAppPlacement `json:"placements"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	list, err := s.db.ReplaceMicroAppPlacements(uid, id, body.Placements)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "placements", id, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"placements": list})
+}
+
+func (s *Server) handleListMicroAppGrants(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	machineID := strings.TrimSpace(r.URL.Query().Get("machine_id"))
+	list, err := s.db.ListMicroAppGrants(uid, id, machineID)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"grants": list,
+		// Phase 0 hint for clients: high-sens defaults.
+		"defaults": map[string]string{
+			"host.shell.run":      db.MicroAppGrantAllowOnce,
+			"host.clipboard.read": db.MicroAppGrantAllowOnce,
+		},
+	})
+}
+
+func (s *Server) handlePutMicroAppGrant(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	capability := r.PathValue("capability")
+	var body struct {
+		Decision  string     `json:"decision"`
+		MachineID string     `json:"machine_id"`
+		ExpiresAt *time.Time `json:"expires_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	g, err := s.db.UpsertMicroAppGrant(uid, id, capability, body.MachineID, body.Decision, body.ExpiresAt)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		if strings.HasPrefix(err.Error(), "capability_not_declared") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publishMicroAppsChanged(uid, "grants", id, map[string]any{"capability": capability})
+	writeJSON(w, http.StatusOK, g)
+}
+
+func (s *Server) handleMicroAppSession(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	app, err := s.db.GetMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if app.Status != db.MicroAppStatusPinned && app.Status != db.MicroAppStatusDraft {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "micro-app not openable"})
+		return
+	}
+	// Phase 0 stub: opaque short-lived token placeholder. Phase 1 binds to micro_app_id scope
+	// and Host Bridge RPC; do not treat as a full user JWT.
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	token := "ma_" + hex.EncodeToString(b[:])
+	expires := time.Now().UTC().Add(15 * time.Minute)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"micro_app_id": app.ID,
+		"token":        token,
+		"expires_at":   expires.Format(time.RFC3339Nano),
+		"note":         "Phase 0 stub session; Phase 1 wires iframe SDK + host bridge",
+	})
+}
+
+func (s *Server) handleMicroAppBundle(w http.ResponseWriter, r *http.Request) {
+	uid := userIDFrom(r.Context())
+	id := r.PathValue("id")
+	app, err := s.db.GetMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Phase 0: object storage not wired. Placeholder metadata only — no half-built iframe/SDK.
+	// Phase 1: stream zip from MinIO key app.BundleKey (micro-apps/{owner}/{id}/).
+	writeJSON(w, http.StatusNotImplemented, map[string]any{
+		"error":      "bundle_not_available",
+		"message":    "Phase 0 placeholder: MinIO bundle download lands in Phase 1",
+		"bundle_key": app.BundleKey,
+		"entrypoint": app.Entrypoint,
+	})
+}

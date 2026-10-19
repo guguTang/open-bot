@@ -256,6 +256,20 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/inbound-hooks", s.requireAuth(s.handleListInboundHooks))
 	mux.HandleFunc("POST /v1/inbound-hooks", s.requireAuth(s.handleCreateInboundHook))
 	mux.HandleFunc("DELETE /v1/inbound-hooks/{id}", s.requireAuth(s.handleDeleteInboundHook))
+
+	// Micro apps (Phase 0: DB + API + hub shell; iframe/SDK Phase 1)
+	mux.HandleFunc("GET /v1/micro-apps", s.requireAuth(s.handleListMicroApps))
+	mux.HandleFunc("POST /v1/micro-apps", s.requireAuth(s.handleCreateMicroApp))
+	mux.HandleFunc("GET /v1/micro-apps/{id}", s.requireAuth(s.handleGetMicroApp))
+	mux.HandleFunc("PATCH /v1/micro-apps/{id}", s.requireAuth(s.handlePatchMicroApp))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/pin", s.requireAuth(s.handlePinMicroApp))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/archive", s.requireAuth(s.handleArchiveMicroApp))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/placements", s.requireAuth(s.handlePutMicroAppPlacements))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/grants", s.requireAuth(s.handleListMicroAppGrants))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handlePutMicroAppGrant))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/session", s.requireAuth(s.handleMicroAppSession))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/bundle", s.requireAuth(s.handleMicroAppBundle))
+
 	mux.HandleFunc("POST /v1/webhooks/slack/{token}", s.handleSlackWebhook)
 	mux.HandleFunc("POST /v1/webhooks/github/{token}", s.handleGitHubWebhook)
 

@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Cpu, LogOut, Settings } from "lucide-react";
+import { ChevronsUpDown, Cpu, LogOut, Settings, Wrench } from "lucide-react";
 import type { LLMConnection } from "../api";
 import { accountInitials } from "./app/accountInitials";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,10 +18,11 @@ type AccountMenuProps = {
   llm?: LLMConnection;
   onOpenSettings: () => void;
   onChangeModel: () => void;
+  onOpenMicroApps?: () => void;
   onLogout: () => void;
 };
 
-export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLogout }: AccountMenuProps) {
+export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onOpenMicroApps, onLogout }: AccountMenuProps) {
   const modelLabel = llm?.model || llm?.name || "未配置模型";
   const initials = accountInitials(username);
 
@@ -89,6 +90,12 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onLo
             <Cpu />
             更改模型
           </DropdownMenuItem>
+          {onOpenMicroApps ? (
+            <DropdownMenuItem onSelect={onOpenMicroApps}>
+              <Wrench />
+              我的工具
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onSelect={onOpenSettings}>
             <Settings />
             设置

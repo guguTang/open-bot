@@ -14,6 +14,7 @@ import type { Conversation } from "../../api";
 import type { PatchConvMessages } from "../../lib/app/conversationMessages";
 import { setApprovalGate } from "../../stores/chat";
 import { usePresenceStore } from "../../stores/presence";
+import { refreshMicroAppsFromWS } from "../../stores/microApps";
 
 export function useChatEventsSocket(deps: {
   token: string | null;
@@ -86,6 +87,7 @@ export function useChatEventsSocket(deps: {
         const live = depsRef.current;
         void live.refreshAgents().catch(() => {});
         void live.refreshChannels().catch(() => {});
+        refreshMicroAppsFromWS();
         pullOpen();
       };
       ws.onmessage = (ev) => {
@@ -158,6 +160,10 @@ export function useChatEventsSocket(deps: {
           void live.refreshChannels().catch(() => {});
           return;
         }
+        if (data.type === "micro_apps_changed") {
+          refreshMicroAppsFromWS();
+          return;
+        }
         if (data.type === "reaction_updated") {
           const evt = data as ReactionUpdatedEvent;
           if (evt.message_id && evt.emoji) {
@@ -177,6 +183,7 @@ export function useChatEventsSocket(deps: {
         const live = depsRef.current;
         void live.refreshAgents().catch(() => {});
         void live.refreshChannels().catch(() => {});
+        refreshMicroAppsFromWS();
         pullOpen();
       }
     };
