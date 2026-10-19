@@ -4,11 +4,14 @@ import { toast } from "sonner";
 import {
   archiveMicroApp,
   pinMicroApp,
+  putMicroAppPlacements,
   type MicroApp,
 } from "../api";
+import { detectClientContext } from "../lib/clientEnv";
 import { useMicroAppsStore } from "../stores/microApps";
 import { Button } from "@/components/ui/button";
 import { MicroAppShell } from "./MicroAppShell";
+import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
 import {
   Dialog,
   DialogContent,
@@ -18,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-/** 「我的工具」 hub — list + MicroAppShell (sandboxed iframe + SDK). */
+/** 「我的工具」 hub — list + MicroAppShell + chat_pin / capability matrix (Phase 2). */
 
 type Props = {
   open: boolean;
@@ -34,6 +37,8 @@ export function MicroAppsHub({ open, onClose }: Props) {
   const refresh = useMicroAppsStore((s) => s.refresh);
   const [pinningId, setPinningId] = useState<string | null>(null);
   const [confirmPin, setConfirmPin] = useState<MicroApp | null>(null);
+  const [chatPinOnPin, setChatPinOnPin] = useState(false);
+  const client = detectClientContext();
 
   useEffect(() => {
     if (!open) return;
@@ -46,15 +51,40 @@ export function MicroAppsHub({ open, onClose }: Props) {
     if (!confirmPin) return;
     setPinningId(confirmPin.id);
     try {
-      // Explicit user pin intent — never silent.
-      await pinMicroApp(confirmPin.id, "user_pin");
+      await pinMicroApp(confirmPin.id, "user_pin", { chat_pin: chatPinOnPin });
       toast.success(`已固定「${confirmPin.title}」到我的工具`);
       setConfirmPin(null);
+      setChatPinOnPin(false);
       await refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "固定失败");
     } finally {
       setPinningId(null);
+    }
+  }
+
+  async function toggleChatPin(app: MicroApp, enabled: boolean) {
+    const others = (app.placements || [])
+      .filter((p) => p.surface !== "chat_pin")
+      .map((p) => ({
+        surface: p.surface,
+        context_id: p.context_id || "",
+        sort_rank: p.sort_rank,
+        enabled: p.enabled,
+        id: p.id,
+      }));
+    if (enabled) {
+      others.push({ surface: "chat_pin", context_id: "", sort_rank: 0, enabled: true, id: "" });
+    }
+    if (!others.some((p) => p.surface === "hub")) {
+      others.unshift({ surface: "hub", context_id: "", sort_rank: 0, enabled: true, id: "" });
+    }
+    try {
+      await putMicroAppPlacements(app.id, others);
+      toast.success(enabled ? "已加入聊天快捷条" : "已从聊天快捷条移除");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "更新入口失败");
     }
   }
 
@@ -67,6 +97,11 @@ export function MicroAppsHub({ open, onClose }: Props) {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "下架失败");
     }
+  }
+
+  function askPin(app: MicroApp) {
+    setChatPinOnPin(false);
+    setConfirmPin(app);
   }
 
   return (
@@ -87,7 +122,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
               我的工具
             </DialogTitle>
             <DialogDescription className="text-xs text-[var(--muted)]">
-              账号级固定入口。未确认不会自动出现在此列表。
+              账号级固定入口。未确认不会自动出现在此列表。可挂到聊天栏（chat_pin）。
             </DialogDescription>
           </DialogHeader>
 
@@ -133,6 +168,11 @@ export function MicroAppsHub({ open, onClose }: Props) {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-[var(--text)]">
                             {app.title}
+                            {app.kind === "skill" ? (
+                              <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">
+                                skill
+                              </span>
+                            ) : null}
                           </span>
                           <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
                             {app.description || statusLabel(app.status)}
@@ -144,7 +184,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
                             className="mt-1 shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-800"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setConfirmPin(app);
+                              askPin(app);
                             }}
                           >
                             待固定
@@ -159,7 +199,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
                             variant="outline"
                             className="h-7 text-xs"
                             disabled={pinningId === app.id}
-                            onClick={() => setConfirmPin(app)}
+                            onClick={() => askPin(app)}
                           >
                             <Pin className="size-3" aria-hidden />
                             固定到我的工具
@@ -174,6 +214,43 @@ export function MicroAppsHub({ open, onClose }: Props) {
                             下架
                           </Button>
                         </div>
+                      ) : app.status === "pinned" ? (
+                        <div className="mb-2 space-y-1 px-3">
+                          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-[var(--muted)]">
+                            <input
+                              type="checkbox"
+                              checked={(app.placements || []).some(
+                                (pl) => pl.surface === "chat_pin" && pl.enabled,
+                              )}
+                              onChange={(e) => void toggleChatPin(app, e.target.checked)}
+                            />
+                            聊天栏快捷入口（chat_pin）
+                          </label>
+                          {(app.capabilities?.length || 0) > 0 ? (
+                            <details>
+                              <summary className="cursor-pointer text-[11px] text-[var(--muted)]">
+                                能力矩阵
+                              </summary>
+                              <MicroAppCapabilityMatrix
+                                className="mt-1"
+                                capabilities={app.capabilities || []}
+                                client={client}
+                                compact
+                              />
+                            </details>
+                          ) : null}
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-[var(--muted)]"
+                              onClick={() => void onArchive(app)}
+                            >
+                              下架
+                            </Button>
+                          </div>
+                        </div>
                       ) : null}
                     </li>
                   ))}
@@ -184,14 +261,36 @@ export function MicroAppsHub({ open, onClose }: Props) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(confirmPin)} onOpenChange={(v) => !v && setConfirmPin(null)}>
+      <Dialog
+        open={Boolean(confirmPin)}
+        onOpenChange={(v) => {
+          if (!v) {
+            setConfirmPin(null);
+            setChatPinOnPin(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>确认固定？</DialogTitle>
             <DialogDescription>
               将「{confirmPin?.title}」固定到「我的工具」。仅在你确认后才会出现在各端入口；不会静默固定。
+              {confirmPin?.kind === "skill" && confirmPin.skill_slug ? (
+                <span className="mt-2 block text-xs">
+                  技能型：固定后将启用 <code>{confirmPin.skill_slug}</code>
+                  （账号{confirmPin.agent_id ? " + 来源 Bot" : ""}）。
+                </span>
+              ) : null}
             </DialogDescription>
           </DialogHeader>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={chatPinOnPin}
+              onChange={(e) => setChatPinOnPin(e.target.checked)}
+            />
+            同时放到聊天输入框上方快捷条（chat_pin）
+          </label>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setConfirmPin(null)}>
               取消

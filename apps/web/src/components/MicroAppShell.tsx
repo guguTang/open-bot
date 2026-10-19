@@ -9,6 +9,7 @@ import {
 } from "../api";
 import { detectClientContext } from "../lib/clientEnv";
 import { summarizeUnavailable } from "../lib/microApp/capabilities";
+import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
 import { buildMicroAppSrcdoc } from "../lib/microApp/sdk";
 import { createMicroAppMessageHandler } from "../lib/microApp/hostBridge";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -163,19 +164,38 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
         </Button>
       </div>
 
-      {unavailable.length > 0 ? (
-        <div className="shrink-0 border-b border-[var(--border)] bg-amber-500/10 px-3 py-2 text-xs text-amber-900">
-          部分能力在此端不可用（已灰显）：
-          {unavailable.map((u) => (
-            <span key={u.capability} className="ml-2 inline-block">
-              <code>{u.capability}</code> — {u.reason}
-            </span>
-          ))}
-        </div>
+      {(app.capabilities?.length || 0) > 0 ? (
+        <details className="shrink-0 border-b border-[var(--border)] px-3 py-2">
+          <summary className="cursor-pointer text-xs text-[var(--muted)]">
+            能力矩阵
+            {unavailable.length > 0
+              ? ` · ${unavailable.length} 项在此端不可用`
+              : " · 本端均可尝试"}
+          </summary>
+          <MicroAppCapabilityMatrix
+            className="mt-2"
+            capabilities={app.capabilities || []}
+            client={client}
+            compact
+          />
+        </details>
       ) : null}
 
       <div className="relative min-h-[320px] flex-1 bg-[var(--bg)]">
-        {loading ? (
+        {app.kind === "skill" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="text-sm font-medium text-[var(--text)]">技能型微应用</p>
+            <p className="max-w-sm text-xs text-[var(--muted)]">
+              已绑定技能 <code>{app.skill_slug || "（未设置 skill_slug）"}</code>。
+              固定到「我的工具」时会在账号与来源 Bot 上启用对应 agent_skills。
+            </p>
+            <MicroAppCapabilityMatrix
+              capabilities={app.capabilities || []}
+              client={client}
+              className="w-full max-w-sm text-left"
+            />
+          </div>
+        ) : loading ? (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-[var(--muted)]">
             <Loader2 className="size-4 animate-spin" /> 加载中…
           </div>

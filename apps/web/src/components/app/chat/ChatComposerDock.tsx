@@ -12,6 +12,8 @@ import {
 import { chatSessionActions, shellSessionActions } from "../../../stores/sessionActions";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { Composer } from "../../Composer";
+import { MicroAppChatPinBar } from "../../MicroAppChatPinBar";
+import { useMicroAppsStore } from "../../../stores/microApps";
 import { isChatProcessing } from "../transcriptView";
 
 export function ChatComposerDock({ messagesRef }: { messagesRef: RefObject<HTMLDivElement | null> }) {
@@ -76,6 +78,12 @@ export function ChatComposerDock({ messagesRef }: { messagesRef: RefObject<HTMLD
           <ChevronDown size={16} strokeWidth={2.2} aria-hidden />
         </button>
       ) : null}
+      <MicroAppChatPinBar
+        onOpenApp={(app) => {
+          useMicroAppsStore.getState().setHubOpen(true);
+          useMicroAppsStore.getState().setOpenAppId(app.id);
+        }}
+      />
       <Composer
         value={input}
         onChange={setInput}

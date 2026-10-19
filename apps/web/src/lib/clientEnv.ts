@@ -38,6 +38,9 @@ declare global {
           getInfo?: () => Promise<{ name?: string; model?: string }>;
           getId?: () => Promise<{ identifier?: string }>;
         };
+        Camera?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        LocalNotifications?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Share?: Record<string, (...args: unknown[]) => Promise<unknown>>;
         StatusBar?: {
           getInfo?: () => Promise<{ visible?: boolean; overlays?: boolean; style?: string }>;
           setOverlaysWebView?: (opts: { overlay: boolean }) => Promise<void>;

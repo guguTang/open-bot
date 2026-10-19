@@ -119,11 +119,16 @@ export async function createMicroApp(input: MicroAppCreateInput): Promise<MicroA
 export async function pinMicroApp(
   id: string,
   userIntent: MicroAppUserIntent = "user_pin",
+  opts?: { chat_pin?: boolean; context_id?: string },
 ): Promise<MicroApp> {
   const res = await fetch(`${API_BASE}/v1/micro-apps/${encodeURIComponent(id)}/pin`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ user_intent: userIntent }),
+    body: JSON.stringify({
+      user_intent: userIntent,
+      chat_pin: Boolean(opts?.chat_pin),
+      context_id: opts?.context_id || "",
+    }),
   });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();

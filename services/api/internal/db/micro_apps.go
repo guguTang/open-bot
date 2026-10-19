@@ -534,15 +534,26 @@ UPDATE micro_apps SET
 	return d.GetMicroApp(userID, id)
 }
 
+// PinMicroAppOptions controls extra surfaces written on pin (hub always).
+type PinMicroAppOptions struct {
+	// ChatPin adds surface=chat_pin (account-wide when ContextID empty).
+	ChatPin   bool
+	ContextID string
+}
+
 // PinMicroApp promotes draft→pinned after explicit user confirm intent.
 // Writes confirmed_* and ensures a hub placement.
-func (d *DB) PinMicroApp(userID, id, confirmedBy string) (*MicroApp, error) {
+// kind=skill: enables skill_slug on account (+ agent_id bot when set).
+func (d *DB) PinMicroApp(userID, id, confirmedBy string, opts *PinMicroAppOptions) (*MicroApp, error) {
 	cur, err := d.GetMicroApp(userID, id)
 	if err != nil {
 		return nil, err
 	}
 	if cur.Status == MicroAppStatusArchived {
 		return nil, errors.New("cannot pin archived micro-app")
+	}
+	if opts == nil {
+		opts = &PinMicroAppOptions{}
 	}
 	now := Now()
 	confirmedBy = strings.TrimSpace(confirmedBy)
@@ -562,7 +573,49 @@ UPDATE micro_apps SET
 	if err := d.EnsureMicroAppPlacement(id, MicroAppSurfaceHub, "", 0, true); err != nil {
 		return nil, err
 	}
+	if opts.ChatPin {
+		if err := d.EnsureMicroAppPlacement(id, MicroAppSurfaceChatPin, opts.ContextID, 0, true); err != nil {
+			return nil, err
+		}
+	}
+	if err := d.syncSkillOnPin(userID, cur); err != nil {
+		return nil, err
+	}
 	return d.GetMicroApp(userID, id)
+}
+
+// syncSkillOnPin enables the bound skill for kind=skill micro-apps.
+func (d *DB) syncSkillOnPin(userID string, app *MicroApp) error {
+	if app == nil || NormalizeMicroAppKind(app.Kind) != MicroAppKindSkill {
+		return nil
+	}
+	slug := strings.TrimSpace(app.SkillSlug)
+	if slug == "" {
+		return errors.New("kind=skill requires skill_slug")
+	}
+	if _, err := d.SetUserSkillEnabled(userID, slug, true); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("skill %q not found in account catalog", slug)
+		}
+		return err
+	}
+	agentID := strings.TrimSpace(app.AgentID)
+	if agentID == "" {
+		return nil
+	}
+	if _, err := d.SetAgentSkillEnabled(userID, agentID, slug, true); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("skill %q not available for agent %s", slug, agentID)
+		}
+		return err
+	}
+	return nil
+}
+
+// ListMicroAppsForSurface returns pinned apps with an enabled placement on surface
+// (and optional context_id match: empty context matches only global pins).
+func (d *DB) ListMicroAppsForSurface(userID, surface, contextID string) ([]*MicroApp, error) {
+	return d.ListMicroApps(userID, surface, MicroAppStatusPinned)
 }
 
 func (d *DB) ArchiveMicroApp(userID, id string) (*MicroApp, error) {

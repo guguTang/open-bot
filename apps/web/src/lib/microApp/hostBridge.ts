@@ -10,6 +10,7 @@ import {
 } from "../../api";
 import { runLocalHostOp } from "../hostExecSession";
 import { capabilityAvailability } from "./capabilities";
+import { deviceCameraGetPhoto, deviceNotify, deviceShare } from "./deviceBridge";
 import type { ClientContext } from "../clientEnv";
 
 export type GrantPromptFn = (opts: {
@@ -155,6 +156,15 @@ async function executeCapability(
         body: params.body != null ? String(params.body) : undefined,
         machine_id: ctx.machineId,
       });
+    }
+    case "device.camera": {
+      return deviceCameraGetPhoto(params);
+    }
+    case "device.notify": {
+      return deviceNotify(params);
+    }
+    case "device.share": {
+      return deviceShare(params);
     }
     case "chat.attach": {
       const convId = String(params.conversation_id || ctx.conversationId || "").trim();

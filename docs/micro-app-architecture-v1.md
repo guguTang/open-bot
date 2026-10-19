@@ -1,6 +1,6 @@
 # open-bot 微应用（Micro App）技术架构与能力实现路径
 
-> 状态：**Phase 0–1 已按本文在 `develop` 落地**（本地 commit，默认不推）  
+> 状态：**Phase 0–2 已按本文在 `develop` 落地**（本地 commit，默认不推）  
 > 日期：2026-10-19（Asia/Shanghai）  
 > 校对原则：以仓内现实现为准；改 API/表/能力时同步改本文。
 
@@ -151,7 +151,7 @@ Placement 只指向 MicroApp.id
 | GET | `/v1/micro-apps` | 列表；`?surface=hub`、`?status=` |
 | GET | `/v1/micro-apps/{id}` | 元数据；`bundle_url` 相对路径 |
 | POST | `/v1/micro-apps` | 创建 **draft**；**必须** `user_intent` |
-| POST | `/v1/micro-apps/{id}/pin` | 用户确认固定；写 hub + `confirmed_*`；**必须** `user_intent` |
+| POST | `/v1/micro-apps/{id}/pin` | 用户确认固定；写 hub + `confirmed_*`；可选 `chat_pin`；**必须** `user_intent`；`kind=skill` 启用技能 |
 | PATCH | `/v1/micro-apps/{id}` | 改标题/能力等 |
 | POST | `/v1/micro-apps/{id}/archive` | 下架并禁用 placements |
 | PUT | `/v1/micro-apps/{id}/placements` | 批量挂载 |
@@ -192,14 +192,29 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 | `ui.notify` | 全端 | toast |
 | `chat.attach` | 有会话 | 上传附件 + `persist_only` markdown（对齐 present_image 展图通道） |
 
-### 5.2 灰显规则（`lib/microApp/capabilities.ts`）
+### 5.2 灰显规则（`lib/microApp/capabilities.ts` + `MicroAppCapabilityMatrix`）
 
-- Capacitor / 纯浏览器：`host.screenshot`、`host.shell.run` 等 **host_required** → 不可用，文案提示「手机登录 ≠ host，请在已连接电脑上使用」。
-- 未声明能力 → RPC 直接失败 `capability_not_declared` / 「未在微应用中声明」。
+- Capacitor / 纯浏览器：`host.*`（除文件选择器）→ 灰显「需要已连接的电脑；手机登录 ≠ host」。
+- `device.camera` / `device.notify` / `device.share`：非原生壳或 `Capacitor.Plugins` 未注册 → 灰显。
+- 未声明 → 矩阵标不可用；RPC 拒绝。
 
-### 5.3 后续
+### 5.3 Device P1（Android / iOS）
 
-`device.*`、chat_pin、kind=skill↔agent_skills、系统 Widget 等见 §10 Phase 2/3。
+| capability | 桥 | 说明 |
+|------------|----|------|
+| `device.camera` | `Capacitor.Plugins.Camera` | 有则 `getPhoto`；无则灰显 |
+| `device.notify` | `LocalNotifications` | `schedule` |
+| `device.share` | `Share` | 系统分享 |
+
+实现：`apps/web/src/lib/microApp/deviceBridge.ts`（运行时探测，不强制 npm 插件进 web 包）。
+
+### 5.4 kind=skill
+
+Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `agent_id` 非空再 `SetAgentSkillEnabled`。缺 `skill_slug` → 400。
+
+### 5.5 后续
+
+系统 Widget、Runtime draft/pin 工具注册见 §10 Phase 3。
 
 ---
 
@@ -224,10 +239,11 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 
 ### 7.1 Web / Desktop（`apps/web`）
 
-1. 账户菜单「我的工具」→ `MicroAppsHub`
-2. `MicroAppShell`：上传 zip、runtime → srcdoc iframe + SDK
-3. `lib/microApp/hostBridge.ts`：RPC；桌面与 host 通道共用 `runLocalHostOp`
-4. `MicroAppGrantDialog`：审批三态文案
+1. 账户菜单「我的工具」→ `MicroAppsHub`（能力矩阵、chat_pin 勾选）
+2. `MicroAppShell`：上传 zip、runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明
+3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）
+4. `lib/microApp/hostBridge.ts` + `deviceBridge.ts`：RPC
+5. `MicroAppGrantDialog`：审批三态文案
 
 ### 7.2 Android / Runtime
 
@@ -279,18 +295,19 @@ bundle.zip
 - [x] draft/pin `user_intent` 门
 - [x] WS：`micro_apps_changed`
 
-### Phase 1 — UI + P0 能力 ✅（本迭代）
+### Phase 1 — UI + P0 能力 ✅
 
 - [x] Bundle 上传/下载（MinIO/本地）+ runtime
 - [x] 沙箱 iframe + `openbot.micro` SDK
 - [x] P0 RPC + Grants 三态 + 无 host 灰显
 - [x] `chat.attach` ↔ present_image 通道
 
-### Phase 2 — 入口与移动
+### Phase 2 — 入口与移动 ✅（本迭代）
 
-- [ ] chat_pin 快捷条
-- [ ] Android：`device.camera` / `device.notify` / `device.share`
-- [ ] kind=skill ↔ agent_skills
+- [x] chat_pin 快捷条（作曲框上方；hub 可勾选 placement）
+- [x] 能力矩阵 UI（可用/灰显 + 原因）
+- [x] Android：`device.camera` / `device.notify` / `device.share`（Capacitor Plugins 就绪时接通；否则灰显）
+- [x] kind=skill ↔ 固定时启用 `user_skills` + 来源 Bot `agent_skills`
 - [ ] Runtime 正式注册 draft/pin 工具（仍须 user 确认）
 
 ### Phase 3 — 增强
@@ -305,9 +322,11 @@ bundle.zip
 1. 用户确认 pin 后出现在「我的工具」，重启仍在。
 2. 同账号多端 hub 列表一致（WS 刷新）。
 3. 未声明 / 未授权 / deny 不执行；allow_once 可消费。
-4. 无桌面 host 时截屏/shell 灰显并说明原因。
+4. 无桌面 host 时截屏/shell 灰显并说明原因；能力矩阵展示原因。
 5. 口头「已固定」而无 pin 行 → 失败。
 6. 上传 zip → 打开 Shell → P0 RPC 冒烟；图经 `chat.attach` 进会话。
+7. chat_pin 出现在作曲框上方；勾选/取消与 placement 一致。
+8. kind=skill pin 后账号（及来源 Bot）技能为启用。
 
 ---
 
@@ -326,8 +345,8 @@ bundle.zip
 | 本文 | `docs/micro-app-architecture-v1.md` |
 | DB | `services/api/internal/db/micro_apps.go` |
 | API | `services/api/internal/httpserver/micro_apps*.go` |
-| Web Hub/Shell | `apps/web/src/components/MicroAppsHub.tsx`、`MicroAppShell.tsx` |
-| SDK / Bridge | `apps/web/src/lib/microApp/` |
+| Web Hub/Shell | `apps/web/src/components/MicroAppsHub.tsx`、`MicroAppShell.tsx`、`MicroAppChatPinBar.tsx`、`MicroAppCapabilityMatrix.tsx` |
+| SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
 | Runtime stub | `services/agent-runtime/app/micro_apps_stub.py` |
 
 推送：仅当用户在 open bot 1:1 明确说 push；否则 **develop 本地 commit only**。

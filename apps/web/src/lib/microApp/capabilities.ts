@@ -6,6 +6,8 @@ export type CapabilityAvailability = {
   reason?: string;
   /** Needs desktop host (Tauri) or connected machine. */
   host_required: boolean;
+  /** Needs Capacitor native plugins (camera / notify / share). */
+  device_required?: boolean;
 };
 
 const HOST_CAPS = new Set([
@@ -23,9 +25,42 @@ const FILE_PICKER_CAPS = new Set(["host.fs.read", "host.fs.write"]);
 
 const ALWAYS_OK = new Set(["ui.notify", "chat.attach", "cloud.http", "account.profile"]);
 
+/** Android / iOS P1 device caps — wired when Capacitor plugin bridge exists. */
+export const DEVICE_CAPS = new Set(["device.camera", "device.notify", "device.share"]);
+
 export function isHostEnvironment(client?: ClientContext | null): boolean {
   if (client?.capabilities?.host_tools) return true;
   return hasTauriLike();
+}
+
+export function isCapacitorNative(client?: ClientContext | null): boolean {
+  if (client?.app === "capacitor") return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return Boolean(window.Capacitor?.isNativePlatform?.());
+  } catch {
+    return false;
+  }
+}
+
+/** Runtime probe: plugin registered on native bridge (no npm import required). */
+export function devicePluginAvailable(capability: string): boolean {
+  if (typeof window === "undefined") return false;
+  const plugins = window.Capacitor?.Plugins as Record<string, Record<string, unknown>> | undefined;
+  if (!plugins) return false;
+  switch (capability) {
+    case "device.camera":
+      return typeof plugins.Camera?.getPhoto === "function" || typeof plugins.Camera?.takePicture === "function";
+    case "device.notify":
+      return (
+        typeof plugins.LocalNotifications?.schedule === "function" ||
+        typeof plugins.LocalNotifications?.requestPermissions === "function"
+      );
+    case "device.share":
+      return typeof plugins.Share?.share === "function";
+    default:
+      return false;
+  }
 }
 
 export function capabilityAvailability(
@@ -39,6 +74,7 @@ export function capabilityAvailability(
       available: false,
       reason: "未在微应用中声明该能力",
       host_required: HOST_CAPS.has(cap),
+      device_required: DEVICE_CAPS.has(cap),
     };
   }
   if (ALWAYS_OK.has(cap) || FILE_PICKER_CAPS.has(cap)) {
@@ -56,13 +92,35 @@ export function capabilityAvailability(
     }
     return { capability: cap, available: true, host_required: true };
   }
-  // device.* etc.
+  if (DEVICE_CAPS.has(cap)) {
+    const native = isCapacitorNative(opts.client);
+    if (!native) {
+      return {
+        capability: cap,
+        available: false,
+        reason: "仅 Android / iOS 原生壳可用（请在手机 App 中打开）",
+        host_required: false,
+        device_required: true,
+      };
+    }
+    if (!devicePluginAvailable(cap)) {
+      return {
+        capability: cap,
+        available: false,
+        reason: "原生插件未接入（Camera / LocalNotifications / Share）；接入后自动可用",
+        host_required: false,
+        device_required: true,
+      };
+    }
+    return { capability: cap, available: true, host_required: false, device_required: true };
+  }
   if (cap.startsWith("device.")) {
     return {
       capability: cap,
       available: false,
-      reason: "移动端能力将在后续版本提供",
+      reason: "该设备能力尚未开放",
       host_required: false,
+      device_required: true,
     };
   }
   return { capability: cap, available: true, host_required: false };
@@ -76,3 +134,24 @@ export function summarizeUnavailable(
     .map((c) => capabilityAvailability(c, { client, declared: capabilities }))
     .filter((c) => !c.available);
 }
+
+/** Full matrix (available + unavailable) for UI. */
+export function capabilityMatrix(
+  capabilities: string[],
+  client?: ClientContext | null,
+): CapabilityAvailability[] {
+  return (capabilities || []).map((c) => capabilityAvailability(c, { client, declared: capabilities }));
+}
+
+export const CAPABILITY_LABELS: Record<string, string> = {
+  "host.screenshot": "截屏",
+  "host.fs.read": "读取所选文件",
+  "host.fs.write": "保存到所选位置",
+  "host.shell.run": "本机命令",
+  "cloud.http": "云端 HTTP",
+  "ui.notify": "应用内通知",
+  "chat.attach": "发到会话",
+  "device.camera": "相机",
+  "device.notify": "系统通知",
+  "device.share": "系统分享",
+};

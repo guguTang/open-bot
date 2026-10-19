@@ -70,7 +70,7 @@ func (s *Server) handleGetMicroApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-		if app.BundleKey != "" {
+	if app.BundleKey != "" {
 		app.BundleURL = "/v1/micro-apps/" + app.ID + "/bundle"
 	}
 	writeJSON(w, http.StatusOK, app)
@@ -131,6 +131,9 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var body struct {
 		UserIntent string `json:"user_intent"`
+		// ChatPin explicitly mounts surface=chat_pin (hub always written).
+		ChatPin   bool   `json:"chat_pin"`
+		ContextID string `json:"context_id"`
 	}
 	if r.Body != nil && r.ContentLength != 0 {
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -142,7 +145,10 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	app, err := s.db.PinMicroApp(uid, id, uid)
+	app, err := s.db.PinMicroApp(uid, id, uid, &db.PinMicroAppOptions{
+		ChatPin:   body.ChatPin || r.URL.Query().Get("chat_pin") == "1",
+		ContextID: body.ContextID,
+	})
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -151,7 +157,11 @@ func (s *Server) handlePinMicroApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	s.publishMicroAppsChanged(uid, "pinned", app.ID, map[string]any{"status": app.Status})
+	extra := map[string]any{"status": app.Status, "kind": app.Kind}
+	if app.SkillSlug != "" {
+		extra["skill_slug"] = app.SkillSlug
+	}
+	s.publishMicroAppsChanged(uid, "pinned", app.ID, extra)
 	writeJSON(w, http.StatusOK, app)
 }
 
