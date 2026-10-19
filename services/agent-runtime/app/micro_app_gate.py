@@ -169,18 +169,20 @@ def surface_grant_prompt(
     high_sensitivity: bool = False,
     pending_args: str = "",
     request_id: str = "",
-) -> None:
+    req_id: str = "",
+) -> str:
     """Best-effort: insert a micro_app_grant chat card for the client approval UX.
 
-    Stores pending tool/args/request_id so allow_once|always_allow can auto-retry.
+    Stores pending tool/args/request_id so allow can resume the parked tool call.
+    Returns the card req_id (may reuse a pending card's id via server dedupe).
     """
     conv = (conversation_id or "").strip()
     if not conv or not (user_id or "").strip() or not (micro_app_id or "").strip():
-        return
+        return (req_id or "").strip()
     if not (capability or "").strip():
-        return
+        return (req_id or "").strip()
     try:
-        obapi._post(
+        out = obapi._post(
             "/internal/micro-apps/grant-prompt",
             {
                 "user_id": user_id,
@@ -191,14 +193,26 @@ def surface_grant_prompt(
                 "command": command or "",
                 "machine_id": machine_id or "",
                 "reason": reason
-                or "模型路径需要微应用授权。允许后将自动重试原工具调用。",
+                or "模型路径需要微应用授权。允许后将在同一工具调用内继续。",
                 "suggested_decision": suggested_decision or "",
                 "high_sensitivity": bool(high_sensitivity),
                 "pending_args": pending_args or "",
                 "request_id": request_id or "",
+                "req_id": req_id or "",
             },
             timeout=10.0,
         )
+        if isinstance(out, dict):
+            content = out.get("content")
+            if isinstance(content, str) and content.strip():
+                try:
+                    payload = json.loads(content)
+                    rid = str(payload.get("req_id") or "").strip()
+                    if rid:
+                        return rid
+                except Exception:  # noqa: BLE001
+                    pass
+        return (req_id or "").strip()
     except Exception:  # noqa: BLE001
         logger.warning(
             "micro_app grant-prompt failed user=%s app=%s cap=%s",
@@ -206,6 +220,7 @@ def surface_grant_prompt(
             micro_app_id,
             capability,
         )
+        return (req_id or "").strip()
 
 
 def consume_grant(user_id: str, grant_id: str) -> None:
@@ -345,8 +360,12 @@ def enforce_dual_gate_with_grant(
     client: ClientContext | None,
     conversation_id: str = "",
     request_id: str = "",
+    surface: bool = True,
 ) -> tuple[str | None, str]:
-    """Like enforce_dual_gate but also returns grant_id when allowed (for allow_once)."""
+    """Like enforce_dual_gate but also returns grant_id when allowed (for allow_once).
+
+    When surface=False, grant_required does not insert a chat card (caller parks).
+    """
     mid = (micro_app_id or "").strip()
     if not mid or not is_hostish_tool(tool):
         return None, ""
@@ -411,7 +430,7 @@ def enforce_dual_gate_with_grant(
             return None, grant_id
         return None, ""
 
-    if error_code == "grant_required" or bool(result.get("needs_prompt")):
+    if surface and (error_code == "grant_required" or bool(result.get("needs_prompt"))):
         reason = str(result.get("error") or result.get("reason") or "")
         if reason == "command_not_in_allowlist":
             reason = "该命令不在此微应用的命令白名单内"
@@ -481,3 +500,131 @@ def apply_offer_filter(
             sorted(dropped),
         )
     return filtered
+
+async def await_dual_gate_with_park(
+    *,
+    user_id: str,
+    micro_app_id: str,
+    tool: str,
+    args: dict[str, Any] | None,
+    client: ClientContext | None,
+    conversation_id: str = "",
+    request_id: str = "",
+    timeout_sec: float | None = None,
+) -> tuple[str | None, str]:
+    """Enforce dual-gate; on grant_required park until allow/deny resolves the same call.
+
+    Park store: ``micro_app_park`` in-process Future keyed by grant-card ``req_id``.
+    Resume trigger: client decide → UpsertGrant → runtime ``/v1/micro-app-grants/resolve``.
+    Deny/timeout fails this tool cleanly (no new-turn sendUserText).
+    """
+    import uuid
+
+    from . import micro_app_park as park_mod
+
+    mid = (micro_app_id or "").strip()
+    if not mid or not is_hostish_tool(tool):
+        return None, ""
+
+    reject, grant_id = enforce_dual_gate_with_grant(
+        user_id=user_id,
+        micro_app_id=mid,
+        tool=tool,
+        args=args,
+        client=client,
+        conversation_id=conversation_id,
+        request_id=request_id,
+        surface=False,
+    )
+    if reject is None:
+        return None, grant_id
+
+    try:
+        body = json.loads(reject)
+    except Exception:  # noqa: BLE001
+        return reject, ""
+
+    error_code = str(body.get("error_code") or "")
+    if error_code != "grant_required" and not body.get("needs_prompt"):
+        return reject, ""
+
+    capability = str(body.get("capability") or capability_for_tool(tool) or "")
+    command = ""
+    if tool == "host_shell" and isinstance(args, dict):
+        command = str(args.get("command") or args.get("cmd") or "").strip()
+
+    machine_id = ""
+    if client is not None:
+        machine_id = str(client.machine_id or "").strip()
+
+    reason = str(body.get("error") or body.get("reason") or "")
+    if reason == "command_not_in_allowlist":
+        reason = "该命令不在此微应用的命令白名单内"
+
+    wanted_id = "mag-" + uuid.uuid4().hex
+    # Register waiter before the card is visible so decide→resolve cannot miss.
+    await park_mod.create_park(
+        req_id=wanted_id,
+        micro_app_id=mid,
+        tool=tool,
+        capability=capability,
+        conversation_id=(conversation_id or "").strip(),
+        request_id=(request_id or "").strip(),
+        user_id=str(user_id or ""),
+        args=args if isinstance(args, dict) else {},
+    )
+    park_id = surface_grant_prompt(
+        user_id=str(user_id or ""),
+        conversation_id=(conversation_id or "").strip(),
+        micro_app_id=mid,
+        capability=capability,
+        tool=tool,
+        command=command,
+        machine_id=machine_id,
+        reason=reason,
+        suggested_decision=str(body.get("suggested_decision") or ""),
+        high_sensitivity=bool(body.get("high_sensitivity")),
+        pending_args=_compact_pending_args(args),
+        request_id=str(request_id or "").strip(),
+        req_id=wanted_id,
+    ) or wanted_id
+    # Server dedupe may reuse an older pending card req_id — await that key too.
+    if park_id != wanted_id:
+        await park_mod.alias_to(park_id, wanted_id)
+        # Prefer awaiting the id stamped on the card (what decide will resolve).
+
+    to = park_mod.DEFAULT_TIMEOUT_SEC if timeout_sec is None else float(timeout_sec)
+    decision = await park_mod.await_decision(park_id, timeout_sec=to)
+    if decision not in ("allow_once", "always_allow"):
+        code = "grant_denied" if decision == "deny" else "grant_park_timeout"
+        err = (
+            "用户拒绝了微应用授权"
+            if decision == "deny"
+            else "等待微应用授权超时"
+        )
+        return (
+            reject_payload(
+                error_code=code,
+                tool=tool,
+                micro_app_id=mid,
+                capability=capability,
+                error=err,
+                extra={"park_id": park_id, "decision": decision or "deny"},
+            ),
+            "",
+        )
+
+    reject2, grant_id2 = enforce_dual_gate_with_grant(
+        user_id=user_id,
+        micro_app_id=mid,
+        tool=tool,
+        args=args,
+        client=client,
+        conversation_id=conversation_id,
+        request_id=request_id,
+        surface=False,
+    )
+    if reject2 is not None:
+        return reject2, ""
+    return None, grant_id2
+

@@ -45,7 +45,7 @@ export function useHostConfirmChat(deps: {
   hostExecPolicy: MachineExecPolicy;
   toolAllowEntries: ToolAllowEntry[];
   setToolAllowEntries: Dispatch<SetStateAction<ToolAllowEntry[]>>;
-  /** After allow_once/always_allow: parent sends a continue turn with micro_app_id. */
+  /** Fallback only: when park_resolved=false after allow, parent may send a continue turn. */
   retryAfterMicroAppGrantRef?: React.MutableRefObject<
     ((args: MicroAppGrantRetryArgs) => void) | null
   >;
@@ -198,7 +198,7 @@ export function useHostConfirmChat(deps: {
         status,
         decision: choice.decision,
         allowlist_entry: choice.allowlistEntry || "",
-        auto_retry: choice.decision !== "deny",
+        auto_retry: false,
       });
       const convId = message.conversation_id || deps.conversationRef.current?.id || "";
       if (!convId) return;
@@ -226,7 +226,14 @@ export function useHostConfirmChat(deps: {
             toast.message("已拒绝微应用授权", { duration: 2500 });
             return;
           }
-          toast.message("已授权，正在自动继续…", { duration: 2500 });
+          const savedParsed = parseMicroAppGrantPrompt(saved.content);
+          const parked = Boolean(savedParsed?.park_resolved);
+          if (parked) {
+            toast.message("已授权，正在继续原工具调用…", { duration: 2500 });
+            return;
+          }
+          // Documented fallback: no in-process waiter (runtime restart / non-park path).
+          toast.message("已授权；未找到暂停中的工具调用，将发续跑消息…", { duration: 3500 });
           const retryText = microAppGrantRetryUserText({
             ...parsed,
             status: "allowed",

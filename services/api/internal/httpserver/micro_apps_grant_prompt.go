@@ -26,8 +26,9 @@ type microAppGrantPromptPayload struct {
 	// PendingArgs / RunRequestID preserve the blocked tool call so allow can auto-retry.
 	PendingArgs    string `json:"pending_args,omitempty"`
 	RunRequestID   string `json:"run_request_id,omitempty"`
-	AutoRetry      bool   `json:"auto_retry,omitempty"` // set true after allow when client/API will resume
-	Status         string `json:"status"`               // pending | allowed | denied
+	AutoRetry      bool   `json:"auto_retry,omitempty"`    // deprecated: new-turn retry removed; kept for old clients
+	ParkResolved   bool   `json:"park_resolved,omitempty"` // runtime in-process park was unblocked
+	Status         string `json:"status"`                  // pending | allowed | denied
 	Decision       string `json:"decision,omitempty"`
 	AllowlistEntry string `json:"allowlist_entry,omitempty"`
 }
@@ -95,7 +96,7 @@ func (s *Server) handleInternalMicroAppGrantPrompt(w http.ResponseWriter, r *htt
 	}
 	reason := strings.TrimSpace(body.Reason)
 	if reason == "" {
-		reason = "模型路径需要微应用授权后才能继续（允许后将自动重试）"
+		reason = "模型路径需要微应用授权后才能继续（允许后将在同一工具调用内继续）"
 	}
 	prefix := ""
 	if cap == db.MicroAppShellCapability && cmd != "" {
@@ -263,8 +264,26 @@ func (s *Server) handleDecideMicroAppGrantPrompt(w http.ResponseWriter, r *http.
 	payload.Status = status
 	payload.Decision = decision
 	payload.AllowlistEntry = entry
-	// Signal clients/history that allow should auto-retry the pending host_* call.
-	payload.AutoRetry = decision != db.MicroAppGrantDeny && (strings.TrimSpace(payload.Tool) != "" || strings.TrimSpace(payload.Command) != "")
+	// Resume parked tool loop in agent-runtime (same host_* call). Not a new turn.
+	parkResolved := false
+	if strings.TrimSpace(payload.ReqID) != "" {
+		out, code, rerr := s.postRuntimeJSON(r.Context(), "/v1/micro-app-grants/resolve", map[string]any{
+			"req_id":          payload.ReqID,
+			"decision":        decision,
+			"conversation_id": conversationID,
+			"request_id":      payload.RunRequestID,
+		})
+		if rerr != nil {
+			// Grant is already upserted; park miss is a documented fallback gap.
+		} else if code >= 200 && code < 300 && out != nil {
+			if v, ok := out["park_resolved"].(bool); ok {
+				parkResolved = v
+			}
+		}
+	}
+	payload.ParkResolved = parkResolved
+	// auto_retry false: client must not sendUserText continue when park works.
+	payload.AutoRetry = false
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -278,7 +297,7 @@ func (s *Server) handleDecideMicroAppGrantPrompt(w http.ResponseWriter, r *http.
 	s.publishConversationMessage(uid, updated)
 	meta, _ := json.Marshal(map[string]any{
 		"req_id": payload.ReqID, "grant_id": g.ID, "source": "grant_prompt_decide",
-		"allowlist_entry": entry,
+		"allowlist_entry": entry, "park_resolved": parkResolved,
 	})
 	_ = s.db.InsertMicroAppGateAudit(uid, payload.MicroAppID, conversationID, payload.Tool, payload.Capability,
 		decision != db.MicroAppGrantDeny, "", decision, machineID, string(meta))

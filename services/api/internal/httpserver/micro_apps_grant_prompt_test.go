@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestMicroAppGrantRuntimeNoteAutoRetry(t *testing.T) {
-	allowed := `{"req_id":"mag-1","micro_app_id":"app1","capability":"host.shell.run","tool":"host_shell","command":"git status","pending_args":"{\"command\":\"git status\"}","status":"allowed","auto_retry":true}`
+func TestMicroAppGrantRuntimeNoteParkResume(t *testing.T) {
+	allowed := `{"req_id":"mag-1","micro_app_id":"app1","capability":"host.shell.run","tool":"host_shell","command":"git status","pending_args":"{\"command\":\"git status\"}","status":"allowed","park_resolved":true}`
 	note := microAppGrantRuntimeNote(allowed)
 	if note == "" {
 		t.Fatal("empty note")
@@ -14,11 +14,11 @@ func TestMicroAppGrantRuntimeNoteAutoRetry(t *testing.T) {
 	if !strings.Contains(note, "已允许") {
 		t.Fatalf("missing allowed: %s", note)
 	}
-	if !strings.Contains(note, "立即重试") {
-		t.Fatalf("should instruct immediate retry: %s", note)
+	if !strings.Contains(note, "同一工具调用") && !strings.Contains(note, "park/resume") {
+		t.Fatalf("should describe same-call resume: %s", note)
 	}
-	if strings.Contains(note, "再说一次") || strings.Contains(note, "不自动重试") {
-		t.Fatalf("stale no-retry copy: %s", note)
+	if strings.Contains(note, "客户端会自动续跑") {
+		t.Fatalf("stale new-turn copy: %s", note)
 	}
 	if !strings.Contains(note, "host_shell") {
 		t.Fatalf("missing tool: %s", note)
@@ -32,7 +32,7 @@ func TestMicroAppGrantRuntimeNoteAutoRetry(t *testing.T) {
 
 	pending := `{"req_id":"mag-3","micro_app_id":"app1","capability":"host.fs.read","tool":"host_read","status":"pending"}`
 	pnote := microAppGrantRuntimeNote(pending)
-	if !strings.Contains(pnote, "自动重试") {
-		t.Fatalf("pending should mention auto-retry: %s", pnote)
+	if !strings.Contains(pnote, "同一工具调用将继续") {
+		t.Fatalf("pending should mention same-call continue: %s", pnote)
 	}
 }

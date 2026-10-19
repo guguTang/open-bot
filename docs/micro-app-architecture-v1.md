@@ -316,8 +316,10 @@ agent.invoke(micro_app_id)
 ```
 
 结构化错误码：`capability_not_declared` / `grant_denied` / `grant_required` / `host_required`。  
-**缺口收口 + 授权后续跑**：模型路径遇 `grant_required` 时，runtime 另调 `POST /internal/micro-apps/grant-prompt`，在会话插入 `role=micro_app_grant` 卡片（`MicroAppGrantConfirmCard`，三态），并写入 `tool` / `command` / `pending_args` / `run_request_id`。用户点「仅一次」或「始终允许」→ `UpsertMicroAppGrant` 后**客户端自动发续跑消息**（带原 `micro_app_id`），模型立即重试原 `host_*`；点「拒绝」则停止、不续跑。完整「tool-loop 内暂停→恢复」（与 iframe `MicroAppGrantDialog` 同环）仍未做——续跑是新 turn，不是 interrupt resume。  
-轻量审计：表 `micro_app_gate_audit`（tool-gate / grant-prompt / decide 写入）+ runtime 日志 `micro_app_dual_gate …`。
+**缺口收口 + tool-loop park/resume**：模型路径遇 `grant_required` 时，runtime 在**同一工具调用内** park（`micro_app_park` in-process Future，键 = 授权卡 `req_id`），并调 `POST /internal/micro-apps/grant-prompt` 插入 `role=micro_app_grant` 卡（`tool` / `pending_args` / `run_request_id`）。用户点「仅一次」或「始终允许」→ `UpsertMicroAppGrant` 后 Go 调 runtime `POST /v1/micro-app-grants/resolve` **恢复同一 `host_*` 调用**；点「拒绝」→ resolve(deny) → 该工具以 `grant_denied` 失败。  
+**不走** LangGraph `interrupt()`/`Command(resume)`：`approve_thread` 无法 rebound `tool_handler`，无法在 resume 后执行 host_*。park 语义对齐 iframe `MicroAppGrantDialog` / Go host_confirm 等待。  
+进程重启会丢 park；decide 仍写 Grant，响应 `park_resolved=false` 时客户端才 fallback 发续跑 turn（避免双续跑）。  
+轻量审计：表 `micro_app_gate_audit`（tool-gate / grant-prompt / decide 写入）+ runtime 日志 `micro_app_dual_gate …` / `micro_app_park …`。
 
 Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，便于客户端灰显/引导。
 
@@ -444,8 +446,8 @@ bundle.zip
 | 结构化错误 | ✅ | `capability_not_declared` / `grant_denied` / `grant_required` / `host_required`（Host Bridge RPC 与 runtime 工具结果） |
 | 高敏默认 | ✅ | 仍无 always 默认；建议 `allow_once`（既有 `DefaultGrantDecisionForCapability`） |
 | 审计 | ✅ 轻量表 | `micro_app_gate_audit` + runtime logger `micro_app_dual_gate …` |
-| 模型路径 Grant 卡 | ✅ | `grant_required` → 会话 `micro_app_grant` 卡；allow → UpsertGrant + **自动续跑重试** host_*（见 §6.2 / §14） |
-| 跳过 | — | OS Widget、团队模板、store、入站 Hook、`device.contacts`；tool-loop 内 interrupt 暂停→恢复（续跑为新 turn） |
+| 模型路径 Grant 卡 | ✅ | `grant_required` → 会话 `micro_app_grant` 卡；allow → UpsertGrant + **同调用 park/resume**（见 §6.2 / §14） |
+| 跳过 | — | OS Widget、团队模板、store、入站 Hook、`device.contacts`；不用 LangGraph interrupt 做 Grant park（见 §6.2 原因） |
 
 
 ### 10.5 延期项（仅文档，不实现）
@@ -488,7 +490,7 @@ bundle.zip
 20. （Phase 6）已声明但无 Grant：`error_code=grant_required`；用户 `deny` 后 → `grant_denied`；桌面未开 host_tools → `host_required`。
 21. （Phase 6）iframe RPC 拒绝时 error 字符串以 `capability_not_declared:` / `grant_denied:` / `host_required:` 等码开头，客户端可解析灰显/引导。
 22. （缺口收口）mobile `cap sync` 后 Capacitor 壳上 `device.geo` / `device.mic`（及 camera）矩阵不再因「插件未接入」灰显；拒 OS 权限时仍引导。
-23. （缺口收口）`agent.invoke` 回合 host_* 遇无 Grant → 会话出现微应用授权卡；点「仅一次」或「始终允许」后库内有 grant，**且自动续跑**重试原工具（无需用户再说一次）；点「拒绝」不续跑。
+23. （缺口收口）`agent.invoke` 回合 host_* 遇无 Grant → 会话出现微应用授权卡；点「仅一次」或「始终允许」后库内有 grant，**且同一工具调用继续**（park/resume，无需用户再说一次、默认不新开 turn）；点「拒绝」该工具失败。
 24. （缺口收口）`micro_app_gate_audit` 有对应行（tool-gate / grant-prompt / decide）。
 
 ---
@@ -500,7 +502,7 @@ bundle.zip
 4. **Phase 3 范围**（PM 拍板）：应用内快捷区（非 OS Widget）；shell 三态打磨 + 每应用白名单；kind=routine（复用现有 routines，缺口标占位）；OS Widget 与团队模板分发仅文档延期。
 5. **Phase 4 范围**：Runtime draft/pin 工具；PATCH routine_config 同步 UpdateRoutine；Host Bridge routine.manage + clipboard；可选 app.find/open、account.profile。跳过 OS Widget / 模板 / hooks / dual-gate / mic·geo / agent.invoke / skill.toggle / fs.workspace。
 6. **Phase 5 范围（产品确认）**：`agent.invoke`（仅绑定 agent_id + 运行前确认）、`skill.toggle`（禁 always_on）、`host.fs.workspace`（/workspace + Grant）、`device.mic`/`device.geo`（Capacitor + Grant + OS 权限，无能力灰显）。不做 OS Widget / 团队模板 / store / 入站 Hook 代建 / 完整模型侧双闸门（Phase 6）。
-7. **Phase 6 范围**：模型侧双闸门（`micro_app_id` 上下文 + 供给过滤 + tool-gate ∩ Grant + 结构化错误码 + 轻量审计）。**缺口收口**：`grant_required` 会话授权卡 + 授权后自动续跑 + `micro_app_gate_audit`；mobile geo/mic（及 camera/notify/share）deps。跳过 OS Widget / 模板 / store / hooks / `device.contacts` / tool-loop 内 interrupt。
+7. **Phase 6 范围**：模型侧双闸门（`micro_app_id` 上下文 + 供给过滤 + tool-gate ∩ Grant + 结构化错误码 + 轻量审计）。**缺口收口**：`grant_required` 会话授权卡 + **tool-loop park/resume** + `micro_app_gate_audit`；mobile geo/mic（及 camera/notify/share）deps。跳过 OS Widget / 模板 / store / hooks / `device.contacts`。
 3. **draft 时机**：不在「实现完」时静默建库。仅当用户保存/固定意图，或 bot 询问且用户同意后，才 `user_intent` 建 draft 并进入 pin。draft/pin 的 `user_intent` 门在 Phase 5 保持不变。
 
 ---
@@ -514,15 +516,16 @@ bundle.zip
 |----|------|------|
 | Mobile Capacitor geo + mic（+ camera/notify/share） | ✅ | `apps/mobile` deps + iOS/Android 权限文案；deviceBridge 运行时探测；OS 未授权仍灰显+系统框 |
 | 模型路径 `grant_required` → 客户端审批卡 | ✅ | 会话卡 `micro_app_grant` / `MicroAppGrantConfirmCard`；decide → UpsertGrant |
-| 授权后自动重试 host_* | ✅ | 卡上保留 `tool`/`pending_args`/`run_request_id`；allow → 客户端带 `micro_app_id` 自动续跑；deny 停止 |
+| 授权后 **同调用** 继续 host_* | ✅ | park：`micro_app_park`（req_id Future）；resume：decide → `/v1/micro-app-grants/resolve`；deny 失败该工具；**默认不再** sendUserText 新 turn |
 | 双闸门审计落库 | ✅ 轻量 | 表 `micro_app_gate_audit`；保留 runtime logger |
 | OS Widget / 团队模板 / store / 入站 Hook 代建 / `device.contacts` | ⏸ 跳过 | 见 §10.5；本批明确不实现 |
 
 **仍打开的边界（有意留下）**
 
-1. 续跑是**新 turn**（自动发「继续…」+ `micro_app_id`），不是 tool-loop 内 interrupt 暂停→恢复（与 iframe `MicroAppGrantDialog` / host_confirm park 不同）。
-2. iframe Host Bridge 仍用 `MicroAppGrantDialog`；模型路径用聊天卡——两套 UI，语义同为三态 Grant。
-3. `cap sync` / 真机权限仍需本地执行；CI 不强制跑原生构建。
+1. Park 存 **runtime 进程内** Future（非 LangGraph checkpoint）。进程重启 → `park_resolved=false`，客户端 **fallback** 发续跑 turn（仅此时）；正常路径无双续跑。
+2. 未用 LangGraph `interrupt()`：`approve_thread` 无 rebound `tool_handler`，无法在 resume 后跑 host_*（见 §6.2）。
+3. iframe Host Bridge 仍用 `MicroAppGrantDialog`；模型路径用聊天卡——两套 UI，语义同为三态 Grant。
+4. `cap sync` / 真机权限仍需本地执行；CI 不强制跑原生构建。
 
 ## 13. 仓内索引
 
@@ -536,7 +539,7 @@ bundle.zip
 | SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
 | Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`）；内部 API `httpserver/micro_apps_internal.go` |
 | Phase 6 dual-gate | `httpserver/micro_apps_tool_gate.go`；runtime `micro_app_gate.py`；`agent.invoke` → `micro_app_id` |
-| 缺口收口 Grant 卡 + 自动续跑 | `httpserver/micro_apps_grant_prompt.go`；Web `MicroAppGrantConfirmCard` / `settleMicroAppGrant`；role=`micro_app_grant`；pending_args + allow→续跑 |
+| 缺口收口 Grant 卡 + park/resume | `httpserver/micro_apps_grant_prompt.go`；runtime `micro_app_park.py` / `await_dual_gate_with_park`；Web `settleMicroAppGrant`；role=`micro_app_grant`；decide→resolve |
 | 缺口收口审计 | 表 `micro_app_gate_audit`（`InsertMicroAppGateAudit`） |
 | Mobile device 插件 | `apps/mobile/package.json`（camera/geo/mic/notify/share） |
 

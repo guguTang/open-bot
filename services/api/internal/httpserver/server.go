@@ -2493,7 +2493,7 @@ func microAppGrantRuntimeNote(content string) string {
 	note += "。这是系统记录。禁止编造与此相反的批准/拒绝。"
 	switch strings.TrimSpace(payload.Status) {
 	case "allowed":
-		note += "用户已授权；请立即重试原工具调用（客户端会自动续跑），勿再索要授权。"
+		note += "用户已授权；同一工具调用将继续执行（tool-loop park/resume），勿再索要授权、勿新开一轮重试。"
 		if args := strings.TrimSpace(payload.PendingArgs); args != "" {
 			if len(args) > 400 {
 				args = args[:400] + "…"
@@ -2503,7 +2503,7 @@ func microAppGrantRuntimeNote(content string) string {
 	case "denied":
 		note += "用户已拒绝；停止该操作，勿重试。"
 	default:
-		note += "授权通过后将自动重试原工具；拒绝则停止。"
+		note += "授权通过后同一工具调用将继续；拒绝则该工具失败并停止。"
 	}
 	return note
 }

@@ -1287,7 +1287,7 @@ async def openai_path(
                     _rid = str(getattr(turn, "request_id", "") or "").strip()
                 if not _rid:
                     _rid = str(durable_run_id or "").strip()
-                _reject, _ma_grant_id = micro_gate.enforce_dual_gate_with_grant(
+                _reject, _ma_grant_id = await micro_gate.await_dual_gate_with_park(
                     user_id=str(user_id or ""),
                     micro_app_id=_ma_id,
                     tool=name,
@@ -1926,6 +1926,22 @@ class ApproveRequest(BaseModel):
     request_id: str = Field(..., min_length=1)
     approve: bool = True
     reason: str = ""
+
+
+class MicroAppGrantResolveRequest(BaseModel):
+    """Unblock a parked host_* tool after micro_app_grant decide."""
+
+    req_id: str = Field(..., min_length=1)
+    decision: str = Field(..., min_length=1)  # allow_once | always_allow | deny
+    conversation_id: str = ""
+    request_id: str = ""
+
+
+@app.post("/v1/micro-app-grants/resolve")
+async def micro_app_grants_resolve(body: MicroAppGrantResolveRequest) -> dict:
+    from . import micro_app_park as park_mod
+
+    return await park_mod.resolve(body.req_id, body.decision)
 
 
 @app.post("/v1/runs/steer")

@@ -193,6 +193,7 @@ export function useChatController(p: ChatControllerParams) {
     deviceDisplayName: p.deviceDisplayName,
   });
 
+  // Fallback only when server reports park_resolved=false (no in-process waiter).
   useLayoutEffect(() => {
     retryAfterMicroAppGrantRef.current = (args) => {
       if (conversationRef.current?.id !== args.conversationId) return;

@@ -13,8 +13,10 @@ export type MicroAppGrantPromptPayload = {
   pending_args?: string;
   /** Durable run / turn request_id when the tool was blocked. */
   run_request_id?: string;
-  /** True after allow when the client should auto-retry. */
+  /** @deprecated New-turn auto-retry removed; park resume is server-side. */
   auto_retry?: boolean;
+  /** True when runtime unblocked the parked same tool call. */
+  park_resolved?: boolean;
   status: "pending" | "allowed" | "denied" | string;
   decision?: string;
   allowlist_entry?: string;
@@ -30,7 +32,7 @@ export function parseMicroAppGrantPrompt(content: string): MicroAppGrantPromptPa
   }
 }
 
-/** User-visible continue text after grant allow (auto-retry turn). */
+/** Fallback continue text when park was not resolved (process restart / no waiter). */
 export function microAppGrantRetryUserText(item: MicroAppGrantPromptPayload): string {
   const tool = (item.tool || "").trim();
   const command = (item.command || "").trim();
