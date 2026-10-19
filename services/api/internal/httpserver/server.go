@@ -335,6 +335,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/routines/delete", s.requireInternal(s.handleInternalDeleteRoutine))
 	mux.HandleFunc("POST /internal/micro-apps/create", s.requireInternal(s.handleInternalCreateMicroApp))
 	mux.HandleFunc("POST /internal/micro-apps/pin", s.requireInternal(s.handleInternalPinMicroApp))
+	mux.HandleFunc("POST /internal/micro-apps/tool-gate", s.requireInternal(s.handleInternalMicroAppToolGate))
+	mux.HandleFunc("POST /internal/micro-apps/grant-consume", s.requireInternal(s.handleInternalMicroAppGrantConsume))
 	mux.HandleFunc("POST /internal/agents/clone", s.requireInternal(s.handleInternalCloneAgent))
 	mux.HandleFunc("POST /internal/agents/ask", s.requireInternal(s.handleInternalAskAgent))
 
@@ -1316,6 +1318,8 @@ type sendBody struct {
 	Attachments     []AttachmentRef `json:"attachments"`
 	AgentIDs        []string        `json:"agent_ids"` // @ subset or UI pick; empty/full-members = server AutoPick
 	Client          map[string]any  `json:"client"`    // client environment envelope (platform/app/os/…)
+	// MicroAppID (Phase 6): when set, runtime enforces dual-gate on host_* tools.
+	MicroAppID string `json:"micro_app_id"`
 	// ReplyToID is set only when the user explicitly clicks「回复」(quote / mainline).
 	// Normal sends leave it empty. Bot assistant saves must never copy this onto reply_to_id;
 	// turn linkage uses request_id (runtime run_id) instead.
@@ -1807,6 +1811,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		if body.Client != nil {
 			payloadMap["client"] = body.Client
 		}
+		if mid := strings.TrimSpace(body.MicroAppID); mid != "" {
+			payloadMap["micro_app_id"] = mid
+		}
 		attachUserTimezone(payloadMap, s.userSettingsOrDefault(uid))
 		attachToolAllowlist(payloadMap, s.toolAllowlistOrEmpty(uid))
 		s.attachPreferredMachine(payloadMap, uid, agentID)
@@ -2036,6 +2043,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 					attachDecision(payloadMap, s.decisionRuntimePayload(uid))
 					if body.Client != nil {
 						payloadMap["client"] = body.Client
+					}
+					if mid := strings.TrimSpace(body.MicroAppID); mid != "" {
+						payloadMap["micro_app_id"] = mid
 					}
 					attachUserTimezone(payloadMap, s.userSettingsOrDefault(uid))
 					attachToolAllowlist(payloadMap, s.toolAllowlistOrEmpty(uid))

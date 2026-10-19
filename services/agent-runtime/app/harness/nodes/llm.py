@@ -183,6 +183,7 @@ async def llm_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         tools = iter_tool_defs(
             allow_ask_agent=bool(cfg.get("allow_ask_agent")),
             extra_tools=extra_tools,
+            allowed_names=cfg.get("available_tool_names"),
         )
         choice: str | None = "auto" if profile.tool_choice_auto else None
         try:

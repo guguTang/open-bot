@@ -99,7 +99,9 @@ function reply(
   );
 }
 
-type GrantOutcome = { ok: true; grantId?: string } | { ok: false; error: string };
+type GrantOutcome =
+  | { ok: true; grantId?: string }
+  | { ok: false; error: string; code?: string };
 
 /** host.shell.run command text from SDK params. */
 export function shellCommandFromParams(params: Record<string, unknown>): string {
@@ -129,7 +131,7 @@ async function ensureGrant(
 ): Promise<GrantOutcome> {
   const isShell = capability === "host.shell.run";
   const command = isShell ? shellCommandFromParams(params) : "";
-  if (isShell && !command) return { ok: false, error: "command required" };
+  if (isShell && !command) return { ok: false, error: "command required", code: "invalid_params" };
 
   // Host-side Auto-review stays authoritative: hard deny / exec_policy=deny always win,
   // regardless of any micro-app Grant.
@@ -143,14 +145,14 @@ async function ensureGrant(
       path: command,
       dest: params.terminal ? "terminal" : undefined,
     });
-    if (rev.tier === "deny") return { ok: false, error: rev.reason || "Auto-review 拒绝了该命令" };
+    if (rev.tier === "deny") return { ok: false, error: rev.reason || "Auto-review 拒绝了该命令", code: "auto_review_denied" };
     reviewConfirm = rev.tier === "confirm";
     reviewReason = rev.reason;
   }
 
   const check = await microAppGrantCheck(ctx.microAppId, capability, ctx.machineId, command || undefined);
   if (check.decision === "deny") {
-    return { ok: false, error: "用户已拒绝该能力" };
+    return { ok: false, error: "用户已拒绝该能力", code: "grant_denied" };
   }
   if (check.decision === "allow_once") {
     return { ok: true, grantId: check.grant_id };
@@ -179,14 +181,14 @@ async function ensureGrant(
           : undefined,
   });
   if (!choice) {
-    return { ok: false, error: "用户取消了授权" };
+    return { ok: false, error: "用户取消了授权", code: "grant_required" };
   }
   const { decision } = choice;
 
   if (overriding) {
     // Keep the existing always_allow grant: allow_once / deny apply to this run only;
     // 「始终允许」 extends the allowlist.
-    if (decision === "deny") return { ok: false, error: "用户拒绝了这次命令" };
+    if (decision === "deny") return { ok: false, error: "用户拒绝了这次命令", code: "grant_denied" };
     if (decision === "allow_once") return { ok: true };
     const entry = (choice.allowlistEntry ?? "").trim();
     const current = check.command_allowlist || [];
@@ -208,7 +210,7 @@ async function ensureGrant(
   }
   const g = await putMicroAppGrant(ctx.microAppId, capability, body);
   if (decision === "deny") {
-    return { ok: false, error: "用户拒绝了该能力" };
+    return { ok: false, error: "用户拒绝了该能力", code: "grant_denied" };
   }
   return { ok: true, grantId: g.id };
 }
@@ -499,6 +501,12 @@ async function executeCapability(
         undefined,
         [bound],
         ctx.client || undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        ctx.microAppId,
       );
       if (errMsg) throw new Error(errMsg);
       return {
@@ -651,12 +659,14 @@ export function createMicroAppMessageHandler(ctx: HostBridgeContext) {
         declared: ctx.declared,
       });
       if (!avail.available) {
-        reply(ev.source, id, false, undefined, avail.reason || "capability_unavailable");
+        const code = avail.code || "capability_unavailable";
+        reply(ev.source, id, false, undefined, `${code}: ${avail.reason || code}`);
         return;
       }
       const grant = await ensureGrant(ctx, capability, params);
       if (!grant.ok) {
-        reply(ev.source, id, false, undefined, grant.error);
+        const code = grant.code || "grant_denied";
+        reply(ev.source, id, false, undefined, `${code}: ${grant.error}`);
         return;
       }
       const result = await executeCapability(ctx, capability, params);

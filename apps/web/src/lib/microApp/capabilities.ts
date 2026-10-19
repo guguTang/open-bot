@@ -4,6 +4,12 @@ export type CapabilityAvailability = {
   capability: string;
   available: boolean;
   reason?: string;
+  /** Stable reject code for client gray/prompt (Phase 6). */
+  code?:
+    | "capability_not_declared"
+    | "host_required"
+    | "device_required"
+    | "capability_unavailable";
   /** Needs desktop host (Tauri) or connected machine. */
   host_required: boolean;
   /** Needs Capacitor native plugins (camera / notify / share). */
@@ -98,6 +104,7 @@ export function capabilityAvailability(
       capability: cap,
       available: false,
       reason: "未在微应用中声明该能力",
+      code: "capability_not_declared",
       host_required: HOST_CAPS.has(cap),
       device_required: DEVICE_CAPS.has(cap),
     };
@@ -112,6 +119,7 @@ export function capabilityAvailability(
         capability: cap,
         available: false,
         reason: "需要已连接的电脑（桌面端）。手机登录不等于本机 host。",
+        code: "host_required",
         host_required: true,
       };
     }
@@ -124,6 +132,7 @@ export function capabilityAvailability(
         capability: cap,
         available: false,
         reason: "仅 Android / iOS 原生壳可用（请在手机 App 中打开）",
+        code: "device_required",
         host_required: false,
         device_required: true,
       };
@@ -133,6 +142,7 @@ export function capabilityAvailability(
         capability: cap,
         available: false,
         reason: "原生插件未接入（Camera / LocalNotifications / Share / Mic / Geo）；接入后自动可用",
+        code: "device_required",
         host_required: false,
         device_required: true,
       };
@@ -144,6 +154,7 @@ export function capabilityAvailability(
       capability: cap,
       available: false,
       reason: "该设备能力尚未开放",
+      code: "capability_unavailable",
       host_required: false,
       device_required: true,
     };

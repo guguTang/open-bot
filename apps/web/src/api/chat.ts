@@ -413,6 +413,8 @@ export async function sendMessageStream(
   whenBusy?: string,
   /** Job card (or a custom answer on it). This turn stays with the current bot. */
   onboarding?: boolean,
+  /** Phase 6: micro-app dual-gate context for model-side host_* tools. */
+  microAppId?: string,
 ): Promise<void> {
   const body: Record<string, unknown> = { content };
   if (attachments && attachments.length > 0) {
@@ -438,6 +440,9 @@ export async function sendMessageStream(
   }
   if (onboarding) {
     body.onboarding = true;
+  }
+  if (microAppId && microAppId.trim()) {
+    body.micro_app_id = microAppId.trim();
   }
   const res = await fetch(`${API_BASE}/v1/conversations/${conversationId}/messages`, {
     method: "POST",
