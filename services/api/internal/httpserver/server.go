@@ -204,6 +204,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("DELETE /v1/conversations/{id}", s.requireAuth(s.handleDeleteConversation))
 	mux.HandleFunc("GET /v1/conversations/{id}/messages", s.requireAuth(s.handleListMessages))
 	mux.HandleFunc("POST /v1/conversations/{id}/host-confirms", s.requireAuth(s.handleCreateHostConfirm))
+	mux.HandleFunc("POST /v1/conversations/{id}/micro-app-grants/{msgId}/decide", s.requireAuth(s.handleDecideMicroAppGrantPrompt))
 	mux.HandleFunc("POST /v1/conversations/{id}/host-confirms/{msgId}", s.requireAuth(s.handleDecideHostConfirm))
 	mux.HandleFunc("POST /v1/conversations/{id}/messages", s.requireAuth(s.handleSendMessage))
 	mux.HandleFunc("POST /v1/conversations/{id}/cancel", s.requireAuth(s.handleCancelConversationRun))
@@ -337,6 +338,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/micro-apps/pin", s.requireInternal(s.handleInternalPinMicroApp))
 	mux.HandleFunc("POST /internal/micro-apps/tool-gate", s.requireInternal(s.handleInternalMicroAppToolGate))
 	mux.HandleFunc("POST /internal/micro-apps/grant-consume", s.requireInternal(s.handleInternalMicroAppGrantConsume))
+	mux.HandleFunc("POST /internal/micro-apps/grant-prompt", s.requireInternal(s.handleInternalMicroAppGrantPrompt))
 	mux.HandleFunc("POST /internal/agents/clone", s.requireInternal(s.handleInternalCloneAgent))
 	mux.HandleFunc("POST /internal/agents/ask", s.requireInternal(s.handleInternalAskAgent))
 
@@ -2459,6 +2461,31 @@ func formatAssistantRunFailure(err error) string {
 		msg = string(runes[:300]) + "…"
 	}
 	return "（失败）" + msg
+}
+
+func microAppGrantRuntimeNote(content string) string {
+	var payload microAppGrantPromptPayload
+	if json.Unmarshal([]byte(content), &payload) != nil {
+		return ""
+	}
+	cap := strings.TrimSpace(payload.Capability)
+	if cap == "" {
+		return ""
+	}
+	status := strings.TrimSpace(payload.Status)
+	switch status {
+	case "allowed":
+		status = "已允许"
+	case "denied":
+		status = "已拒绝"
+	case "pending":
+		status = "等待用户在对话里点授权"
+	case "":
+		status = "未知"
+	}
+	note := "[微应用授权] capability=" + cap + " 结果=" + status +
+		"。这是系统记录。禁止编造与此相反的批准/拒绝。授权后用户需再说一次才能继续原操作（本回合不自动重试）。"
+	return note
 }
 
 func hostConfirmRuntimeNote(content string) string {

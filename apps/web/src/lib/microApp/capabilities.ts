@@ -141,7 +141,7 @@ export function capabilityAvailability(
       return {
         capability: cap,
         available: false,
-        reason: "原生插件未接入（Camera / LocalNotifications / Share / Mic / Geo）；接入后自动可用",
+        reason: "原生插件未注册（需 Capacitor 壳 + cap sync）；若已接入则检查系统权限设置",
         code: "device_required",
         host_required: false,
         device_required: true,

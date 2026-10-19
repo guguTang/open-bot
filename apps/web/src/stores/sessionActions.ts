@@ -48,6 +48,7 @@ const initialActions: SessionActions = {
   onLogout: noop,
   onSystemBack: noop,
   settleHostConfirm: noop,
+  settleMicroAppGrant: noop,
   stopCurrentRun: noop,
   onSubmit: noop,
   setOpenThreadRootId: noop,

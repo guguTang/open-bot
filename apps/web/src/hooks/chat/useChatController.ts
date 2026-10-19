@@ -327,6 +327,7 @@ export function useChatController(p: ChatControllerParams) {
     viewingRunActive,
     selectionHydrated,
     settleHostConfirm: host.settleHostConfirm,
+    settleMicroAppGrant: host.settleMicroAppGrant,
     askHostConfirmRef: host.askHostConfirmRef,
     hostConfirmResolvers: host.hostConfirmResolvers,
     applyRemoteHostDecisionRef: host.applyRemoteHostDecisionRef,

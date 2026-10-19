@@ -41,6 +41,10 @@ declare global {
         Camera?: Record<string, (...args: unknown[]) => Promise<unknown>>;
         LocalNotifications?: Record<string, (...args: unknown[]) => Promise<unknown>>;
         Share?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Geolocation?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Microphone?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        VoiceRecorder?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        SpeechRecognition?: Record<string, (...args: unknown[]) => Promise<unknown>>;
         StatusBar?: {
           getInfo?: () => Promise<{ visible?: boolean; overlays?: boolean; style?: string }>;
           setOverlaysWebView?: (opts: { overlay: boolean }) => Promise<void>;

@@ -748,6 +748,28 @@ export async function decideHostConfirm(
   return (await res.json()) as Message;
 }
 
+/** Decide a micro_app_grant chat card (model-path grant_required). */
+export async function decideMicroAppGrantPrompt(
+  conversationId: string,
+  messageId: string,
+  body: {
+    decision: "allow_once" | "always_allow" | "deny";
+    allowlist_entry?: string;
+    machine_id?: string;
+  },
+): Promise<Message> {
+  const res = await fetch(
+    `${API_BASE}/v1/conversations/${encodeURIComponent(conversationId)}/micro-app-grants/${encodeURIComponent(messageId)}/decide`,
+    {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as Message;
+}
+
 const TOOL_ALLOWLIST_GET_CANDIDATES = [
   "/v1/me/tool-allowlist",
   "/v1/settings/tool-allowlist",
@@ -758,6 +780,7 @@ const TOOL_ALLOWLIST_GET_CANDIDATES = [
  * List Always-allow entries. Tries known paths; returns [] if none exist yet
  * (backend may still be shipping). Callers may merge an optimistic local cache.
  */
+
 export async function listToolAllowlist(): Promise<ToolAllowlistEntry[]> {
   for (const path of TOOL_ALLOWLIST_GET_CANDIDATES) {
     try {

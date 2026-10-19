@@ -17,6 +17,8 @@ import { MessageReactions } from "./MessageReactions";
 import { stripThinkTags } from "../lib/stripThink";
 import { ResultOrientedMessage } from "./ArtifactCards";
 import { HostConfirmCard } from "./HostConfirmCard";
+import { MicroAppGrantConfirmCard, type MicroAppGrantCardDecision } from "./MicroAppGrantConfirmCard";
+import { parseMicroAppGrantPrompt } from "./microAppGrantModel";
 import { parseHostConfirm } from "./hostConfirmModel";
 import type { ApprovalDecision } from "../lib/toolAllowlist";
 import { type ChatMessageData, formatMessageTime } from "./chatMessageModel";
@@ -38,6 +40,7 @@ type Props = {
   speakerName?: string;
   speakerFace?: { id: string; name: string; shape?: string | null; color?: string | null };
   onHostDecide?: (decision: ApprovalDecision) => void;
+  onMicroAppGrantDecide?: (decision: MicroAppGrantCardDecision) => void;
   /** When false, hide Always allow (machine exec_policy=ask). Default true. */
   alwaysAllowEnabled?: boolean;
   /** Quoted parent preview when rendering a reply. */
@@ -74,7 +77,7 @@ function previewText(content: string, max = 80): string {
 
 function canReact(message: ChatMessageData): boolean {
   if (message.streaming) return false;
-  if (message.role === "host_confirm" || message.role === "handoff") return false;
+  if (message.role === "host_confirm" || message.role === "micro_app_grant" || message.role === "handoff") return false;
   const id = message.id || "";
   if (!id || id.startsWith("local-") || id.startsWith("onboard-")) return false;
   return true;
@@ -99,6 +102,7 @@ function ChatMessageInner({
   speakerName,
   speakerFace,
   onHostDecide,
+  onMicroAppGrantDecide,
   alwaysAllowEnabled = true,
   replyQuote,
   replyCount = 0,
@@ -144,6 +148,20 @@ function ChatMessageInner({
           item={item}
           onDecide={item.status === "pending" ? onHostDecide : undefined}
           alwaysAllowEnabled={alwaysAllowEnabled}
+        />
+        {timeEl}
+      </div>
+    );
+  }
+
+  if (message.role === "micro_app_grant") {
+    const item = parseMicroAppGrantPrompt(message.content);
+    if (!item) return null;
+    return (
+      <div className="chat-row chat-row-assistant" data-msg-id={message.id}>
+        <MicroAppGrantConfirmCard
+          item={item}
+          onDecide={item.status === "pending" ? onMicroAppGrantDecide : undefined}
         />
         {timeEl}
       </div>

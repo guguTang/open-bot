@@ -1288,6 +1288,7 @@ async def openai_path(
                     tool=name,
                     args=args,
                     client=client,
+                    conversation_id=str(conversation_id or ""),
                 )
                 if _reject:
                     return _reject

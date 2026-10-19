@@ -1,6 +1,6 @@
 # open-bot 微应用（Micro App）技术架构与能力实现路径
 
-> 状态：**Phase 0–6 已按本文在 `develop` 落地**（本地 commit，默认不推）；系统级 Widget / 团队模板分发 / 入站 Hook 代建 / store 为**延期项**（§10.5）  
+> 状态：**Phase 0–6 + 缺口收口**已按本文在 `develop` 落地（本地 commit，默认不推）；系统级 Widget / 团队模板分发 / 入站 Hook 代建 / store / `device.contacts` 为**延期项**（§10.5）  
 > 日期：2026-10-20（Asia/Shanghai）  
 > 校对原则：以仓内现实现为准；改 API/表/能力时同步改本文。
 
@@ -228,7 +228,7 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 | `device.mic` | `Microphone` / `VoiceRecorder` / `SpeechRecognition` | **Phase 5**：运行时探测；Grant（高敏默认 allow_once）+ OS 权限；无插件灰显 |
 | `device.geo` | `Geolocation` | **Phase 5**：`getCurrentPosition`；Grant（高敏）+ OS 权限；无插件灰显 |
 
-实现：`apps/web/src/lib/microApp/deviceBridge.ts`（运行时探测，不强制 npm 插件进 web 包）。**缺口**：`apps/mobile/package.json` 尚未声明 `@capacitor/geolocation` / 录音类插件；与 Phase 2 相机相同——壳接入插件并 `cap sync` 后自动亮起，否则矩阵灰显。
+实现：`apps/web/src/lib/microApp/deviceBridge.ts`（运行时探测，不强制 npm 插件进 web 包）。**已收口**：`apps/mobile/package.json` 声明 `@capacitor/camera` / `@capacitor/geolocation` / `@mozartec/capacitor-microphone` / `@capacitor/local-notifications` / `@capacitor/share`；iOS `Info.plist` + Android Manifest 权限文案已加。`pnpm install` + `cap sync` 后矩阵亮起；**OS 权限未授予**时仍灰显并走系统 `requestPermissions` 引导。
 
 ### 5.4 kind=skill
 
@@ -316,8 +316,8 @@ agent.invoke(micro_app_id)
 ```
 
 结构化错误码：`capability_not_declared` / `grant_denied` / `grant_required` / `host_required`。  
-模型路径**不**弹 MicroAppGrantDialog（与 iframe Host Bridge 对齐语义，但 UX 上须先在 Shell「命令授权」等面板授权）。  
-轻量审计：runtime 日志字段 `micro_app_dual_gate …`（无独立 audit 表）。
+**缺口收口**：模型路径遇 `grant_required` 时，runtime 另调 `POST /internal/micro-apps/grant-prompt`，在会话插入 `role=micro_app_grant` 卡片（`MicroAppGrantConfirmCard`，三态）；用户决定后 `PUT` Grant。**剩余边界**：授权**不**自动重试本回合工具（须用户再说一次）；完整「闸门内暂停→恢复」与 iframe `MicroAppGrantDialog` 同环未做。  
+轻量审计：表 `micro_app_gate_audit`（tool-gate / grant-prompt / decide 写入）+ runtime 日志 `micro_app_dual_gate …`。
 
 Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，便于客户端灰显/引导。
 
@@ -428,7 +428,7 @@ bundle.zip
 | `agent.invoke` | ✅ | 仅 `micro_apps.agent_id`；Grant + 每次运行前 ConfirmProvider 确认；打开主会话并 `sendMessageStream` |
 | `skill.toggle` | ✅ | 现有 `PUT /v1/skills/{name}` / `PUT /v1/agents/{id}/skills/{name}`；禁用 always_on（find-skills）客户端+服务端双拦 |
 | `host.fs.workspace` | ✅ | 沙箱 `listSandbox` / `readSandboxFile` / `writeSandboxFile`；路径闸门 `/workspace`；Grant 三态 |
-| `device.mic` / `device.geo` | ✅ | deviceBridge 运行时探测 + Grant + OS `requestPermissions`；无插件/非原生壳灰显（同 camera） |
+| `device.mic` / `device.geo` | ✅ | deviceBridge + mobile 已声明插件；Grant + OS `requestPermissions`；非原生壳/未 sync/OS 拒权 → 灰显+引导 |
 | 跳过 / 延期 | — | OS Widget、团队模板、入站 Hook 代建（Phase 6 承接双闸门） |
 
 ### Phase 6 — 模型侧双闸门 ✅（本迭代）
@@ -443,8 +443,9 @@ bundle.zip
 | 执行闸门 | ✅ | `POST /internal/micro-apps/tool-gate`：declared ∩ host_tools ∩ Grant；shell 白名单同 grant-check |
 | 结构化错误 | ✅ | `capability_not_declared` / `grant_denied` / `grant_required` / `host_required`（Host Bridge RPC 与 runtime 工具结果） |
 | 高敏默认 | ✅ | 仍无 always 默认；建议 `allow_once`（既有 `DefaultGrantDecisionForCapability`） |
-| 审计 | ✅ 轻量 | runtime logger：`micro_app_dual_gate micro_app_id=… tool=… capability=… allowed=… error_code=…`；**无**独立 audit 表 |
-| 跳过 | — | OS Widget、团队模板、store、入站 Hook、`device.contacts`；模型路径**不**弹 Grant 窗（须先在 Shell 授权；`grant_required`） |
+| 审计 | ✅ 轻量表 | `micro_app_gate_audit` + runtime logger `micro_app_dual_gate …` |
+| 模型路径 Grant 卡 | ✅ 最小 UX | `grant_required` → 会话 `micro_app_grant` 卡；**不**自动重试本回合（剩边界见 §6.2 / §14） |
+| 跳过 | — | OS Widget、团队模板、store、入站 Hook、`device.contacts`；闸门内暂停→恢复 |
 
 
 ### 10.5 延期项（仅文档，不实现）
@@ -486,6 +487,9 @@ bundle.zip
 19. （Phase 6）微应用未声明 `host.shell.run` 时，经 `agent.invoke` 触发的回合：模型看不到 `host_shell`；若仍调用 → 工具结果 `error_code=capability_not_declared`。
 20. （Phase 6）已声明但无 Grant：`error_code=grant_required`；用户 `deny` 后 → `grant_denied`；桌面未开 host_tools → `host_required`。
 21. （Phase 6）iframe RPC 拒绝时 error 字符串以 `capability_not_declared:` / `grant_denied:` / `host_required:` 等码开头，客户端可解析灰显/引导。
+22. （缺口收口）mobile `cap sync` 后 Capacitor 壳上 `device.geo` / `device.mic`（及 camera）矩阵不再因「插件未接入」灰显；拒 OS 权限时仍引导。
+23. （缺口收口）`agent.invoke` 回合 host_* 遇无 Grant → 会话出现微应用授权卡；点「仅一次」后库内有 grant，再说一次可过闸。
+24. （缺口收口）`micro_app_gate_audit` 有对应行（tool-gate / grant-prompt / decide）。
 
 ---
 
@@ -496,10 +500,28 @@ bundle.zip
 4. **Phase 3 范围**（PM 拍板）：应用内快捷区（非 OS Widget）；shell 三态打磨 + 每应用白名单；kind=routine（复用现有 routines，缺口标占位）；OS Widget 与团队模板分发仅文档延期。
 5. **Phase 4 范围**：Runtime draft/pin 工具；PATCH routine_config 同步 UpdateRoutine；Host Bridge routine.manage + clipboard；可选 app.find/open、account.profile。跳过 OS Widget / 模板 / hooks / dual-gate / mic·geo / agent.invoke / skill.toggle / fs.workspace。
 6. **Phase 5 范围（产品确认）**：`agent.invoke`（仅绑定 agent_id + 运行前确认）、`skill.toggle`（禁 always_on）、`host.fs.workspace`（/workspace + Grant）、`device.mic`/`device.geo`（Capacitor + Grant + OS 权限，无能力灰显）。不做 OS Widget / 团队模板 / store / 入站 Hook 代建 / 完整模型侧双闸门（Phase 6）。
-7. **Phase 6 范围**：模型侧双闸门（`micro_app_id` 上下文 + 供给过滤 + tool-gate ∩ Grant + 结构化错误码 + 轻量审计日志）。模型路径不弹 Grant 窗（`grant_required` → 用户先在 Shell 授权）。跳过 OS Widget / 模板 / store / hooks / `device.contacts` / 独立 audit 表。
+7. **Phase 6 范围**：模型侧双闸门（`micro_app_id` 上下文 + 供给过滤 + tool-gate ∩ Grant + 结构化错误码 + 轻量审计）。**缺口收口**：`grant_required` 会话授权卡 + `micro_app_gate_audit`；mobile geo/mic（及 camera/notify/share）deps。跳过 OS Widget / 模板 / store / hooks / `device.contacts` / 闸门内自动重试。
 3. **draft 时机**：不在「实现完」时静默建库。仅当用户保存/固定意图，或 bot 询问且用户同意后，才 `user_intent` 建 draft 并进入 pin。draft/pin 的 `user_intent` 门在 Phase 5 保持不变。
 
 ---
+
+
+---
+
+## 14. 缺口收口（本批）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| Mobile Capacitor geo + mic（+ camera/notify/share） | ✅ | `apps/mobile` deps + iOS/Android 权限文案；deviceBridge 运行时探测；OS 未授权仍灰显+系统框 |
+| 模型路径 `grant_required` → 客户端审批卡 | ✅ 最小 UX | 会话卡 `micro_app_grant` / `MicroAppGrantConfirmCard`；decide → UpsertGrant；**不**自动重试本回合 |
+| 双闸门审计落库 | ✅ 轻量 | 表 `micro_app_gate_audit`；保留 runtime logger |
+| OS Widget / 团队模板 / store / 入站 Hook 代建 / `device.contacts` | ⏸ 跳过 | 见 §10.5；本批明确不实现 |
+
+**仍打开的边界（有意留下）**
+
+1. 模型路径授权后**须用户再说一次**——未做 tool-loop 内暂停/恢复（与 host_confirm 的 client-side park 不同：dual-gate 在 runtime 侧先拒绝）。
+2. iframe Host Bridge 仍用 `MicroAppGrantDialog`；模型路径用聊天卡——两套 UI，语义同为三态 Grant。
+3. `cap sync` / 真机权限仍需本地执行；CI 不强制跑原生构建。
 
 ## 13. 仓内索引
 
@@ -513,5 +535,8 @@ bundle.zip
 | SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
 | Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`）；内部 API `httpserver/micro_apps_internal.go` |
 | Phase 6 dual-gate | `httpserver/micro_apps_tool_gate.go`；runtime `micro_app_gate.py`；`agent.invoke` → `micro_app_id` |
+| 缺口收口 Grant 卡 | `httpserver/micro_apps_grant_prompt.go`；Web `MicroAppGrantConfirmCard`；role=`micro_app_grant` |
+| 缺口收口审计 | 表 `micro_app_gate_audit`（`InsertMicroAppGateAudit`） |
+| Mobile device 插件 | `apps/mobile/package.json`（camera/geo/mic/notify/share） |
 
 推送：仅当用户在 open bot 1:1 明确说 push；否则 **develop 本地 commit only**。

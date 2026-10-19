@@ -214,6 +214,26 @@ CREATE INDEX IF NOT EXISTS idx_micro_app_grants_app ON micro_app_grants(micro_ap
 -- Phase 3: kind=routine recipe + host.shell.run per-grant command allowlist.
 ALTER TABLE micro_apps ADD COLUMN IF NOT EXISTS routine_config_json TEXT NOT NULL DEFAULT '';
 ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEXT NOT NULL DEFAULT '[]';
+
+-- Gap-close: lightweight dual-gate audit (model path + grant prompts).
+CREATE TABLE IF NOT EXISTS micro_app_gate_audit (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  micro_app_id TEXT NOT NULL DEFAULT '',
+  conversation_id TEXT NOT NULL DEFAULT '',
+  tool TEXT NOT NULL DEFAULT '',
+  capability TEXT NOT NULL DEFAULT '',
+  allowed BOOLEAN NOT NULL DEFAULT FALSE,
+  error_code TEXT NOT NULL DEFAULT '',
+  decision TEXT NOT NULL DEFAULT '',
+  machine_id TEXT NOT NULL DEFAULT '',
+  meta_json TEXT NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_micro_app_gate_audit_app_created
+  ON micro_app_gate_audit(micro_app_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_micro_app_gate_audit_user_created
+  ON micro_app_gate_audit(user_id, created_at DESC);
 `)
 	return err
 }
@@ -1036,4 +1056,67 @@ func (d *DB) EvaluateMicroAppGrant(userID, microAppID, capability, machineID str
 		return "", nil, nil
 	}
 	return g.Decision, g, nil
+}
+
+
+// MicroAppGateAudit is a lightweight dual-gate / grant-prompt audit row.
+type MicroAppGateAudit struct {
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	MicroAppID     string `json:"micro_app_id"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Tool           string `json:"tool,omitempty"`
+	Capability     string `json:"capability,omitempty"`
+	Allowed        bool   `json:"allowed"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	Decision       string `json:"decision,omitempty"`
+	MachineID      string `json:"machine_id,omitempty"`
+	MetaJSON       string `json:"meta_json,omitempty"`
+	CreatedAt      string `json:"created_at"`
+}
+
+// InsertMicroAppGateAudit persists one dual-gate outcome (best-effort from callers).
+func (d *DB) InsertMicroAppGateAudit(userID, microAppID, conversationID, tool, capability string, allowed bool, errorCode, decision, machineID, metaJSON string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil
+	}
+	if strings.TrimSpace(metaJSON) == "" || !json.Valid([]byte(metaJSON)) {
+		metaJSON = "{}"
+	}
+	_, err := d.SQL.Exec(`
+INSERT INTO micro_app_gate_audit
+  (id, user_id, micro_app_id, conversation_id, tool, capability, allowed, error_code, decision, machine_id, meta_json, created_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+`, uuid.NewString(), userID, strings.TrimSpace(microAppID), strings.TrimSpace(conversationID),
+		strings.TrimSpace(tool), strings.TrimSpace(capability), allowed,
+		strings.TrimSpace(errorCode), strings.TrimSpace(decision), strings.TrimSpace(machineID),
+		metaJSON, Now())
+	return err
+}
+
+// RecentMicroAppGrantPrompts returns recent micro_app_grant messages for dedupe.
+func (d *DB) RecentMicroAppGrantPrompts(conversationID string) ([]Message, error) {
+	rows, err := d.SQL.Query(
+		`SELECT id, conversation_id, role, content, COALESCE(agent_id,''),
+		        COALESCE(reply_to_id,''), COALESCE(thread_root_id,''), created_at
+		 FROM messages
+		 WHERE conversation_id = $1 AND role = 'micro_app_grant'
+		 ORDER BY created_at DESC
+		 LIMIT 40`,
+		strings.TrimSpace(conversationID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.Role, &m.Content, &m.AgentID, &m.ReplyToID, &m.ThreadRootID, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }

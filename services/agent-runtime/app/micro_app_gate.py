@@ -127,6 +127,7 @@ def check_tool_gate(
     machine_id: str = "",
     command: str = "",
     host_tools: bool | None = None,
+    conversation_id: str = "",
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "user_id": user_id,
@@ -134,10 +135,57 @@ def check_tool_gate(
         "tool": tool,
         "machine_id": machine_id or "",
         "command": command or "",
+        "conversation_id": conversation_id or "",
     }
     if host_tools is not None:
         payload["host_tools"] = bool(host_tools)
     return obapi._post("/internal/micro-apps/tool-gate", payload, timeout=15.0)
+
+
+def surface_grant_prompt(
+    *,
+    user_id: str,
+    conversation_id: str,
+    micro_app_id: str,
+    capability: str,
+    tool: str = "",
+    command: str = "",
+    machine_id: str = "",
+    reason: str = "",
+    suggested_decision: str = "",
+    high_sensitivity: bool = False,
+) -> None:
+    """Best-effort: insert a micro_app_grant chat card for the client approval UX."""
+    conv = (conversation_id or "").strip()
+    if not conv or not (user_id or "").strip() or not (micro_app_id or "").strip():
+        return
+    if not (capability or "").strip():
+        return
+    try:
+        obapi._post(
+            "/internal/micro-apps/grant-prompt",
+            {
+                "user_id": user_id,
+                "conversation_id": conv,
+                "micro_app_id": micro_app_id,
+                "capability": capability,
+                "tool": tool or "",
+                "command": command or "",
+                "machine_id": machine_id or "",
+                "reason": reason
+                or "模型路径需要微应用授权。授权后请再说一次以继续（本回合不自动重试）。",
+                "suggested_decision": suggested_decision or "",
+                "high_sensitivity": bool(high_sensitivity),
+            },
+            timeout=10.0,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "micro_app grant-prompt failed user=%s app=%s cap=%s",
+            user_id,
+            micro_app_id,
+            capability,
+        )
 
 
 def consume_grant(user_id: str, grant_id: str) -> None:
@@ -275,6 +323,7 @@ def enforce_dual_gate_with_grant(
     tool: str,
     args: dict[str, Any] | None,
     client: ClientContext | None,
+    conversation_id: str = "",
 ) -> tuple[str | None, str]:
     """Like enforce_dual_gate but also returns grant_id when allowed (for allow_once)."""
     mid = (micro_app_id or "").strip()
@@ -291,6 +340,8 @@ def enforce_dual_gate_with_grant(
     if tool == "host_shell" and isinstance(args, dict):
         command = str(args.get("command") or args.get("cmd") or "").strip()
 
+    conv = (conversation_id or "").strip()
+
     try:
         result = check_tool_gate(
             user_id=str(user_id or ""),
@@ -299,6 +350,7 @@ def enforce_dual_gate_with_grant(
             machine_id=machine_id,
             command=command,
             host_tools=host_tools,
+            conversation_id=conv,
         )
     except Exception as e:  # noqa: BLE001
         audit_log(
@@ -337,6 +389,23 @@ def enforce_dual_gate_with_grant(
         if decision == "allow_once":
             return None, grant_id
         return None, ""
+
+    if error_code == "grant_required" or bool(result.get("needs_prompt")):
+        reason = str(result.get("error") or result.get("reason") or "")
+        if reason == "command_not_in_allowlist":
+            reason = "该命令不在此微应用的命令白名单内"
+        surface_grant_prompt(
+            user_id=str(user_id or ""),
+            conversation_id=conv,
+            micro_app_id=mid,
+            capability=capability,
+            tool=tool,
+            command=command,
+            machine_id=machine_id,
+            reason=reason,
+            suggested_decision=str(result.get("suggested_decision") or ""),
+            high_sensitivity=bool(result.get("high_sensitivity")),
+        )
 
     return (
         reject_payload(

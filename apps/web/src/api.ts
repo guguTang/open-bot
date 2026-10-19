@@ -154,6 +154,7 @@ export {
   type ChatServerEvent,
   createHostConfirm,
   decideHostConfirm,
+  decideMicroAppGrantPrompt,
   listToolAllowlist,
   revokeToolAllowlistEntry,
   STOP_MARKER_TEXT,

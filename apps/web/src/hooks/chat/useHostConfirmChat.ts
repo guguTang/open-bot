@@ -4,11 +4,14 @@ import {
   approveConversation,
   createHostConfirm,
   decideHostConfirm,
+  decideMicroAppGrantPrompt,
   mergeIncomingMessage,
   type ApprovalDecision,
   type Message,
 } from "../../api";
 import { parseHostConfirm } from "../../components/hostConfirmModel";
+import { parseMicroAppGrantPrompt } from "../../components/microAppGrantModel";
+import type { MicroAppGrantCardDecision } from "../../components/MicroAppGrantConfirmCard";
 import {
   ALWAYS_ALLOW_TOAST,
   grantToolFamilyAlwaysAllow,
@@ -147,7 +150,7 @@ export function useHostConfirmChat(deps: {
             scope,
             reason: parsed.reason || "",
           })
-            .then((saved) => acceptServerMessage(saved))
+            .then((saved: Message) => acceptServerMessage(saved))
             .catch(() => {});
         }
         // Host-confirm for email_send parks on Go's confirm gate, not LangGraph
@@ -169,11 +172,45 @@ export function useHostConfirmChat(deps: {
     [acceptServerMessage, deps, releaseHostConfirm],
   );
 
+  const settleMicroAppGrant = useCallback(
+    (message: Message, choice: MicroAppGrantCardDecision) => {
+      const parsed = parseMicroAppGrantPrompt(message.content);
+      if (!parsed?.req_id || parsed.status === "allowed" || parsed.status === "denied") return;
+      const status = choice.decision === "deny" ? "denied" : "allowed";
+      const content = JSON.stringify({
+        ...parsed,
+        status,
+        decision: choice.decision,
+        allowlist_entry: choice.allowlistEntry || "",
+      });
+      const convId = message.conversation_id || deps.conversationRef.current?.id || "";
+      if (convId) {
+        deps.patchConvMessages(convId, (prev) =>
+          prev.map((m) => (m.id === message.id ? { ...m, content } : m)),
+        );
+        if (!message.id.startsWith("local-")) {
+          void decideMicroAppGrantPrompt(convId, message.id, {
+            decision: choice.decision,
+            allowlist_entry: choice.allowlistEntry,
+            machine_id: parsed.machine_id || "",
+          })
+            .then((saved: Message) => acceptServerMessage(saved))
+            .catch(() => {});
+        }
+      }
+      if (choice.decision !== "deny") {
+        toast.message("已写入微应用授权。请再说一次让助手继续。", { duration: 4000 });
+      }
+    },
+    [acceptServerMessage, deps],
+  );
+
   return {
     hostConfirmResolvers,
     askHostConfirmRef,
     applyRemoteHostDecisionRef,
     acceptServerMessage,
     settleHostConfirm,
+    settleMicroAppGrant,
   };
 }

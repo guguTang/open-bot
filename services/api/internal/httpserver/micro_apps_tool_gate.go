@@ -48,12 +48,13 @@ func microAppCapabilityDeclared(app *db.MicroApp, capability string) bool {
 // When tool is empty: returns context only (capabilities) for offer-time filtering.
 func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID     string `json:"user_id"`
-		MicroAppID string `json:"micro_app_id"`
-		Tool       string `json:"tool"`
-		MachineID  string `json:"machine_id"`
-		Command    string `json:"command"`
-		HostTools  *bool  `json:"host_tools"`
+		UserID         string `json:"user_id"`
+		MicroAppID     string `json:"micro_app_id"`
+		Tool           string `json:"tool"`
+		MachineID      string `json:"machine_id"`
+		Command        string `json:"command"`
+		HostTools      *bool  `json:"host_tools"`
+		ConversationID string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -97,6 +98,7 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 		out["allowed"] = false
 		out["error_code"] = "host_required"
 		out["error"] = "host_required: client has no host_tools"
+		s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, "", false, "host_required", "", body.MachineID, nil)
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
@@ -107,6 +109,7 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 		out["allowed"] = false
 		out["error_code"] = "capability_not_declared"
 		out["error"] = "capability_not_declared: tool_unmapped:" + tool
+		s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, "", false, "capability_not_declared", "", body.MachineID, nil)
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
@@ -119,6 +122,7 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 		out["allowed"] = false
 		out["error_code"] = "capability_not_declared"
 		out["error"] = "capability_not_declared: " + capability
+		s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, capability, false, "capability_not_declared", "", body.MachineID, nil)
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
@@ -138,16 +142,18 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 		out["error_code"] = "grant_denied"
 		out["error"] = "grant_denied"
 		out["decision"] = decision
+		s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, capability, false, "grant_denied", decision, body.MachineID, nil)
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	if decision == "" {
-		// Model path does not prompt; user grants via MicroApp Shell / Grant panel.
+		// Model path: client shows micro_app_grant card (via grant-prompt); still returns grant_required to the model.
 		out["allowed"] = false
 		out["error_code"] = "grant_required"
 		out["error"] = "grant_required"
 		out["needs_prompt"] = true
 		out["decision"] = ""
+		s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, capability, false, "grant_required", "", body.MachineID, map[string]any{"needs_prompt": true})
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
@@ -166,6 +172,7 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 				out["reason"] = "command_not_in_allowlist"
 				out["needs_prompt"] = true
 				out["decision"] = ""
+				s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, capability, false, "grant_required", "", body.MachineID, map[string]any{"reason": "command_not_in_allowlist"})
 				writeJSON(w, http.StatusOK, out)
 				return
 			}
@@ -174,6 +181,7 @@ func (s *Server) handleInternalMicroAppToolGate(w http.ResponseWriter, r *http.R
 
 	out["allowed"] = true
 	out["decision"] = decision
+	s.recordMicroAppGateAudit(uid, appID, body.ConversationID, tool, capability, true, "", decision, body.MachineID, nil)
 	writeJSON(w, http.StatusOK, out)
 }
 

@@ -13,6 +13,11 @@ def capacitor_pods
   pod 'CapacitorCordova', :path => '../../../../node_modules/.pnpm/@capacitor+ios@7.6.9_@capacitor+core@7.6.9/node_modules/@capacitor/ios'
   pod 'CapacitorDevice', :path => '../../../../node_modules/.pnpm/@capacitor+device@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/device'
   pod 'CapacitorApp', :path => '../../../../node_modules/.pnpm/@capacitor+app@7.0.2_@capacitor+core@7.6.9/node_modules/@capacitor/app'
+  pod 'CapacitorCamera', :path => '../../../../node_modules/.pnpm/@capacitor+camera@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/camera'
+  pod 'CapacitorGeolocation', :path => '../../../../node_modules/.pnpm/@capacitor+geolocation@7.1.8_@capacitor+core@7.6.9/node_modules/@capacitor/geolocation'
+  pod 'CapacitorLocalNotifications', :path => '../../../../node_modules/.pnpm/@capacitor+local-notifications@7.0.7_@capacitor+core@7.6.9/node_modules/@capacitor/local-notifications'
+  pod 'CapacitorShare', :path => '../../../../node_modules/.pnpm/@capacitor+share@7.0.4_@capacitor+core@7.6.9/node_modules/@capacitor/share'
+  pod 'MozartecCapacitorMicrophone', :path => '../../../../node_modules/.pnpm/@mozartec+capacitor-microphone@7.1.0_@capacitor+core@7.6.9/node_modules/@mozartec/capacitor-microphone'
 end
 
 target 'App' do
