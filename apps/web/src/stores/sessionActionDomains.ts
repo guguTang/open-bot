@@ -11,6 +11,8 @@ export type ChatSessionActions = {
   settleHostConfirm: (message: UiMessage, decision: ApprovalDecision) => void;
   stopCurrentRun: (opts: { markStopped: boolean }) => void;
   onSubmit: (e: FormEvent) => void | Promise<void>;
+  /** 以用户身份发一条纯文本（OpenUI 组件点击等）。 */
+  sendUserText: (text: string) => void | Promise<void>;
   setOpenThreadRootId: (id: string | null) => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
   openFeedbackForMessage: (msg: UiMessage, source: FeedbackTarget["source"]) => void;
@@ -78,6 +80,7 @@ export const CHAT_SESSION_KEYS = [
   "settleHostConfirm",
   "stopCurrentRun",
   "onSubmit",
+  "sendUserText",
   "setOpenThreadRootId",
   "onToggleReaction",
   "openFeedbackForMessage",

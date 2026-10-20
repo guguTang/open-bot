@@ -4926,3 +4926,29 @@ html.touch-ui .composer-quote-clear {
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* ---- OpenUI 交互回复（apps/web/src/openui）---- */
+.oui-root { margin: 0.7em 0; }
+.oui-card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated, #fff); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.oui-card-title { font-weight: 600; font-size: 15px; }
+.oui-card-body { display: flex; flex-direction: column; gap: 8px; }
+.oui-text { margin: 0; line-height: 1.5; }
+.oui-text-heading { font-weight: 600; font-size: 15px; }
+.oui-text-caption { font-size: 12px; color: var(--muted-foreground); }
+.oui-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.oui-btn { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
+.oui-btn:hover:not(:disabled) { background: var(--bg-hover, #eceef1); }
+.oui-btn:disabled { opacity: 0.5; cursor: default; }
+.oui-btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.oui-btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; }
+.oui-table-wrap { overflow-x: auto; }
+.oui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+.oui-table th { background: var(--bg-soft, #f5f5f7); font-weight: 600; }
+.oui-list { margin: 0; padding-left: 1.3em; }
+.oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.oui-field-label { color: var(--muted-foreground); }
+.oui-field-value { font-weight: 500; text-align: right; }
+.oui-form { display: flex; flex-direction: column; gap: 10px; }
+.oui-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.oui-input input, .oui-input select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: inherit; background: transparent; }

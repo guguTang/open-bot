@@ -237,15 +237,11 @@ func (s *Server) syncOIDCRole(u *db.User, info *auth.OIDCUserInfo) (*db.User, er
 }
 
 func (s *Server) seedDefaultLLM(userID string) {
-	base := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
-	key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	model := strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
-	enableTools := false
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("OPENAI_ENABLE_TOOLS"))) {
-	case "1", "true", "yes", "on":
-		enableTools = true
+	seed, ok := envSeedLLM(os.Getenv)
+	if !ok {
+		return
 	}
-	_, _ = s.db.CreateLLMConnection(userID, "默认连接", base, key, model, enableTools, true, nil)
+	_, _ = s.db.CreateLLMConnection(userID, "默认连接", seed.BaseURL, seed.APIKey, seed.Model, seed.EnableTools, true, nil)
 }
 
 func randomState() string {

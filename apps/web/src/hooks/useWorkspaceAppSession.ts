@@ -276,6 +276,7 @@ export function useWorkspaceAppSession() {
     settleHostConfirm,
     stopCurrentRun,
     onSubmit,
+    sendUserText: (text: string) => sendUserText(text, []),
     setOpenThreadRootId,
     toggleAssistantsCollapsed,
     toggleGroupsCollapsed,
