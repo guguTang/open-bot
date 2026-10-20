@@ -14,6 +14,7 @@ import { AgentAvatar } from "@/components/AgentAvatar";
 import { ArtifactCards } from "@/components/ArtifactCards";
 import { Icon } from "@/components/Icon";
 import { Markdown } from "@/components/Markdown";
+import { OpenUIBlock } from "@/openui/OpenUIBlock";
 import {
   HtmlDiagramCard,
   ImageDiagramCard,
@@ -271,7 +272,20 @@ export function MessageBubble({
                 ))}
 
               {/* 图表围栏在流式过程中会反复重排，先只渲染文字，等这轮稳定了再出图 */}
-              {message.streaming ? (
+              {message.streaming && body?.streamingSegments.length ? (
+                body.streamingSegments.map((seg, i) =>
+                  seg.kind === "openui" ? (
+                    <OpenUIBlock key={`o${i}`} source={seg.source} streaming />
+                  ) : seg.kind === "text" ? (
+                    <Markdown
+                      key={`t${i}`}
+                      content={seg.markdown}
+                      streaming
+                      {...(onSandboxLink ? { onLinkPress: onSandboxLink } : {})}
+                    />
+                  ) : null
+                )
+              ) : message.streaming ? (
                 <Markdown
                   content={body?.streamingMarkdown ?? ""}
                   streaming
@@ -279,6 +293,9 @@ export function MessageBubble({
                 />
               ) : (
                 (body?.segments ?? []).map((seg, i) => {
+                  if (seg.kind === "openui") {
+                    return <OpenUIBlock key={`o${i}`} source={seg.source} streaming={false} />;
+                  }
                   if (seg.kind === "diagram") {
                     return seg.lang === "mermaid" ? (
                       <MermaidDiagramCard key={`d${i}`} source={seg.source} pending={seg.pending} />
