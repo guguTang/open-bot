@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 import { deleteReaction, NEGATIVE_REACTION_EMOJIS, REACTION_EMOJIS, toggleReaction } from "@/api";
 import type { ReactionSummary, ReactionUpdatedEvent } from "@/api/types";
 import { Icon } from "@/components/Icon";
+import { runWithFinally } from "@/lib/finally";
 
 /**
  * `as const` 元组只接受字面量，这里先摊平成 string[] 才能拿运行时 emoji 去 includes。
@@ -87,23 +88,28 @@ export function ReactionBar({
       setOptimistic(applyOptimistic(base, emoji, removing));
       setError("");
       setBusy(true);
-      try {
-        const evt = removing
-          ? await deleteReaction(messageId, emoji)
-          : await toggleReaction(messageId, emoji);
-        setOptimistic(null);
-        onChanged(evt);
-        // 负表情只在「新增」时追问原因；取消不算，别在用户改主意时弹窗
-        if (!removing && NEGATIVE.includes(emoji)) onRequestFeedback?.(messageId);
-      } catch (err) {
-        // 回滚到 props，并提示失败原因
-        setOptimistic(null);
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-        onError?.(message);
-      } finally {
-        setBusy(false);
-      }
+      await runWithFinally(
+        async () => {
+          try {
+            const evt = removing
+              ? await deleteReaction(messageId, emoji)
+              : await toggleReaction(messageId, emoji);
+            setOptimistic(null);
+            onChanged(evt);
+            // 负表情只在「新增」时追问原因；取消不算，别在用户改主意时弹窗
+            if (!removing && NEGATIVE.includes(emoji)) onRequestFeedback?.(messageId);
+          } catch (err) {
+            // 回滚到 props，并提示失败原因
+            setOptimistic(null);
+            const message = err instanceof Error ? err.message : String(err);
+            setError(message);
+            onError?.(message);
+          }
+        },
+        () => {
+          setBusy(false);
+        }
+      );
     },
     [base, busy, disabled, messageId, onChanged, onError, onRequestFeedback]
   );

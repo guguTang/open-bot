@@ -59,6 +59,8 @@ import { useRealtimeEvents } from "@/providers/realtime";
 import { useSession } from "@/providers/session";
 import { useSecretPrompt } from "@/providers/secretPrompt";
 import { useAgentOnline, useAgentPresence } from "@/stores/realtime";
+import { runWithFinally } from "@/lib/finally";
+import { hitSlopFor } from "@/theme/tokens";
 
 /** 距底部多少像素内视为「贴底」，用于隐藏滚到底按钮。 */
 const NEAR_BOTTOM_PX = 96;
@@ -556,52 +558,57 @@ export default function ChatScreen(): JSX.Element {
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
-      try {
-        await api.sendMessageStream(
-          conversationId,
-          content,
-          buildStreamHandlers({
-            setStreamingByAgent,
-            setRunLabel,
-            setRunActiveTool,
-            setError,
-            setSending,
-            withSendMeta: true,
-            onDone: () => {
-              // 以服务端落库结果为准，避免本地拼的消息缺 id / 时间戳
-              void reload().catch(() => undefined);
-              void refreshSecrets();
-            },
-          }),
-          ctrl.signal,
-          {
-            ...(uploaded.length ? { attachments: uploaded } : {}),
-            ...(mentioned.length ? { agentIds: mentioned.map((a) => a.id) } : {}),
-            ...(replyTo ? { replyToId: replyTo.id } : {}),
-            // 在线程里回复时沿用根消息，否则这条会掉回主时间线
-            ...(threadRootId ? { threadRootId } : {}),
-            ...(opts?.onboarding ? { onboarding: true } : {}),
+      await runWithFinally(
+        async () => {
+          try {
+            await api.sendMessageStream(
+              conversationId,
+              content,
+              buildStreamHandlers({
+                setStreamingByAgent,
+                setRunLabel,
+                setRunActiveTool,
+                setError,
+                setSending,
+                withSendMeta: true,
+                onDone: () => {
+                  // 以服务端落库结果为准，避免本地拼的消息缺 id / 时间戳
+                  void reload().catch(() => undefined);
+                  void refreshSecrets();
+                },
+              }),
+              ctrl.signal,
+              {
+                ...(uploaded.length ? { attachments: uploaded } : {}),
+                ...(mentioned.length ? { agentIds: mentioned.map((a) => a.id) } : {}),
+                ...(replyTo ? { replyToId: replyTo.id } : {}),
+                // 在线程里回复时沿用根消息，否则这条会掉回主时间线
+                ...(threadRootId ? { threadRootId } : {}),
+                ...(opts?.onboarding ? { onboarding: true } : {}),
+              }
+            );
+          } catch (err) {
+            if (isAbortError(err)) {
+              // 用户点停止：服务端 run 可能仍在收尾，补拉一次；已切走会话则别再 reload
+              setStreamingByAgent(null);
+              setSending(false);
+              setRunLabel("");
+              setRunActiveTool(null);
+              if (conversationIdRef.current === conversationId) {
+                void reload().catch(() => undefined);
+              }
+            } else {
+              setError(err instanceof Error ? err.message : "发送失败");
+              setSending(false);
+              setStreamingByAgent(null);
+              setRunActiveTool(null);
+            }
           }
-        );
-      } catch (err) {
-        if (isAbortError(err)) {
-          // 用户点停止：服务端 run 可能仍在收尾，补拉一次；已切走会话则别再 reload
-          setStreamingByAgent(null);
-          setSending(false);
-          setRunLabel("");
-          setRunActiveTool(null);
-          if (conversationIdRef.current === conversationId) {
-            void reload().catch(() => undefined);
-          }
-        } else {
-          setError(err instanceof Error ? err.message : "发送失败");
-          setSending(false);
-          setStreamingByAgent(null);
-          setRunActiveTool(null);
+        },
+        () => {
+          if (abortRef.current === ctrl) abortRef.current = null;
         }
-      } finally {
-        if (abortRef.current === ctrl) abortRef.current = null;
-      }
+      );
     },
     [
       conversationId,
@@ -847,6 +854,7 @@ export default function ChatScreen(): JSX.Element {
             onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
             accessibilityRole="button"
             accessibilityLabel="滚到最新消息"
+            hitSlop={hitSlopFor(36)}
             className="absolute right-4 bottom-3 z-10 size-9 items-center justify-center rounded-full border border-border bg-surface"
           >
             <Icon name="chevron-down" size={20} tone="muted" />

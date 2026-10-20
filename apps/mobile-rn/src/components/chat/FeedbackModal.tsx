@@ -5,6 +5,7 @@ import { View } from "react-native";
 
 import { createMessageFeedback } from "@/api";
 import type { FeedbackPolarity, FeedbackSource, Message, MessageFeedback } from "@/api/types";
+import { runWithFinally } from "@/lib/finally";
 
 /** 负面原因标签，文案对齐 Web 端 `FeedbackModal.tsx` */
 const NEGATIVE_REASONS = [
@@ -102,28 +103,33 @@ export function FeedbackModal({
     }
     setBusy(true);
     setError("");
-    try {
-      const feedback = await createMessageFeedback({
-        message_id: message.id,
-        agent_id: agentId,
-        conversation_id: convId,
-        polarity,
-        reasons,
-        note: note.trim().slice(0, NOTE_LIMIT) || undefined,
-        source,
-      });
-      onSubmitted?.(feedback);
-      const trainId = agentIdForTrain || agentId;
-      if (trainId) {
-        setDoneAgentId(trainId);
-      } else {
-        onClose();
+    await runWithFinally(
+      async () => {
+        try {
+          const feedback = await createMessageFeedback({
+            message_id: message.id,
+            agent_id: agentId,
+            conversation_id: convId,
+            polarity,
+            reasons,
+            note: note.trim().slice(0, NOTE_LIMIT) || undefined,
+            source,
+          });
+          onSubmitted?.(feedback);
+          const trainId = agentIdForTrain || agentId;
+          if (trainId) {
+            setDoneAgentId(trainId);
+          } else {
+            onClose();
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      },
+      () => {
+        setBusy(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    );
   };
 
   const presets = polarity === "negative" ? NEGATIVE_REASONS : POSITIVE_REASONS;

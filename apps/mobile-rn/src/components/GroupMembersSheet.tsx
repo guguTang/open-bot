@@ -12,6 +12,7 @@ import type { Agent, Channel } from "@/api/types";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { errText } from "@/lib/errors";
+import { runWithFinally } from "@/lib/finally";
 
 type Props = {
   visible: boolean;
@@ -53,16 +54,21 @@ export function GroupMembersSheet({
     if (!channel) return;
     setBusy(true);
     setMsg("");
-    try {
-      const updated = await api.addChannelMember(channel.id, agentId);
-      onChanged(updated);
-      setView("list");
-      setMsg("已添加成员");
-    } catch (err) {
-      setMsg(errText(err, "添加失败"));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const updated = await api.addChannelMember(channel.id, agentId);
+          onChanged(updated);
+          setView("list");
+          setMsg("已添加成员");
+        } catch (err) {
+          setMsg(errText(err, "添加失败"));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   async function remove(agentId: string, name: string): Promise<void> {
@@ -76,17 +82,24 @@ export function GroupMembersSheet({
     if (!ok) return;
     setBusy(true);
     setMsg("");
-    try {
-      const updated = await api.removeChannelMember(channel.id, agentId);
-      onChanged(
-        updated.members ? updated : { ...channel, members: memberIds.filter((id) => id !== agentId) }
-      );
-      setMsg("已移除");
-    } catch (err) {
-      setMsg(errText(err, "移除失败（接口可能尚未就绪）"));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const updated = await api.removeChannelMember(channel.id, agentId);
+          onChanged(
+            updated.members
+              ? updated
+              : { ...channel, members: memberIds.filter((id) => id !== agentId) }
+          );
+          setMsg("已移除");
+        } catch (err) {
+          setMsg(errText(err, "移除失败（接口可能尚未就绪）"));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   return (
@@ -101,7 +114,12 @@ export function GroupMembersSheet({
       }}
     >
       <View className="flex-1 justify-end bg-black/40">
-        <Pressable className="flex-1" onPress={busy ? undefined : onClose} />
+        <Pressable
+          className="flex-1"
+          accessibilityRole="button"
+          accessibilityLabel="关闭"
+          onPress={busy ? undefined : onClose}
+        />
         <View className="max-h-[80%] rounded-t-3xl bg-background pb-safe-offset-8">
           <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
             <Typography.Heading type="h4">
@@ -124,7 +142,12 @@ export function GroupMembersSheet({
                   <Typography.Paragraph color="muted" className="text-sm">
                     成员（{memberRows.length}）
                   </Typography.Paragraph>
-                  <Button size="sm" variant="secondary" isDisabled={busy} onPress={() => setView("add")}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isDisabled={busy}
+                    onPress={() => setView("add")}
+                  >
                     <Button.Label>添加成员</Button.Label>
                   </Button>
                 </View>
