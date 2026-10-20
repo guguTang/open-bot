@@ -4,18 +4,24 @@
  *
  * Resize protocol (host listens; not an RPC capability):
  *   { source: "openbot.micro", type: "resize", width: number, height: number }
- * Auto: ResizeObserver + MutationObserver + load. Manual: openbot.micro.reportSize({ width?, height? }).
+ *   { source: "openbot.micro", type: "measure-request" }  // ask host to enlarge iframe
+ *   host → iframe: { source: "openbot.micro.host", type: "measure-go" }
+ * Auto: MutationObserver + load (+ host measure-request). Manual: openbot.micro.reportSize({ width?, height? }).
  * Host clamps and shrinks Dialog chrome to reported size (content-fit).
  *
- * Preferred-size measure: temporarily expand the layout containing block so
- * CSS like `min(100%, Npx)` can reveal N beyond the current iframe width;
- * height uses content metrics (not documentElement.offsetHeight) so the shell
- * can shrink when content gets shorter. See preferredSize.ts / docs §2.1.1.
+ * Preferred-size measure:
+ * 1. Host briefly enlarges the iframe to the max content-fit canvas (clipped)
+ *    so `100vw` / fluid layouts reveal true preferred size, then measure-go.
+ * 2. SDK also expands the layout containing block so `min(100%, N)` reveals N.
+ * 3. Height uses content union bounds (not documentElement.offsetHeight) so the
+ *    shell can shrink when content gets shorter.
+ * See preferredSize.ts / docs §2.1.1.
  */
 import {
   MICRO_SHELL_MEASURE_CHILD_SLACK_PX,
   MICRO_SHELL_MEASURE_EXPAND_EPSILON_PX,
   MICRO_SHELL_MEASURE_EXPAND_PX,
+  MICRO_SHELL_MEASURE_IGNORE_RO_MS,
 } from "./preferredSize";
 
 export const OPENBOT_MICRO_SDK = `
@@ -26,7 +32,11 @@ export const OPENBOT_MICRO_SDK = `
   var MEASURE_EXPAND_PX = ${MICRO_SHELL_MEASURE_EXPAND_PX};
   var MEASURE_EXPAND_EPS = ${MICRO_SHELL_MEASURE_EXPAND_EPSILON_PX};
   var CHILD_SLACK_PX = ${MICRO_SHELL_MEASURE_CHILD_SLACK_PX};
+  var IGNORE_RO_MS = ${MICRO_SHELL_MEASURE_IGNORE_RO_MS};
   var measuring = false;
+  var measurePending = false;
+  var ignoreROUntil = 0;
+  var measureFallbackTimer = 0;
 
   function request(capability, params) {
     return new Promise(function (resolve, reject) {
@@ -50,15 +60,6 @@ export const OPENBOT_MICRO_SDK = `
       }, 120000);
     });
   }
-  window.addEventListener("message", function (ev) {
-    var data = ev.data;
-    if (!data || data.source !== "openbot.micro.host" || data.type !== "response") return;
-    var p = pending[data.id];
-    if (!p) return;
-    delete pending[data.id];
-    if (data.ok) p.resolve(data.result);
-    else p.reject(new Error(data.error || "request failed"));
-  });
 
   function readContentMetrics() {
     var body = document.body;
@@ -68,15 +69,28 @@ export const OPENBOT_MICRO_SDK = `
     var childH = 0;
     if (body) {
       var nodes = body.children;
+      var minL = Infinity;
+      var minT = Infinity;
+      var maxR = 0;
+      var maxB = 0;
+      var any = false;
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
         var r = el.getBoundingClientRect();
-        if (r.right > w) w = r.right;
-        if (r.bottom > h) h = r.bottom;
+        any = true;
+        if (r.left < minL) minL = r.left;
+        if (r.top < minT) minT = r.top;
+        if (r.right > maxR) maxR = r.right;
+        if (r.bottom > maxB) maxB = r.bottom;
         var cw = Math.max(el.scrollWidth || 0, r.width || 0);
         var ch = Math.max(el.scrollHeight || 0, r.height || 0);
         if (cw > childW) childW = cw;
         if (ch > childH) childH = ch;
+      }
+      // Union box cancels place-items:center offset inside a tall/wide canvas.
+      if (any && isFinite(minL) && isFinite(minT)) {
+        w = Math.max(0, maxR - minL);
+        h = Math.max(0, maxB - minT);
       }
       var cs = window.getComputedStyle(body);
       h += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
@@ -134,67 +148,134 @@ export const OPENBOT_MICRO_SDK = `
     if (width >= MEASURE_EXPAND_PX - MEASURE_EXPAND_EPS) {
       width = constrained.width > 0 ? constrained.width : width;
     }
-    // Height: prefer expanded content metrics, but if expand stretched a
-    // fluid column oddly, take the min of the two positive content heights
-    // so the shell can shrink when content gets shorter.
-    if (constrained.height > 0 && height > constrained.height) {
-      // Expanded taller only when content actually grew under a wider base
-      // (e.g. wrapping relaxed). Keep expanded.
-    }
     if (constrained.height > 0 && height <= 0) height = constrained.height;
-    // If both agree within slack, fine; never floor to iframe viewport.
+    // Host-enlarged iframe: prefer the smaller positive height when expand
+    // only stretched a fluid column (shell must be able to shrink).
+    if (constrained.height > 0 && height > constrained.height) {
+      var tallerLooksFluid = height >= constrained.height * 1.5 && constrained.height >= 80;
+      // Keep expanded when content genuinely grew (wrapping relaxed / mode wider).
+      // If expanded is only marginally larger, keep it; if constrained is the
+      // intrinsic card and expanded matches a stretched canvas, prefer constrained.
+      if (tallerLooksFluid && childSlackPrefer(constrained.height, height)) {
+        height = constrained.height;
+      }
+    }
     return { width: Math.ceil(width), height: Math.ceil(height) };
+  }
+
+  function childSlackPrefer(smaller, larger) {
+    return smaller > 0 && smaller < larger - CHILD_SLACK_PX;
   }
 
   var lastW = -1;
   var lastH = -1;
   var raf = 0;
+
+  function clearMeasurePending() {
+    measurePending = false;
+    if (measureFallbackTimer) {
+      clearTimeout(measureFallbackTimer);
+      measureFallbackTimer = 0;
+    }
+  }
+
   function postResize(size) {
-    var width = size && size.width != null ? Number(size.width) : measureSize().width;
-    var height = size && size.height != null ? Number(size.height) : measureSize().height;
-    if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) return;
+    var measured = null;
+    var width = size && size.width != null ? Number(size.width) : (measured = measureSize()).width;
+    var height = size && size.height != null ? Number(size.height) : (measured || measureSize()).height;
+    if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) {
+      clearMeasurePending();
+      // Still ack host so measuring canvas is released.
+      parent.postMessage(
+        { source: "openbot.micro", type: "resize", width: lastW > 0 ? lastW : 1, height: lastH > 0 ? lastH : 1, invalid: true },
+        "*"
+      );
+      return;
+    }
     width = Math.ceil(width);
     height = Math.ceil(height);
-    if (width === lastW && height === lastH) return;
+    clearMeasurePending();
+    var unchanged = width === lastW && height === lastH;
     lastW = width;
     lastH = height;
+    // Suppress RO / iframe-resize echo from host applying this size.
+    ignoreROUntil = Date.now() + IGNORE_RO_MS;
     parent.postMessage(
-      { source: "openbot.micro", type: "resize", width: width, height: height },
+      { source: "openbot.micro", type: "resize", width: width, height: height, unchanged: unchanged },
       "*"
     );
   }
+
+  function requestHostMeasure() {
+    if (measurePending) return;
+    measurePending = true;
+    parent.postMessage(
+      { source: "openbot.micro", type: "measure-request" },
+      "*"
+    );
+    // If host never answers (older host), fall back to local measure.
+    measureFallbackTimer = setTimeout(function () {
+      measureFallbackTimer = 0;
+      if (!measurePending) return;
+      measurePending = false;
+      postResize(null);
+    }, 320);
+  }
+
   function scheduleResize(explicit) {
     if (measuring && !explicit) return;
     if (explicit) {
+      clearMeasurePending();
       postResize(explicit);
       return;
     }
+    if (Date.now() < ignoreROUntil) return;
+    if (measurePending) return;
     if (raf) return;
     raf = requestAnimationFrame(function () {
       raf = 0;
       if (measuring) return;
-      postResize(null);
+      if (Date.now() < ignoreROUntil) return;
+      if (measurePending) return;
+      requestHostMeasure();
     });
   }
+
   function reportSize(opts) {
-    scheduleResize(opts || null);
+    // Explicit numeric width/height win; bare reportSize() still uses host-assisted measure
+    // so vw/% caps can grow beyond the current iframe frame.
+    if (opts && (opts.width != null || opts.height != null)) {
+      scheduleResize(opts);
+    } else {
+      scheduleResize(null);
+    }
   }
+
+  window.addEventListener("message", function (ev) {
+    var data = ev.data;
+    if (!data || data.source !== "openbot.micro.host") return;
+    if (data.type === "measure-go") {
+      // Host enlarged iframe canvas — measure now (vw/% both valid).
+      postResize(null);
+      return;
+    }
+    if (data.type !== "response") return;
+    var p = pending[data.id];
+    if (!p) return;
+    delete pending[data.id];
+    if (data.ok) p.resolve(data.result);
+    else p.reject(new Error(data.error || "request failed"));
+  });
 
   function bootResize() {
     scheduleResize(null);
-    if (typeof ResizeObserver !== "undefined") {
-      var ro = new ResizeObserver(function () {
-        if (measuring) return;
-        scheduleResize(null);
-      });
-      if (document.documentElement) ro.observe(document.documentElement);
-      if (document.body) ro.observe(document.body);
-    }
-    // Mode / class switches that change preferred size without changing the
-    // constrained layout box (e.g. min(100%,720) while frame is 440) need MO.
+    // Do NOT ResizeObserver html/body: those track the iframe viewport, so every
+    // host apply (and host-assisted measure canvas) would re-enter measure forever.
+    // Mode / class / DOM switches are covered by MutationObserver; apps can reportSize.
     if (typeof MutationObserver !== "undefined" && document.body) {
       var mo = new MutationObserver(function () {
-        if (measuring) return;
+        if (measuring || measurePending) return;
+        if (Date.now() < ignoreROUntil) return;
         scheduleResize(null);
       });
       mo.observe(document.body, {
@@ -207,10 +288,8 @@ export const OPENBOT_MICRO_SDK = `
     window.addEventListener("load", function () {
       scheduleResize(null);
     });
-    window.addEventListener("resize", function () {
-      if (measuring) return;
-      scheduleResize(null);
-    });
+    // Do NOT listen to window "resize": host changing iframe size would
+    // re-enter measure and oscillate.
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootResize);
@@ -232,10 +311,18 @@ export const OPENBOT_MICRO_SHELL_CSS = `
 html, body {
   height: auto !important;
   min-height: 0 !important;
+  max-height: none !important;
   width: auto !important;
   min-width: 0 !important;
+  max-width: none !important;
   margin: 0;
   box-sizing: border-box;
+}
+/* Avoid 100vh / stretch canvases that defeat content-fit height shrink. */
+body {
+  place-items: start !important;
+  align-content: start !important;
+  justify-items: start !important;
 }
 `.trim();
 

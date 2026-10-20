@@ -5,6 +5,7 @@ import {
   hostAcceptsReportedSize,
   pickPreferredContentSize,
   resolveMinPercentCap,
+  resolveMinVwCap,
 } from "./preferredSize";
 import { clampMicroShellSize } from "./shellSize";
 
@@ -34,12 +35,28 @@ describe("resolveMinPercentCap (min(100%, N) fixture)", () => {
   });
 });
 
+describe("resolveMinVwCap (min(N, 100vw - gutter) fixture)", () => {
+  it("cannot reveal preferred cap while iframe viewport is narrower than N", () => {
+    expect(resolveMinVwCap(360, 720, 32)).toBe(328);
+  });
+
+  it("reveals preferred cap when host enlarges iframe viewport past N", () => {
+    const maxCanvas = Math.floor(1440 * 0.9);
+    expect(resolveMinVwCap(maxCanvas, 720, 32)).toBe(720);
+  });
+
+  it("science→basic shrink: smaller cap reported after host measure canvas", () => {
+    const maxCanvas = Math.floor(1440 * 0.9);
+    expect(resolveMinVwCap(maxCanvas, 720, 32)).toBe(720);
+    expect(resolveMinVwCap(maxCanvas, 360, 32)).toBe(360);
+  });
+});
+
 describe("pickPreferredContentSize", () => {
   it("does not floor height to a viewport-sized offsetHeight", () => {
-    // Simulate short content after a tall mode; viewport would be 520.
     const size = pickPreferredContentSize({
-      contentRight: 440,
-      contentBottom: 280,
+      contentWidth: 440,
+      contentHeight: 280,
       maxChildScrollWidth: 440,
       maxChildScrollHeight: 280,
       bodyScrollWidth: 440,
@@ -51,8 +68,8 @@ describe("pickPreferredContentSize", () => {
 
   it("prefers tight child over stretched body scroll width", () => {
     const size = pickPreferredContentSize({
-      contentRight: 720,
-      contentBottom: 400,
+      contentWidth: 720,
+      contentHeight: 400,
       maxChildScrollWidth: 720,
       maxChildScrollHeight: 400,
       bodyScrollWidth: 10000,
@@ -60,6 +77,20 @@ describe("pickPreferredContentSize", () => {
     });
     expect(size.width).toBe(720);
     expect(size.height).toBe(400);
+  });
+
+  it("union box ignores centering offset (tall measure canvas)", () => {
+    // Child visually centered: top=200, height=280 → bottom=480; union height still 280.
+    const size = pickPreferredContentSize({
+      contentWidth: 360,
+      contentHeight: 280,
+      maxChildScrollWidth: 360,
+      maxChildScrollHeight: 280,
+      bodyScrollWidth: 1200,
+      bodyScrollHeight: 800,
+    });
+    expect(size.width).toBe(360);
+    expect(size.height).toBe(280);
   });
 });
 
@@ -129,12 +160,17 @@ describe("hostAcceptsReportedSize (grow + shrink, no aspect lock)", () => {
 });
 
 describe("OPENBOT_MICRO_SDK preferred-measure contract", () => {
-  it("embeds expand-measure + MutationObserver and keeps reportSize", async () => {
+  it("embeds host-assisted measure + expand-measure + MutationObserver and keeps reportSize", async () => {
     const { OPENBOT_MICRO_SDK } = await import("./sdk");
     expect(OPENBOT_MICRO_SDK).toContain("MEASURE_EXPAND_PX = 10000");
     expect(OPENBOT_MICRO_SDK).toContain("withExpandedMeasureBase");
+    expect(OPENBOT_MICRO_SDK).toContain("measure-request");
+    expect(OPENBOT_MICRO_SDK).toContain("measure-go");
     expect(OPENBOT_MICRO_SDK).toContain("MutationObserver");
     expect(OPENBOT_MICRO_SDK).toContain("reportSize");
     expect(OPENBOT_MICRO_SDK).not.toContain("docEl.offsetHeight");
+    // window.resize / ResizeObserver on html|body would re-enter on host iframe echo
+    expect(OPENBOT_MICRO_SDK).not.toMatch(/addEventListener\(\s*["']resize["']/);
+    expect(OPENBOT_MICRO_SDK).not.toContain("new ResizeObserver");
   });
 });

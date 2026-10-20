@@ -22,6 +22,7 @@ import {
   MICRO_SHELL_MIN_WIDTH,
   type MicroShellSize,
 } from "../lib/microApp/shellSize";
+import { MICRO_SHELL_MEASURE_EXPAND_PX } from "../lib/microApp/preferredSize";
 import {
   createMicroAppMessageHandler,
   type GrantPromptOptions,
@@ -84,6 +85,9 @@ export function MicroAppShell({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [frameSize, setFrameSize] = useState<MicroShellSize | null>(null);
   const [frameScroll, setFrameScroll] = useState(false);
+  /** Host-assisted preferred measure: iframe briefly at max canvas, shell stays put (clipped). */
+  const [measuring, setMeasuring] = useState(false);
+  const measureGenRef = useRef(0);
 
   const client = useMemo(() => {
     try {
@@ -114,6 +118,8 @@ export function MicroAppShell({
     setSrcdoc(null);
     setFrameSize(null);
     setFrameScroll(false);
+    setMeasuring(false);
+    measureGenRef.current += 1;
     revokeRef.current?.();
     revokeRef.current = null;
 
@@ -163,6 +169,7 @@ export function MicroAppShell({
   }, [app.id, app.agent_id, app.capabilities, conversation?.id, client, confirm]);
 
   // Content-fit: sandboxed iframe has no allow-same-origin — size via postMessage only.
+  // measure-request → enlarge iframe (clipped) → measure-go → resize (grow/shrink, no outer scroll).
   useEffect(() => {
     const onResizeMsg = (ev: MessageEvent) => {
       const data = ev.data as {
@@ -171,12 +178,57 @@ export function MicroAppShell({
         width?: number;
         height?: number;
       } | null;
-      if (!data || data.source !== "openbot.micro" || data.type !== "resize") return;
+      if (!data || data.source !== "openbot.micro") return;
       const iframe = iframeRef.current;
       if (iframe?.contentWindow && ev.source && ev.source !== iframe.contentWindow) return;
+
+      if (data.type === "measure-request") {
+        const gen = ++measureGenRef.current;
+        const canvas = clampMicroShellSize({
+          width: MICRO_SHELL_MEASURE_EXPAND_PX,
+          height: MICRO_SHELL_MEASURE_EXPAND_PX,
+          narrow: sheetForm,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        });
+        // Imperative size BEFORE React commit — otherwise measure-go races a stale iframe.
+        if (iframe) {
+          // max-width:100% (stage) would keep iframe viewport at the old shell width,
+          // so 100vw / host-assisted measure could never reveal a larger preferred size.
+          iframe.style.maxWidth = "none";
+          iframe.style.width = `${canvas.width}px`;
+          iframe.style.height = `${canvas.height}px`;
+        }
+        setMeasuring(true);
+        // Two RAFs so layout/vw settle on the max canvas before SDK measures.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (gen !== measureGenRef.current) return;
+            const win = iframeRef.current?.contentWindow;
+            if (!win) {
+              setMeasuring(false);
+              return;
+            }
+            win.postMessage({ source: "openbot.micro.host", type: "measure-go" }, "*");
+          });
+        });
+        return;
+      }
+
+      if (data.type !== "resize") return;
+      // Always leave measuring mode (SDK may ack unchanged size after measure-go).
       const rawW = Number(data.width);
       const rawH = Number(data.height);
-      if (!Number.isFinite(rawW) || !Number.isFinite(rawH) || rawW <= 0 || rawH <= 0) return;
+      if (
+        (data as { invalid?: boolean }).invalid ||
+        !Number.isFinite(rawW) ||
+        !Number.isFinite(rawH) ||
+        rawW <= 0 ||
+        rawH <= 0
+      ) {
+        setMeasuring(false);
+        return;
+      }
       const clamped = clampMicroShellSize({
         width: rawW,
         height: rawH,
@@ -184,12 +236,32 @@ export function MicroAppShell({
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
       });
+      if (iframe) {
+        iframe.style.maxWidth = "";
+        iframe.style.width = `${clamped.width}px`;
+        iframe.style.height = `${clamped.height}px`;
+      }
       setFrameSize(clamped);
       setFrameScroll(microShellHeightOverflow(rawH, clamped.height));
+      setMeasuring(false);
     };
     window.addEventListener("message", onResizeMsg);
     return () => window.removeEventListener("message", onResizeMsg);
   }, [app.id, sheetForm]);
+
+  const displaySize: MicroShellSize = frameSize ?? {
+    width: MICRO_SHELL_DEFAULT_WIDTH,
+    height: MICRO_SHELL_DEFAULT_HEIGHT,
+  };
+  const iframeSize: MicroShellSize = measuring
+    ? clampMicroShellSize({
+        width: MICRO_SHELL_MEASURE_EXPAND_PX,
+        height: MICRO_SHELL_MEASURE_EXPAND_PX,
+        narrow: sheetForm,
+        viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1280,
+        viewportHeight: typeof window !== "undefined" ? window.innerHeight : 800,
+      })
+    : displaySize;
 
   async function onUpload(file: File) {
     setUploading(true);
@@ -203,6 +275,8 @@ export function MicroAppShell({
       revokeRef.current = built.revoke;
       setFrameSize(null);
       setFrameScroll(false);
+      setMeasuring(false);
+      measureGenRef.current += 1;
       setSrcdoc(built.srcdoc);
       setError("");
     } catch (e) {
@@ -240,8 +314,8 @@ export function MicroAppShell({
       style={
         !sheetForm
           ? {
-              ["--micro-shell-content-w" as string]: `${frameSize?.width ?? MICRO_SHELL_DEFAULT_WIDTH}px`,
-              ["--micro-shell-content-h" as string]: `${frameSize?.height ?? MICRO_SHELL_DEFAULT_HEIGHT}px`,
+              ["--micro-shell-content-w" as string]: `${displaySize.width}px`,
+              ["--micro-shell-content-h" as string]: `${displaySize.height}px`,
             }
           : undefined
       }
@@ -386,6 +460,7 @@ export function MicroAppShell({
             "micro-app-shell-stage",
             frameSize && "micro-app-shell-stage--sized",
             frameScroll && "micro-app-shell-stage--scroll",
+            measuring && "micro-app-shell-stage--measuring",
           )}
         >
           {app.kind === "routine" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
@@ -447,8 +522,8 @@ export function MicroAppShell({
               sandbox="allow-scripts allow-forms"
               srcDoc={srcdoc}
               style={{
-                width: "100%",
-                height: frameSize?.height ?? MICRO_SHELL_DEFAULT_HEIGHT,
+                width: iframeSize.width,
+                height: iframeSize.height,
                 minHeight: MICRO_SHELL_MIN_HEIGHT,
                 minWidth: MICRO_SHELL_MIN_WIDTH,
               }}

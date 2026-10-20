@@ -5314,6 +5314,7 @@ html.touch-ui .composer-quote-clear {
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
+  /* Hard: no outer scrollbar on the dialog chrome */
   overflow: hidden;
 }
 
@@ -5323,11 +5324,13 @@ html.touch-ui .composer-quote-clear {
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
+  overflow: hidden;
 }
 
 .micro-app-shell--fit .micro-app-shell-body {
   flex: 0 1 auto;
-  overflow: auto;
+  /* Outer shell must NOT scroll — hug content; only stage--scroll may overflow. */
+  overflow: hidden;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -5347,6 +5350,19 @@ html.touch-ui .composer-quote-clear {
 .micro-app-shell--fit .micro-app-shell-stage--sized {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  /* Stage hugs reported iframe size — no leftover blank that invites outer scroll */
+  width: var(--micro-shell-content-w, auto);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--measuring {
+  /* Host-assisted measure: iframe temporarily at max canvas; clip so dialog does not flash huge.
+     Stage itself must not be a max-width containing block for the iframe viewport. */
+  overflow: hidden;
+  width: auto;
+  max-width: none;
 }
 
 .micro-app-shell--fit .micro-app-shell-stage--scroll {
@@ -5357,13 +5373,16 @@ html.touch-ui .composer-quote-clear {
 .micro-app-shell--fit .micro-app-shell-frame,
 .micro-app-shell--fit .micro-app-shell-frame--fit {
   display: block;
-  width: 100%;
+  /* width/height set inline from clampMicroShellSize (not 100% of a stretched parent) */
   border: 0;
   flex: 0 0 auto;
   /* No host transform / forced aspect that deforms the tool */
   transform: none;
   aspect-ratio: auto;
   position: static;
+  /* Do NOT max-width:100% — that caps the iframe viewport to the stage and
+     breaks host-assisted preferred measure (100vw stays at old shell width). */
+  max-width: none;
 }
 
 .micro-app-shell--fit .micro-app-shell-frame--sized {
