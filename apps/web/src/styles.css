@@ -5308,7 +5308,8 @@ html.touch-ui .composer-quote-clear {
    stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
    Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
    No hardcoded portrait preference — shell follows reported resize width/height.
-   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport; overflow scrolls.
+   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport (minus chrome+border);
+   outer overflow:clip + border:none — never show dialog/shell scrollbar; stage scrolls past max.
    Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
 .settings-dialog.settings-dialog--micro-fit {
@@ -5319,20 +5320,30 @@ html.touch-ui .composer-quote-clear {
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
-  overflow: hidden;
+  box-sizing: border-box;
+  /* Kill DialogContent/` .modal` 1px border — border + content-fit size was causing
+     outer scrollWidth/Height > client (user: 「是不是有边框啊」). */
+  border: none !important;
+  border-width: 0 !important;
+  /* clip: never show a scrollbar on dialog chrome (stronger than hidden). */
+  overflow: clip;
 }
 
 .settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
+  box-sizing: border-box;
   width: min(90vw, max(280px, var(--micro-shell-content-w, 480px)));
   max-width: min(90vw, calc(100vw - 32px));
+  /* height:auto hugs header chrome + content; max caps to viewport (chrome budgeted in clamp). */
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
+  overflow: clip;
 }
 
 .micro-app-shell--fit .micro-app-shell-body {
   flex: 0 1 auto;
-  overflow: auto;
+  /* Outer shell must NOT scroll — hug content; only stage--scroll may overflow. */
+  overflow: clip;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -5347,11 +5358,27 @@ html.touch-ui .composer-quote-clear {
   border-radius: 0;
   border: none;
   padding: 0;
+  box-sizing: border-box;
 }
 
 .micro-app-shell--fit .micro-app-shell-stage--sized {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  /* Stage hugs reported iframe size — no leftover blank that invites outer scroll */
+  width: var(--micro-shell-content-w, auto);
+  height: var(--micro-shell-content-h, auto);
+  max-width: 100%;
+  overflow: clip;
+  box-sizing: border-box;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--measuring {
+  /* Host-assisted measure: iframe temporarily at max canvas; clip so dialog does not flash huge.
+     Stage itself must not be a max-width containing block for the iframe viewport. */
+  overflow: hidden;
+  width: auto;
+  max-width: none;
 }
 
 .micro-app-shell--fit .micro-app-shell-stage--scroll {
@@ -5362,13 +5389,16 @@ html.touch-ui .composer-quote-clear {
 .micro-app-shell--fit .micro-app-shell-frame,
 .micro-app-shell--fit .micro-app-shell-frame--fit {
   display: block;
-  width: 100%;
+  /* width/height set inline from clampMicroShellSize (not 100% of a stretched parent) */
   border: 0;
   flex: 0 0 auto;
   /* No host transform / forced aspect that deforms the tool */
   transform: none;
   aspect-ratio: auto;
   position: static;
+  /* Do NOT max-width:100% — that caps the iframe viewport to the stage and
+     breaks host-assisted preferred measure (100vw stays at old shell width). */
+  max-width: none;
 }
 
 .micro-app-shell--fit .micro-app-shell-frame--sized {

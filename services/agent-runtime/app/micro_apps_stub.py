@@ -1,13 +1,14 @@
-"""Micro App runtime tools: draft / upload / pin / list / update.
+"""Micro App runtime tools: draft / upload / pin / list / get_runtime / update.
 
-Calls Go internal endpoints that share create/pin/bundle/list/patch semantics
-with /v1/micro-apps (including the user_intent gate on draft/pin). Never create
-draft/pin from model narration alone. Bundle upload does not pin and does not
-require user_intent.
+Calls Go internal endpoints that share create/pin/bundle/list/runtime/patch
+semantics with /v1/micro-apps (including the user_intent gate on draft/pin).
+Never create draft/pin from model narration alone. Bundle upload does not pin
+and does not require user_intent.
 
-Modify path (existing id): list_micro_apps (or known id) → upload_micro_app_bundle
-and/or update_micro_app. Forbid draft_micro_app for an existing tool. If already
-pinned, do not pin again and do not open chat_pin unless the user explicitly asks.
+Modify path (existing id): list_micro_apps (or known id) → get_micro_app_runtime
+(read HTML/JS) → upload_micro_app_bundle and/or update_micro_app. Forbid
+draft_micro_app for an existing tool. If already pinned, do not pin again and
+do not open chat_pin unless the user explicitly asks.
 """
 
 from __future__ import annotations
@@ -20,13 +21,15 @@ DRAFT_MICRO_APP_TOOL = "draft_micro_app"
 UPLOAD_MICRO_APP_BUNDLE_TOOL = "upload_micro_app_bundle"
 PIN_MICRO_APP_TOOL = "pin_micro_app"
 LIST_MICRO_APPS_TOOL = "list_micro_apps"
+GET_MICRO_APP_RUNTIME_TOOL = "get_micro_app_runtime"
 UPDATE_MICRO_APP_TOOL = "update_micro_app"
 
 _VALID_INTENTS = frozenset({"save", "pin_agree", "user_save", "user_pin", "confirm"})
 
 _MODIFY_RULE = (
-    "【修改已有 → 先 list_micro_apps / 用上下文 id → upload_micro_app_bundle 和/或 "
-    "update_micro_app；禁止再 draft_micro_app 新建。】"
+    "【修改已有 → 先 list_micro_apps / 用上下文 id → get_micro_app_runtime 读取 files "
+    "→ 改完用同一 id 调 upload_micro_app_bundle 和/或 update_micro_app；"
+    "禁止再 draft_micro_app 新建。勿向用户索要 index.html（服务端已有 bundle）。】"
 )
 
 
@@ -179,6 +182,24 @@ def list_micro_apps(user_id: str, args: dict[str, Any] | None = None) -> dict[st
     return obapi._post("/internal/micro-apps/list", payload)
 
 
+
+def get_micro_app_runtime(user_id: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    """POST /internal/micro-apps/runtime → same files pack as GET /v1/micro-apps/{id}/runtime.
+
+    Use on the modify path to read existing UI source (index.html / CSS / JS) before
+    overwrite via upload_micro_app_bundle. Does not create, pin, or mutate.
+    """
+    args = dict(args or {})
+    app_id = str(args.get("id") or args.get("micro_app_id") or "").strip()
+    if not app_id:
+        raise ValueError("id (micro_app_id) required")
+    return obapi._post(
+        "/internal/micro-apps/runtime",
+        {"user_id": user_id, "id": app_id},
+        timeout=60.0,
+    )
+
+
 def update_micro_app(user_id: str, args: dict[str, Any]) -> dict[str, Any]:
     """POST /internal/micro-apps/update → same as PATCH /v1/micro-apps/{id}.
 
@@ -216,10 +237,11 @@ MICRO_APP_TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": LIST_MICRO_APPS_TOOL,
             "description": (
-                "列出当前用户的微应用（轻量：id/title/status/kind/placements）。"
+                "列出当前用户的微应用（轻量：id/title/status/kind/placements；不含源码）。"
                 + _MODIFY_RULE
                 + "用户要修改/改进已有工具时必须先调本工具（或使用会话上下文中已有 id），"
-                "再用同一 id 调用 upload_micro_app_bundle / update_micro_app。"
+                "再 get_micro_app_runtime 读源码，最后同一 id 调 upload_micro_app_bundle / "
+                "update_micro_app。"
             ),
             "parameters": {
                 "type": "object",
@@ -238,6 +260,28 @@ MICRO_APP_TOOL_DEFS: list[dict[str, Any]] = [
                         "description": "最多返回条数，默认 20，最大 50",
                     },
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": GET_MICRO_APP_RUNTIME_TOOL,
+            "description": (
+                "读取已有微应用的 UI bundle 源码（entrypoint + files：index.html / "
+                "CSS / JS 等），对齐 GET /v1/micro-apps/{id}/runtime。"
+                "修改已有工具前必须先调本工具拿到现有代码，再改并 "
+                "upload_micro_app_bundle 同 id 覆盖；不要向用户索要文件，"
+                "也不要用 host/sandbox 去猜路径。"
+                + _MODIFY_RULE
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "已有微应用 id"},
+                    "micro_app_id": {"type": "string", "description": "同 id"},
+                },
+                "required": ["id"],
             },
         },
     },

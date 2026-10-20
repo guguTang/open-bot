@@ -26,6 +26,7 @@ def test_format_hint_includes_last_id():
     assert "status=draft" in hint
     assert "禁止再 draft" in hint
     assert "upload_micro_app_bundle" in hint
+    assert "get_micro_app_runtime" in hint
     assert "list_micro_apps" in hint
 
 

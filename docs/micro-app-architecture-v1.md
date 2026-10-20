@@ -116,22 +116,26 @@ Placement 只指向 MicroApp.id
 
 ```
 iframe → parent:
+  { source: "openbot.micro", type: "measure-request" }   // 请求 Host 放大 iframe 画布再测
   { source: "openbot.micro", type: "resize", width: number, height: number }
+parent → iframe:
+  { source: "openbot.micro.host", type: "measure-go" }   // 画布已放大，可以 measure
 ```
 
-- **自动**：SDK 内 `ResizeObserver` + `MutationObserver` + `load` / `resize` 测量后 `postMessage`
+- **自动**：SDK 内 `MutationObserver` + `load` → `measure-request`；**不**对 html/body 挂 `ResizeObserver`、**不**监听 `window.resize`（避免 Host 改 iframe 尺寸回灌振荡）
 - **手动（优先）**：`openbot.micro.reportSize({ width?, height? })` — 应用显式传入的宽/高优先生效；模式切换（如基础↔科学布局）建议一并调用
-- **Host 钳制**（`lib/microApp/shellSize.ts`）：按上报 w/h **独立**钳制（横/竖/方均跟随，**无宽高比锁定**）；每次 resize 对称接受变大与变小；软默认 ≈ 480×360（中性，首帧后 hug）；min ≈ 280×160；max ≈ 90% viewport（扣顶栏）；超高 → stage 滚动
+- **Host 钳制**（`lib/microApp/shellSize.ts`）：按上报 w/h **独立**钳制（横/竖/方均跟随，**无宽高比锁定**）；每次 resize 对称接受变大与变小；软默认 ≈ 480×360（中性，首帧后 hug）；min ≈ 280×160；max ≈ 90% viewport（**扣顶栏 chrome ≈56px + Dialog 边框预算 2px**，避免「内容刚好贴合却因边框/顶栏溢出」出现外层滚动条）；超高 → **仅 stage 滚动**，Dialog / shell-body **`overflow: clip`**，禁止外层滚动条；微应用 document 亦 `overflow:hidden`（内部需滚动时用自己的 overflow 容器）
 - 注入 shell CSS：`html/body` `height/width:auto`，避免 100% 撑开导致误报尺寸
 
 **自动测量契约 / 陷阱（content-fit）**：
 
 | 点 | 说明 |
 |----|------|
-| 帧约束死锁 | 在当前 iframe 内测到的布局受帧宽限制。内容写 `width: min(100%, Npx)` 时，若帧宽 < N，RO 永远看不到「想要的」N，壳无法变大 |
-| 平台解法 | SDK **临时放大**布局包含块再量内容边界并恢复（`preferredSize.ts` / `MEASURE_EXPAND_PX`），使 `min(100%, N)` 能揭示 N；高度用内容 scroll/子节点指标，**不用** `documentElement.offsetHeight`（≈ 视口）当下限，否则难缩小 |
+| 帧约束死锁 | 在当前 iframe 内测到的布局受帧宽限制。内容写 `width: min(100%, Npx)` 或 `min(Npx, 100vw - …)` 时，若帧宽 < N，RO 永远看不到「想要的」N，壳无法变大；`100vw` **不会**随 `html.style.width` 变大 |
+| 平台解法 | **Host 辅助测量**：收到 `measure-request` 后将 iframe 临时设为 max 画布（`max-width:none`，避免 stage 的 `%` 把视口卡在旧壳宽；stage `overflow:hidden` 裁切，Dialog 不闪巨大），再 `measure-go`；SDK 同时 **临时放大**布局包含块（`preferredSize.ts` / `MEASURE_EXPAND_PX`）使 `min(100%, N)` 揭示 N；高度用子节点并集边界，**不用** `documentElement.offsetHeight` |
 | 流体铺满 | 纯 `width:100%`、无上限的应用在 expand 下会接近画布宽 → SDK 回退到「当前帧」测量，避免误报极大宽度 |
 | 模式切换 | 仅改 class/preferred 上限、约束下盒子尺寸不变时 RO 可能不触发 → SDK 用 `MutationObserver` 补测；应用仍可 `reportSize` 加固 |
+| 无外层滚动条 | content-fit Dialog **强制 `border: none`**（抵消 DialogContent/` .modal` 的 1px 边框）；壳 `overflow: clip`；钳制预算含顶栏+边框；仅当上报高度超过 viewport max 时 stage 内滚动 |
 | 非计算器特例 | 上述为**通用平台**行为；勿在 Host 写死某应用宽高或选择器 |
 
 实现：`sdk.ts`、`preferredSize.ts`、`shellSize.ts`、`MicroAppShell.tsx`、`MicroAppsHub.tsx`、`styles.css`（`.settings-dialog--micro-fit` / `.micro-app-shell--fit`）。

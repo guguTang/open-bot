@@ -5,16 +5,24 @@
  * CSS like `width: min(100%, 720px)` cannot grow past ~frame width, so
  * ResizeObserver never sees the larger preferred size. Height taken from
  * `documentElement.offsetHeight` tracks the iframe viewport and resists shrink.
+ * Viewport units (`100vw`) also track the iframe viewport — expanding only
+ * `html.style.width` does NOT change `vw`, so the host must briefly enlarge
+ * the iframe canvas for a true preferred measure (clipped, no dialog flash).
  *
  * Platform contract (SDK mirrors these helpers):
- * 1. Temporarily expand the layout containing block, measure content bounds,
- *    then restore — so percentage bases reveal preferred caps.
- * 2. Prefer child/content scroll metrics; never use html/body offset* (viewport)
- *    as a floor that blocks shrink or as the expand-canvas size.
- * 3. Fluid `width:100%` apps that fill the expand canvas fall back to the
+ * 1. Host temporarily enlarges the iframe to the max content-fit canvas
+ *    (measure-request → measure-go), then SDK measures.
+ * 2. SDK also expands the layout containing block so `min(100%, N)` reveals N.
+ * 3. Prefer child/content bounds (union of children, not viewport offset*);
+ *    never use html/body offset* as a floor that blocks shrink.
+ * 4. Fluid `width:100%` apps that fill the expand canvas fall back to the
  *    constrained (current-frame) measure.
- * 4. Explicit `openbot.micro.reportSize({width?, height?})` always wins when
+ * 5. Explicit `openbot.micro.reportSize({width?, height?})` always wins when
  *    the app supplies numbers.
+ * 6. Outer shell must not scroll — dialog/shell/body use overflow:clip and
+ *    size budget includes header chrome + dialog border; only the stage
+ *    scrolls when content exceeds the viewport max. Iframe document also
+ *    overflow:hidden so a 1–2px measure miss cannot look like an outer bar.
  */
 
 /** Layout base used during unconstrained preferred-width measure (px). */
@@ -25,6 +33,9 @@ export const MICRO_SHELL_MEASURE_EXPAND_EPSILON_PX = 50;
 
 /** Child tighter than body/scroll by this much → prefer child (card-in-stretch). */
 export const MICRO_SHELL_MEASURE_CHILD_SLACK_PX = 48;
+
+/** Ignore RO/window-resize echo after posting resize (ms). */
+export const MICRO_SHELL_MEASURE_IGNORE_RO_MS = 280;
 
 /**
  * CSS `min(100%, capPx)` under a given containing-block width.
@@ -38,33 +49,52 @@ export function resolveMinPercentCap(containingBlockPx: number, capPx: number): 
   return Math.min(base, cap);
 }
 
+/**
+ * CSS `min(capPx, 100vw - gutter)` under a given iframe viewport width.
+ * Host must enlarge the iframe for this to reveal `capPx` when frame < cap.
+ */
+export function resolveMinVwCap(viewportWidthPx: number, capPx: number, gutterPx = 32): number {
+  const vw = Number(viewportWidthPx);
+  const cap = Number(capPx);
+  if (!Number.isFinite(cap) || cap <= 0) return 0;
+  if (!Number.isFinite(vw) || vw <= 0) return Math.ceil(cap);
+  return Math.min(cap, Math.max(0, vw - gutterPx));
+}
+
 export type PreferredContentMetrics = {
-  /** Max of children getBoundingClientRect().right (+ body pad/margin). */
-  contentRight: number;
-  /** Max of children getBoundingClientRect().bottom (+ body pad/margin). */
-  contentBottom: number;
+  /** Union width of children (maxRight - minLeft), ignores centering offset. */
+  contentWidth: number;
+  /** Union height of children (maxBottom - minTop), ignores centering offset. */
+  contentHeight: number;
   maxChildScrollWidth: number;
   maxChildScrollHeight: number;
   bodyScrollWidth: number;
   bodyScrollHeight: number;
+  /** @deprecated alias — prefer contentWidth */
+  contentRight?: number;
+  /** @deprecated alias — prefer contentHeight */
+  contentBottom?: number;
 };
 
 /**
  * Collapse layout metrics gathered during an (expanded) measure pass into
  * a content size. Deliberately ignores documentElement/body offsetWidth/Height
- * (viewport / expand canvas).
+ * (viewport / expand canvas). Uses union box (not offset bottom/right) so
+ * place-items:center inside a tall measure canvas does not inflate height.
  */
 export function pickPreferredContentSize(metrics: PreferredContentMetrics): {
   width: number;
   height: number;
 } {
+  const unionW = finiteNonNeg(metrics.contentWidth ?? metrics.contentRight);
+  const unionH = finiteNonNeg(metrics.contentHeight ?? metrics.contentBottom);
   let width = Math.max(
-    finiteNonNeg(metrics.contentRight),
+    unionW,
     finiteNonNeg(metrics.maxChildScrollWidth),
     finiteNonNeg(metrics.bodyScrollWidth),
   );
   let height = Math.max(
-    finiteNonNeg(metrics.contentBottom),
+    unionH,
     finiteNonNeg(metrics.maxChildScrollHeight),
     finiteNonNeg(metrics.bodyScrollHeight),
   );
@@ -109,7 +139,6 @@ export function hostAcceptsReportedSize(prev: { width: number; height: number } 
   width: number;
   height: number;
 }): { width: number; height: number } {
-  // Identity: host replaces previous frame size with the newly reported (clamped) size.
   void prev;
   return { width: next.width, height: next.height };
 }

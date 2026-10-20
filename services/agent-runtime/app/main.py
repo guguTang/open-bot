@@ -1567,6 +1567,18 @@ async def openai_path(
                 )
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "get_micro_app_runtime":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args_g = dict(args or {})
+                result = micro_apps.get_micro_app_runtime(str(user_id or ""), args_g)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_g
+                )
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "update_micro_app":
             from . import micro_apps_stub as micro_apps
 

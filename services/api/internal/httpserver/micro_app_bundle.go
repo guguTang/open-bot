@@ -120,19 +120,32 @@ func (s *Server) handleGetMicroAppRuntime(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	zipBytes, err := s.microAppObjects().Get(r.Context(), microAppBundleObjectKey(uid, id))
+	payload, status, errMsg := s.microAppRuntimePayload(r.Context(), uid, app)
+	if errMsg != "" {
+		writeJSON(w, status, map[string]string{"error": errMsg})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+// microAppRuntimePayload unpacks the stored bundle into entrypoint + files map
+// (utf8 text or base64 binary). Shared by public GET /runtime and internal
+// POST /internal/micro-apps/runtime (agent modify path).
+func (s *Server) microAppRuntimePayload(ctx context.Context, uid string, app *db.MicroApp) (map[string]any, int, string) {
+	if app == nil {
+		return nil, http.StatusNotFound, "not found"
+	}
+	id := app.ID
+	zipBytes, err := s.microAppObjects().Get(ctx, microAppBundleObjectKey(uid, id))
 	if err != nil {
 		if isNotExist(err) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "bundle_not_found"})
-			return
+			return nil, http.StatusNotFound, "bundle_not_found"
 		}
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
+		return nil, http.StatusBadGateway, err.Error()
 	}
 	files, entrypoint, err := unpackMicroAppZip(zipBytes)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return nil, http.StatusInternalServerError, err.Error()
 	}
 	if ep := strings.TrimSpace(app.Entrypoint); ep != "" {
 		if _, ok := files[ep]; ok {
@@ -155,14 +168,14 @@ func (s *Server) handleGetMicroAppRuntime(w http.ResponseWriter, r *http.Request
 			"content":  base64.StdEncoding.EncodeToString(body),
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	return map[string]any{
 		"micro_app_id": app.ID,
 		"title":        app.Title,
 		"entrypoint":   entrypoint,
 		"capabilities": app.Capabilities,
 		"bundle_hash":  app.BundleHash,
 		"files":        outFiles,
-	})
+	}, http.StatusOK, ""
 }
 
 func isTextyMIME(mt string) bool {

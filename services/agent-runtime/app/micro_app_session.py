@@ -1,7 +1,8 @@
 """Session-scoped recent micro_app touches for modify-path hints.
 
 In-memory cache keyed by conversation_id. Updated on successful
-draft_micro_app / pin_micro_app / upload_micro_app_bundle / update_micro_app.
+draft_micro_app / pin_micro_app / upload_micro_app_bundle / get_micro_app_runtime /
+update_micro_app.
 Injected into the dynamic system prompt so modify flows prefer the same id.
 Does not replace list_micro_apps.
 """
@@ -18,6 +19,7 @@ TOUCH_TOOLS = frozenset(
         "draft_micro_app",
         "pin_micro_app",
         "upload_micro_app_bundle",
+        "get_micro_app_runtime",
         "update_micro_app",
     }
 )
@@ -143,11 +145,12 @@ def format_recent_hint(conversation_id: str) -> str:
     joined = "；".join(parts)
     return (
         f"本会话近期微应用: {joined}；"
-        "修改请用同 id 调用 upload_micro_app_bundle / update_micro_app，禁止再 draft_micro_app。"
+        "修改请先 get_micro_app_runtime 读 files，再用同 id 调 upload_micro_app_bundle / "
+        "update_micro_app，禁止再 draft_micro_app；勿向用户索要源码。"
         "仍可用 list_micro_apps 发现其它 id。"
         f" Recent in this session: {joined}. "
-        "For edits use the same id with upload/update; do not draft again. "
-        "Keep using list_micro_apps when needed."
+        "For edits: get_micro_app_runtime then upload/update same id; do not draft again; "
+        "do not ask the user for source. Keep using list_micro_apps when needed."
     )
 
 
