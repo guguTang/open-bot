@@ -305,7 +305,7 @@ export function Composer({
               <button
                 type="button"
                 className="composer-chip-remove"
-                title="移除"
+                title="移除" aria-label="移除"
                 disabled={sending}
                 onClick={() => removeFile(f.key)}
               >
@@ -353,7 +353,7 @@ export function Composer({
         <button
           type="button"
           className="composer-attach"
-          title="添加附件"
+          title="添加附件" aria-label="添加附件"
           disabled={disabled || sending || !onFilesChange}
           onClick={() => fileRef.current?.click()}
         >
@@ -479,7 +479,7 @@ export function Composer({
             />
           </button>
         ) : (
-          <button type="submit" className="composer-send" disabled={!canSend} title="发送">
+          <button type="submit" className="composer-send" disabled={!canSend} title="发送" aria-label="发送">
             ↑
           </button>
         )}

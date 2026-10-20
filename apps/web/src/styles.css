@@ -4941,11 +4941,14 @@ html.touch-ui .composer-quote-clear {
 .oui-btn { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
 .oui-btn:hover:not(:disabled) { background: var(--bg-hover, #eceef1); }
 .oui-btn:disabled { opacity: 0.5; cursor: default; }
+.oui-btn { min-height: 36px; transition: background-color var(--ob-motion-fast) var(--ob-easing), opacity var(--ob-motion-fast) var(--ob-easing); }
+@media (pointer: coarse) { .oui-btn { min-height: var(--ob-touch-min); } }
 .oui-btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
 .oui-btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; }
 .oui-table-wrap { overflow-x: auto; }
 .oui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left;; vertical-align: top; overflow-wrap: normal; word-break: normal; }
+.oui-table th { white-space: nowrap; }
 .oui-table th { background: var(--bg-soft, #f5f5f7); font-weight: 600; }
 .oui-list { margin: 0; padding-left: 1.3em; }
 .oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
@@ -4975,5 +4978,19 @@ html.touch-ui .composer-quote-clear {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* 触屏设备上主要操作按钮满足 44px 最小可点区域 */
+@media (pointer: coarse) {
+  .composer-attach,
+  .composer-send {
+    width: var(--ob-touch-min);
+    height: var(--ob-touch-min);
+    flex-shrink: 0;
+  }
+  .composer-chip-remove {
+    min-width: 32px;
+    min-height: 32px;
   }
 }
