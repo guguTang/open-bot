@@ -6,6 +6,7 @@ from .micro_apps_stub import (
     MICRO_APP_TOOL_DEFS,
     MICRO_APP_TOOL_NAMES,
     coerce_explicit_bool,
+    get_micro_app_runtime,
     list_micro_apps,
     pin_micro_app,
     require_user_intent,
@@ -20,14 +21,16 @@ def test_tool_defs_registered_names():
         "upload_micro_app_bundle",
         "pin_micro_app",
         "list_micro_apps",
+        "get_micro_app_runtime",
         "update_micro_app",
     }
     names = {t["function"]["name"] for t in MICRO_APP_TOOL_DEFS}
     assert names == MICRO_APP_TOOL_NAMES
-    # Descriptions must steer modify away from draft
+    # Descriptions must steer modify away from draft and toward runtime read
     joined = " ".join(t["function"]["description"] for t in MICRO_APP_TOOL_DEFS)
     assert "禁止" in joined and "draft" in joined
     assert "list_micro_apps" in joined or "list" in joined
+    assert "get_micro_app_runtime" in joined
 
 
 def test_require_user_intent_rejects_silent():
@@ -154,6 +157,19 @@ def test_same_id_update_does_not_create(monkeypatch):
                     {"id": "calc-1", "title": "计算器", "status": "pinned", "kind": "ui"}
                 ]
             }
+        if path.endswith("/runtime"):
+            return {
+                "micro_app_id": payload["id"],
+                "title": "计算器",
+                "entrypoint": "index.html",
+                "files": {
+                    "index.html": {
+                        "encoding": "utf8",
+                        "mime": "text/html",
+                        "content": "<html>v1</html>",
+                    }
+                },
+            }
         if path.endswith("/create"):
             raise AssertionError("modify path must not create")
         return {}
@@ -164,18 +180,23 @@ def test_same_id_update_does_not_create(monkeypatch):
     assert listed["micro_apps"][0]["id"] == "calc-1"
     assert calls[0][0] == "/internal/micro-apps/list"
 
+    runtime = get_micro_app_runtime("u1", {"id": "calc-1"})
+    assert "files" in runtime
+    assert calls[1][0] == "/internal/micro-apps/runtime"
+    assert calls[1][1]["id"] == "calc-1"
+
     out = update_micro_app("u1", {"id": "calc-1", "title": "计算器 v2"})
     assert out["id"] == "calc-1"
-    assert calls[1][0] == "/internal/micro-apps/update"
-    assert calls[1][1]["id"] == "calc-1"
-    assert "create" not in calls[1][0]
+    assert calls[2][0] == "/internal/micro-apps/update"
+    assert calls[2][1]["id"] == "calc-1"
+    assert "create" not in calls[2][0]
 
     upload_micro_app_bundle(
         "u1",
         {"id": "calc-1", "files": {"index.html": "<html>v2</html>"}},
     )
-    assert calls[2][0] == "/internal/micro-apps/bundle"
-    assert calls[2][1]["id"] == "calc-1"
+    assert calls[3][0] == "/internal/micro-apps/bundle"
+    assert calls[3][1]["id"] == "calc-1"
     assert not any(p.endswith("/create") for p, _ in calls)
 
     try:
@@ -183,3 +204,28 @@ def test_same_id_update_does_not_create(monkeypatch):
         raise AssertionError("expected empty patch fields")
     except ValueError as e:
         assert "at least one" in str(e)
+
+
+def test_get_micro_app_runtime_requires_id(monkeypatch):
+    calls: list[tuple] = []
+
+    def fake_post(path, payload, timeout=60.0):
+        calls.append((path, payload, timeout))
+        return {
+            "micro_app_id": payload["id"],
+            "entrypoint": "index.html",
+            "files": {"index.html": {"encoding": "utf8", "content": "<p/>"}},
+        }
+
+    monkeypatch.setattr("app.micro_apps_stub.obapi._post", fake_post)
+    try:
+        get_micro_app_runtime("u1", {})
+        raise AssertionError("expected missing id")
+    except ValueError as e:
+        assert "id" in str(e)
+    out = get_micro_app_runtime("u1", {"micro_app_id": "app-x"})
+    assert out["micro_app_id"] == "app-x"
+    assert "index.html" in out["files"]
+    assert calls[0][0] == "/internal/micro-apps/runtime"
+    assert calls[0][1]["id"] == "app-x"
+

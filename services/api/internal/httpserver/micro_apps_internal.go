@@ -311,3 +311,42 @@ func (s *Server) handleInternalUpdateMicroApp(w http.ResponseWriter, r *http.Req
 	s.publishMicroAppsChanged(uid, "updated", app.ID, nil)
 	writeJSON(w, http.StatusOK, app)
 }
+
+// POST /internal/micro-apps/runtime — agent modify path: return entrypoint + files
+// (same shape as GET /v1/micro-apps/{id}/runtime) so the model can read existing
+// HTML/JS before upload_micro_app_bundle overwrite.
+func (s *Server) handleInternalGetMicroAppRuntime(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID     string `json:"user_id"`
+		ID         string `json:"id"`
+		MicroAppID string `json:"micro_app_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	uid := strings.TrimSpace(body.UserID)
+	id := strings.TrimSpace(body.ID)
+	if id == "" {
+		id = strings.TrimSpace(body.MicroAppID)
+	}
+	if uid == "" || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and id required"})
+		return
+	}
+	app, err := s.db.GetMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	payload, status, errMsg := s.microAppRuntimePayload(r.Context(), uid, app)
+	if errMsg != "" {
+		writeJSON(w, status, map[string]string{"error": errMsg})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
