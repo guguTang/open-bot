@@ -136,7 +136,7 @@ Placement 只指向 MicroApp.id
 高敏默认建议 `allow_once`：`host.shell.run`、`host.clipboard.read`/`write`、`device.mic`、`device.geo` 等（见 `DefaultGrantDecisionForCapability`）。无记录 = 每次弹窗（默认「仅一次」）。
 
 
-### 3.4 `micro_app_parks`（抗重启）
+### 3.3.2 `micro_app_parks`（抗重启）
 
 Durable park / grant_required waiter，键 = 授权卡 `req_id`。
 
@@ -160,7 +160,7 @@ ALTER TABLE micro_apps ADD COLUMN IF NOT EXISTS routine_config_json TEXT NOT NUL
 ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEXT NOT NULL DEFAULT '[]';
 ```
 
-### 3.4 对象存储
+### 3.5 对象存储
 
 - 复用 sandbox 同一套 MinIO 环境变量（`SANDBOX_S3_*` / `MINIO_*`）；micro-app 强制 **Prefix 空**，键自带 `micro-apps/...`。
 - 未配置 MinIO 时回落本地目录：`OPENBOT_MICRO_APP_ROOT` 或 `data/micro-apps-store/`。
