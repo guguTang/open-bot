@@ -432,6 +432,12 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 
 工具描述统一写明：「修改已有 → 先 list/用上下文 id → upload/update；禁止 draft」。
 
+### 8.1.1 本会话近期微应用（runtime 轻量注入）
+
+Agent-runtime 按 `conversation_id` 内存缓存本会话近期经 `draft_micro_app` / `pin_micro_app` / `upload_micro_app_bundle` / `update_micro_app` 成功触达的微应用（id + title + status）。下一轮组装 system prompt（dynamic）时注入短提示，例如：
+「本会话近期微应用: id=… title=… status=…；修改请用同 id upload/update，禁止再 draft」。
+**仍保留 `list_micro_apps`**（发现其它 id / 跨会话）；已 pinned 的再 pin 幂等行为不变。
+
 ### 8.2 `chat_pin` 默认规则
 
 - **默认 false**：用户只说保存 / 固定 / 修改时，**不要**挂聊天栏快捷。

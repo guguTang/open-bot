@@ -34,6 +34,7 @@ from .llm import (
     tools_enabled,
 )
 from .harness.long_task import apply_after_interrupt_hint, apply_host_list_hint
+from .micro_app_session import apply_recent_micro_app_hint, record_touch as record_micro_app_touch
 from .tool_markup import strip_tool_markup
 from .memory import (
     MemoryStore,
@@ -770,6 +771,11 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
             )
             system, dynamic_system = apply_host_list_hint(
                 system, dynamic_system, str(body.content or "")
+            )
+            system, dynamic_system = apply_recent_micro_app_hint(
+                system,
+                dynamic_system,
+                str(body.conversation_id or ""),
             )
 
             dialog = [m for m in history if m["role"] in ("user", "assistant", "summary")]
@@ -1520,30 +1526,35 @@ async def openai_path(
                     args["source_conversation_id"] = str(conversation_id)
                 if not args.get("agent_id") and agent_id:
                     args["agent_id"] = str(agent_id)
-                return json.dumps(
-                    micro_apps.draft_micro_app(str(user_id or ""), args),
-                    ensure_ascii=False,
+                result = micro_apps.draft_micro_app(str(user_id or ""), args)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args
                 )
+                return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "upload_micro_app_bundle":
             from . import micro_apps_stub as micro_apps
 
             try:
-                return json.dumps(
-                    micro_apps.upload_micro_app_bundle(str(user_id or ""), dict(args or {})),
-                    ensure_ascii=False,
+                args_u = dict(args or {})
+                result = micro_apps.upload_micro_app_bundle(str(user_id or ""), args_u)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_u
                 )
+                return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "pin_micro_app":
             from . import micro_apps_stub as micro_apps
 
             try:
-                return json.dumps(
-                    micro_apps.pin_micro_app(str(user_id or ""), dict(args or {})),
-                    ensure_ascii=False,
+                args_p = dict(args or {})
+                result = micro_apps.pin_micro_app(str(user_id or ""), args_p)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_p
                 )
+                return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "list_micro_apps":
@@ -1560,10 +1571,12 @@ async def openai_path(
             from . import micro_apps_stub as micro_apps
 
             try:
-                return json.dumps(
-                    micro_apps.update_micro_app(str(user_id or ""), dict(args or {})),
-                    ensure_ascii=False,
+                args_m = dict(args or {})
+                result = micro_apps.update_micro_app(str(user_id or ""), args_m)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_m
                 )
+                return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name in ("update_routine", "pause_routine", "resume_routine"):
