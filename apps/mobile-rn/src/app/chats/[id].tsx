@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -54,6 +55,7 @@ import {
   type OnboardingOption,
 } from "@/lib/onboarding";
 import { friendlyOpenError, parseSandboxHref, previewTitleFromPath } from "@/lib/workspace";
+import { OpenUiHostProvider, type OpenUiHost } from "@/openui/host";
 import { useRealtimeEvents } from "@/providers/realtime";
 import { useSession } from "@/providers/session";
 import { useSecretPrompt } from "@/providers/secretPrompt";
@@ -616,6 +618,16 @@ export default function ChatScreen(): JSX.Element {
     ]
   );
 
+  /** OpenUI 组件里的点击 / 表单提交 → 以用户身份发一条消息；链接走系统浏览器。 */
+  const openUiHost = useMemo<OpenUiHost>(
+    () => ({
+      send: (text) => void send(text),
+      openUrl: (url) => void Linking.openURL(url),
+      readonly: sending,
+    }),
+    [send, sending]
+  );
+
   const stop = useCallback(async (): Promise<void> => {
     abortRef.current?.abort();
     await api.cancelConversationRun(conversationId).catch(() => undefined);
@@ -788,29 +800,33 @@ export default function ChatScreen(): JSX.Element {
             />
           ) : null}
 
-          {visible.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              conversationId={conversationId}
-              onSandboxLink={openSandboxLink}
-              // 只有群聊需要逐条标注发言者；单聊里每条都是同一个助手，标了是噪音
-              showAgentName={Boolean(memberIds?.length)}
-              {...(primaryAgent?.id ? { ownerAgentId: primaryAgent.id } : {})}
-              {...(m.reply_to_id && messageById.get(m.reply_to_id)
-                ? { quoted: messageById.get(m.reply_to_id) as UiMessage }
-                : {})}
-              {...(threadCounts[m.id] ? { threadCount: threadCounts[m.id] } : {})}
-              onOpenThread={(rootId) => setThreadRootId((cur) => (cur === rootId ? null : rootId))}
-              onLongPress={() => setSheetMessage(m)}
-              onReply={() => startReply(m)}
-              onReactionChange={onReactionChange}
-              onRequestFeedback={(id) => openFeedback(id, "reaction_followup")}
-              {...(primaryAgent ? { fallbackAgentId: primaryAgent.id } : {})}
-              {...(primaryAgent ? { fallbackAgentName: primaryAgent.name } : {})}
-              {...avatarPropsForMessage(m, agents, primaryAgent)}
-            />
-          ))}
+          <OpenUiHostProvider value={openUiHost}>
+            {visible.map((m) => (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                conversationId={conversationId}
+                onSandboxLink={openSandboxLink}
+                // 只有群聊需要逐条标注发言者；单聊里每条都是同一个助手，标了是噪音
+                showAgentName={Boolean(memberIds?.length)}
+                {...(primaryAgent?.id ? { ownerAgentId: primaryAgent.id } : {})}
+                {...(m.reply_to_id && messageById.get(m.reply_to_id)
+                  ? { quoted: messageById.get(m.reply_to_id) as UiMessage }
+                  : {})}
+                {...(threadCounts[m.id] ? { threadCount: threadCounts[m.id] } : {})}
+                onOpenThread={(rootId) =>
+                  setThreadRootId((cur) => (cur === rootId ? null : rootId))
+                }
+                onLongPress={() => setSheetMessage(m)}
+                onReply={() => startReply(m)}
+                onReactionChange={onReactionChange}
+                onRequestFeedback={(id) => openFeedback(id, "reaction_followup")}
+                {...(primaryAgent ? { fallbackAgentId: primaryAgent.id } : {})}
+                {...(primaryAgent ? { fallbackAgentName: primaryAgent.name } : {})}
+                {...avatarPropsForMessage(m, agents, primaryAgent)}
+              />
+            ))}
+          </OpenUiHostProvider>
 
           {sending && runLabel ? (
             <RunStatus

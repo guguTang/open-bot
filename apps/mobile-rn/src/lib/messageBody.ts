@@ -8,6 +8,7 @@ import type { MessageSource } from "@/api/types";
 import { splitDiagrams, type ContentSegment } from "@/lib/chat";
 import { prepareCitedMarkdown } from "@/lib/citationMarkers";
 import { splitResultOriented, type Artifact } from "@/lib/workspace";
+import { splitOpenUi } from "@/openui/fence";
 
 export type { ContentSegment, Artifact };
 
@@ -34,7 +35,8 @@ export function normalizeMessageSources(raw: unknown): MessageSource[] {
 
 export type RenderSegment =
   | { kind: "text"; markdown: string }
-  | { kind: "diagram"; lang: "mermaid" | "html"; source: string; pending: boolean };
+  | { kind: "diagram"; lang: "mermaid" | "html"; source: string; pending: boolean }
+  | { kind: "openui"; source: string; pending: boolean };
 
 export type AssistantBody = {
   display: string;
@@ -42,10 +44,26 @@ export type AssistantBody = {
   collapsedJson: string[];
   /** Streaming: single text pass, no diagrams/citations yet. */
   streamingMarkdown: string;
+  /**
+   * Streaming with OpenUI fences: text/openui pieces (OpenUI renders progressively).
+   * Empty when the reply has no OpenUI fence — callers then use streamingMarkdown.
+   */
+  streamingSegments: RenderSegment[];
   /** Settled: text/diagram segments with citations applied. */
   segments: RenderSegment[];
   sources: MessageSource[];
 };
+
+function openUiStreamingSegments(markdown: string): RenderSegment[] {
+  const parts = splitOpenUi(markdown);
+  if (!parts.some((p) => p.kind === "openui")) return [];
+  const out: RenderSegment[] = [];
+  for (const p of parts) {
+    if (p.kind === "openui") out.push(p);
+    else if (p.text.trim()) out.push({ kind: "text", markdown: p.text.trim() });
+  }
+  return out;
+}
 
 export function buildAssistantBody(opts: {
   content: string;
@@ -63,6 +81,7 @@ export function buildAssistantBody(opts: {
       artifacts: split.artifacts,
       collapsedJson: split.collapsedJson,
       streamingMarkdown,
+      streamingSegments: openUiStreamingSegments(streamingMarkdown),
       segments: [],
       sources,
     };
@@ -75,12 +94,18 @@ export function buildAssistantBody(opts: {
       segments.push(seg);
       continue;
     }
-    const raw = seg.text.trim();
-    if (!raw) continue;
-    segments.push({
-      kind: "text",
-      markdown: prepareCitedMarkdown(raw, opts.messageId, sources),
-    });
+    for (const part of splitOpenUi(seg.text)) {
+      if (part.kind === "openui") {
+        segments.push(part);
+        continue;
+      }
+      const raw = part.text.trim();
+      if (!raw) continue;
+      segments.push({
+        kind: "text",
+        markdown: prepareCitedMarkdown(raw, opts.messageId, sources),
+      });
+    }
   }
 
   return {
@@ -88,6 +113,7 @@ export function buildAssistantBody(opts: {
     artifacts: split.artifacts,
     collapsedJson: split.collapsedJson,
     streamingMarkdown,
+    streamingSegments: [],
     segments,
     sources,
   };

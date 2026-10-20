@@ -17,6 +17,8 @@ import {
   type SourcePosition,
 } from "../lib/mermaidFence";
 import { DiagramCard } from "./DiagramCard";
+import { OpenUIBlock } from "../openui/OpenUIBlock";
+import { isOpenUiLang } from "../openui/spec";
 import { ImageDiagramCard } from "./ImageDiagramCard";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import { looksLikeHtml, parseSandboxHref, previewTitleFromPath } from "./htmlPreviewModel";
@@ -117,6 +119,13 @@ function DiagramFenceBlock({
   const { markdown, streaming } = useContext(MdRenderContext);
   const pending = isFencePending(markdown, position, streaming);
   return <DiagramCard kind={kind} source={code} pending={pending} />;
+}
+
+/** ```openui-lang fence → OpenUI 交互组件；围栏未闭合时按流式渲染。 */
+function OpenUIFenceBlock({ code, position }: { code: string; position: SourcePosition }) {
+  const { markdown, streaming } = useContext(MdRenderContext);
+  const pending = isFencePending(markdown, position, streaming);
+  return <OpenUIBlock source={code} streaming={pending} />;
 }
 
 export function MarkdownMessage({ content, streaming, agentId }: Props) {
@@ -239,6 +248,9 @@ export function MarkdownMessage({ content, streaming, agentId }: Props) {
           return <code className="md-inline-code">{children}</code>;
         }
         const lang = /language-([\w-]+)/.exec(className || "")?.[1];
+        if (isOpenUiLang(lang)) {
+          return <OpenUIFenceBlock code={raw.replace(/\n$/, "")} position={node?.position} />;
+        }
         if (isMermaidLang(lang)) {
           return (
             <DiagramFenceBlock

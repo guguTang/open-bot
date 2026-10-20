@@ -191,8 +191,8 @@ export function Composer({
     // Never treat those as send or @/ picker shortcuts. keyCode 229 = IME "Process".
     // imeComposingRef covers Safari, where compositionend can clear isComposing
     // before the confirming keydown runs.
-    // Use nativeEvent.isComposing: React KeyboardEvent types omit isComposing
-    // (@types/react 19), while the DOM KeyboardEvent still exposes it.
+    // Prefer nativeEvent.isComposing: React KeyboardEvent omits isComposing
+    // under @types/react 19 (main IME guard + develop type-safe access).
     const imeComposing =
       imeComposingRef.current ||
       e.nativeEvent.isComposing ||

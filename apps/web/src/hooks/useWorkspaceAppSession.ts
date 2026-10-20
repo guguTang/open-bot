@@ -278,6 +278,7 @@ export function useWorkspaceAppSession() {
     settleMicroAppGrant,
     stopCurrentRun,
     onSubmit,
+    sendUserText: (text: string) => sendUserText(text, []),
     setOpenThreadRootId,
     toggleAssistantsCollapsed,
     toggleGroupsCollapsed,

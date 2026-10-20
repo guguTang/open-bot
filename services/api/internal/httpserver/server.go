@@ -488,16 +488,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	// seed default LLM from env
-	base := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
-	key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-	model := strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
-	enableTools := false
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("OPENAI_ENABLE_TOOLS"))) {
-	case "1", "true", "yes", "on":
-		enableTools = true
-	}
-	_, _ = s.db.CreateLLMConnection(u.ID, "默认连接", base, key, model, enableTools, true, nil)
+	s.seedDefaultLLM(u.ID)
 	s.provisionUserSandbox(u.ID)
 
 	// Refresh user after org bootstrap

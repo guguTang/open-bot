@@ -290,6 +290,8 @@ def _load_user_from_pg(user_id: str, into: dict[str, SkillMeta]) -> bool:
 # Catalog line descriptions are capped; full body via load_skill.
 # Keep enough trigger keywords for discovery; find-skills covers deep search.
 CATALOG_DESC_MAX = 120
+# Upper bound for an ``inline: true`` skill body injected into the system prompt.
+INLINE_BODY_MAX = 12000
 
 
 class SkillRegistry:
@@ -325,7 +327,36 @@ class SkillRegistry:
             if len(desc) > max_desc:
                 desc = desc[: max_desc - 3].rstrip() + "…"
             lines.append(f"- {s.name}: {desc}")
-        return "\n".join(lines)
+        catalog = "\n".join(lines)
+        inline = self._inline_bodies(items)
+        return f"{catalog}\n\n{inline}" if inline else catalog
+
+    def _inline_bodies(self, items: list[SkillMeta]) -> str:
+        """Bodies of enabled skills whose frontmatter sets ``inline: true``.
+
+        The catalog normally carries only name + short description and the model
+        fetches the body with load_skill. That never happens when tools are off
+        (org/connection enable_tools=false), and even with tools on, output-format
+        skills (e.g. generative-ui: the OpenUI Lang grammar + component signatures
+        the client renders) are useless if the model guesses the syntax instead of
+        loading them. ``inline: true`` puts the body straight into the prompt.
+        Keep such skills short; the body is capped at INLINE_BODY_MAX chars.
+        """
+        blocks: list[str] = []
+        for meta in items:
+            full = self.load(meta.name)
+            if not full:
+                continue
+            fm, _ = _parse_frontmatter(full.raw)
+            if str(fm.get("inline") or "").strip().lower() not in ("true", "1", "yes"):
+                continue
+            body = full.body.strip()
+            if not body:
+                continue
+            if len(body) > INLINE_BODY_MAX:
+                body = body[:INLINE_BODY_MAX].rstrip() + "\n…（已截断）"
+            blocks.append(f"## 已内联技能：{meta.name}（无需 load_skill，按下文规则直接输出）\n\n{body}")
+        return "\n\n".join(blocks)
 
     def filter_meta(self, enabled: set[str] | list[str] | None) -> list[SkillMeta]:
         items = self.list_meta()
