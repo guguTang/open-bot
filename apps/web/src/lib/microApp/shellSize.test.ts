@@ -104,3 +104,29 @@ describe("clampMicroShellSize", () => {
     expect(s.height).toBeLessThanOrEqual(Math.floor(844 * 0.72));
   });
 });
+
+describe("clampMicroShellSize content-fit grow/shrink", () => {
+  it("allows growth beyond previous frame size (no sticky max)", () => {
+    const grown = clampMicroShellSize({
+      width: 720,
+      height: 400,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+    expect(grown.width).toBe(720);
+    expect(grown.height).toBe(400);
+  });
+
+  it("allows height shrink on smaller report (symmetric to width)", () => {
+    const shrunk = clampMicroShellSize({
+      width: 440,
+      height: 280,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+    expect(shrunk.width).toBe(440);
+    expect(shrunk.height).toBe(280);
+  });
+});
