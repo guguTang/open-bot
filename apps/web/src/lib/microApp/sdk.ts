@@ -317,6 +317,10 @@ html, body {
   max-width: none !important;
   margin: 0;
   box-sizing: border-box;
+  /* Content-fit: document must not show a scrollbar flush with the shell edge
+     (looks like an "outer" dialog scrollbar when stage is edge-to-edge).
+     Apps that need scroll should use an inner overflow:auto region. */
+  overflow: hidden !important;
 }
 /* Avoid 100vh / stretch canvases that defeat content-fit height shrink. */
 body {

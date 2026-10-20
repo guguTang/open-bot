@@ -140,7 +140,9 @@ export function MicroAppsHub({ open, onClose }: Props) {
           showCloseButton={false}
           overlayClassName={cn(sheetForm && "settings-backdrop-shell")}
           className={cn(
-            "modal settings-dialog max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
+            // border-0: DialogContent defaults include `border`; micro-fit also forces border:none in CSS.
+            // overflow-clip: never paint an outer scrollbar on the dialog chrome.
+            "modal settings-dialog max-w-none gap-0 overflow-hidden overflow-clip border-0 p-0 sm:max-w-none",
             sheetForm && "settings-dialog-shell",
             !sheetForm && openApp && "settings-dialog--micro-fit",
           )}

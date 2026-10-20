@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   clampMicroShellSize,
   microShellHeightOverflow,
+  microShellViewportMaxBox,
   MICRO_SHELL_MIN_HEIGHT,
   MICRO_SHELL_MIN_WIDTH,
   MICRO_SHELL_VIEWPORT_MAX_RATIO,
   MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
+  MICRO_SHELL_DIALOG_BORDER_TOTAL,
 } from "./shellSize";
 
 describe("clampMicroShellSize", () => {
@@ -21,7 +23,7 @@ describe("clampMicroShellSize", () => {
     expect(s.height).toBe(MICRO_SHELL_MIN_HEIGHT);
   });
 
-  it("caps tall content on desktop at ~90% viewport and flags overflow", () => {
+  it("caps tall content on desktop at viewport max minus chrome+border and flags overflow", () => {
     const rawH = 2000;
     const vh = 900;
     const s = clampMicroShellSize({
@@ -32,10 +34,20 @@ describe("clampMicroShellSize", () => {
       viewportHeight: vh,
     });
     expect(s.width).toBe(320);
-    const maxH = Math.floor(
-      Math.min(vh * MICRO_SHELL_VIEWPORT_MAX_RATIO, vh - 32) - MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
+    const box = microShellViewportMaxBox({
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    const maxH = Math.max(
+      MICRO_SHELL_MIN_HEIGHT,
+      box.height - MICRO_SHELL_DESKTOP_CHROME_HEIGHT - MICRO_SHELL_DIALOG_BORDER_TOTAL,
     );
     expect(s.height).toBe(maxH);
+    // Outer shell = content + chrome (+ border slack) must fit viewport max box.
+    expect(s.height + MICRO_SHELL_DESKTOP_CHROME_HEIGHT + MICRO_SHELL_DIALOG_BORDER_TOTAL).toBeLessThanOrEqual(
+      box.height,
+    );
     expect(microShellHeightOverflow(rawH, s.height)).toBe(true);
   });
 
@@ -77,7 +89,7 @@ describe("clampMicroShellSize", () => {
     expect(s.height).toBe(480);
   });
 
-  it("caps width to ~90% viewport on small desktops", () => {
+  it("caps width to ~90% viewport minus border slack on small desktops", () => {
     const s = clampMicroShellSize({
       width: 900,
       height: 400,
@@ -85,9 +97,15 @@ describe("clampMicroShellSize", () => {
       viewportWidth: 800,
       viewportHeight: 600,
     });
+    const box = microShellViewportMaxBox({
+      narrow: false,
+      viewportWidth: 800,
+      viewportHeight: 600,
+    });
+    expect(s.width).toBeLessThanOrEqual(box.width - MICRO_SHELL_DIALOG_BORDER_TOTAL);
     expect(s.width).toBeLessThanOrEqual(Math.floor(800 * MICRO_SHELL_VIEWPORT_MAX_RATIO));
-    expect(s.height).toBeLessThanOrEqual(
-      Math.floor(Math.min(600 * MICRO_SHELL_VIEWPORT_MAX_RATIO, 600 - 32) - MICRO_SHELL_DESKTOP_CHROME_HEIGHT),
+    expect(s.height + MICRO_SHELL_DESKTOP_CHROME_HEIGHT + MICRO_SHELL_DIALOG_BORDER_TOTAL).toBeLessThanOrEqual(
+      box.height,
     );
   });
 
@@ -102,6 +120,28 @@ describe("clampMicroShellSize", () => {
     expect(s.width).toBeLessThanOrEqual(390 - 32);
     expect(s.height).toBeGreaterThan(MICRO_SHELL_MIN_HEIGHT);
     expect(s.height).toBeLessThanOrEqual(Math.floor(844 * 0.72));
+  });
+
+  it("content 360×396 + chrome + border stays within 90vh outer budget", () => {
+    const vh = 900;
+    const s = clampMicroShellSize({
+      width: 360,
+      height: 396,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    expect(s.width).toBe(360);
+    expect(s.height).toBe(396);
+    const box = microShellViewportMaxBox({
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    const outerH = s.height + MICRO_SHELL_DESKTOP_CHROME_HEIGHT + MICRO_SHELL_DIALOG_BORDER_TOTAL;
+    const outerW = s.width + MICRO_SHELL_DIALOG_BORDER_TOTAL;
+    expect(outerH).toBeLessThanOrEqual(box.height);
+    expect(outerW).toBeLessThanOrEqual(box.width);
   });
 });
 

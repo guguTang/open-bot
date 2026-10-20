@@ -18,6 +18,7 @@ import {
   microShellHeightOverflow,
   MICRO_SHELL_DEFAULT_HEIGHT,
   MICRO_SHELL_DEFAULT_WIDTH,
+  MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
   MICRO_SHELL_MIN_HEIGHT,
   MICRO_SHELL_MIN_WIDTH,
   type MicroShellSize,
@@ -316,6 +317,7 @@ export function MicroAppShell({
           ? {
               ["--micro-shell-content-w" as string]: `${displaySize.width}px`,
               ["--micro-shell-content-h" as string]: `${displaySize.height}px`,
+              ["--micro-shell-chrome-h" as string]: `${MICRO_SHELL_DESKTOP_CHROME_HEIGHT}px`,
             }
           : undefined
       }
