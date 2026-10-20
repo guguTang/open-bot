@@ -12,7 +12,7 @@ import { ApiServerField } from "../ApiServerField";
 type AuthMode = "login" | "register";
 
 const authInputClass =
-  "rounded-[10px] border border-(--border) bg-white px-3 py-2.5 text-(--text) outline-none focus:border-(--accent) focus:shadow-[0_0_0_3px_rgba(59,130,246,0.15)]";
+  "rounded-[10px] border border-(--border) bg-white px-3 py-2.5 text-(--text) outline-none focus:border-(--accent) focus:shadow-[0_0_0_3px_rgba(124,58,237,0.15)]";
 
 export function AuthPage({
   onAuthenticated,
@@ -73,7 +73,7 @@ export function AuthPage({
 
   return (
     <div
-      className="grid min-h-full place-items-center bg-[radial-gradient(ellipse_at_20%_0%,rgba(59,130,246,0.1),transparent_50%),radial-gradient(ellipse_at_80%_100%,rgba(99,102,241,0.08),transparent_45%),var(--bg)] p-6"
+      className="grid min-h-full place-items-center bg-[radial-gradient(ellipse_at_20%_0%,rgba(124,58,237,0.1),transparent_50%),radial-gradient(ellipse_at_80%_100%,rgba(167,139,250,0.08),transparent_45%),var(--bg)] p-6"
     >
       <form
         className="flex w-[min(400px,100%)] flex-col gap-3 rounded-2xl border border-(--border) bg-(--bg-elevated) p-6 shadow-(--shadow-md)"
