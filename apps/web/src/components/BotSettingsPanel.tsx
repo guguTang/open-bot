@@ -34,7 +34,7 @@ type Props = {
   onOpenSkill?: (name: string) => void;
   /** Open BotAvatarSettings (形象 + 优先电脑) for this bot. */
   onOpenAvatar?: (agent: Agent) => void;
-  /** Re-show A–E job onboarding in chat after dismiss. */
+  /** Re-show job onboarding in chat after dismiss. */
   onRestartOnboarding?: (agent: Agent) => void;
 };
 
@@ -215,7 +215,7 @@ export function BotSettingsPanel({
                     type="button"
                     variant="ghost"
                     disabled={locked}
-                    title="重新显示岗位引导问卷（A–E）"
+                    title="重新显示岗位引导问卷"
                     onClick={() => onRestartOnboarding(agent)}
                   >
                     重新岗位引导

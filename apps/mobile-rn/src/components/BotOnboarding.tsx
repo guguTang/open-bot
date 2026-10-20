@@ -1,9 +1,14 @@
 import { Button, Card, CloseButton, Input, Label, Typography } from "heroui-native";
 import type { JSX } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-import { ONBOARDING_OPTIONS, ONBOARDING_WELCOME, type OnboardingOption } from "@/lib/onboarding";
+import {
+  getCachedOnboardingOptions,
+  loadOnboardingOptions,
+  ONBOARDING_WELCOME,
+  type OnboardingOption,
+} from "@/lib/onboarding";
 
 type Props = {
   disabled?: boolean;
@@ -17,6 +22,7 @@ type Props = {
  *
  * 与 Web 端 `BotOnboardingCard.tsx` 内容一致，但布局改成移动端的横向卡片流：
  * Web 上是竖排列表 + 底部输入框，手机上改成横向滚动的选项，节省纵向空间。
+ * 选项列表来自 GET /v1/onboarding/presets（失败时回落本地 A–F seed）。
  */
 export function BotOnboarding({
   disabled,
@@ -25,6 +31,17 @@ export function BotOnboarding({
   onDismiss,
 }: Props): JSX.Element {
   const [custom, setCustom] = useState("");
+  const [options, setOptions] = useState<OnboardingOption[]>(() => getCachedOnboardingOptions());
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOnboardingOptions().then((res) => {
+      if (!cancelled && res.options.length) setOptions(res.options);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const submitCustom = (): void => {
     const text = custom.trim();
@@ -48,15 +65,13 @@ export function BotOnboarding({
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2 pr-2">
-            {ONBOARDING_OPTIONS.map((opt) => (
+            {options.map((opt) => (
               <Pressable
-                key={opt.letter}
+                key={opt.id}
                 disabled={disabled}
                 onPress={() => onSelectOption(opt)}
                 accessibilityRole="button"
                 accessibilityLabel={opt.title}
-                // rounded-xl 而不是 2xl：外层 Card 是 3xl，内层再用同级圆角
-                // 会让这张卡看起来像又嵌了一层容器
                 className="w-44 rounded-xl bg-surface-secondary px-3 py-3"
               >
                 <View className="flex-row items-center gap-2">

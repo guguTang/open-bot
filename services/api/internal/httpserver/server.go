@@ -149,6 +149,12 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/admin/skills/{name}/package", s.requireOrgAdmin(s.handleAdminSaveSkillPackage))
 	mux.HandleFunc("GET /v1/admin/bots/{id}/skills", s.requireOrgAdmin(s.handleAdminListBotSkills))
 	mux.HandleFunc("PUT /v1/admin/bots/{id}/skills/{name}", s.requireOrgAdmin(s.handleAdminSetBotSkill))
+
+	mux.HandleFunc("GET /v1/admin/onboarding-presets", s.requireOrgAdmin(s.handleAdminListOnboardingPresets))
+	mux.HandleFunc("POST /v1/admin/onboarding-presets", s.requireOrgAdmin(s.handleAdminCreateOnboardingPreset))
+	mux.HandleFunc("PATCH /v1/admin/onboarding-presets/{id}", s.requireOrgAdmin(s.handleAdminPatchOnboardingPreset))
+	mux.HandleFunc("DELETE /v1/admin/onboarding-presets/{id}", s.requireOrgAdmin(s.handleAdminDeleteOnboardingPreset))
+	mux.HandleFunc("PUT /v1/admin/onboarding-presets/reorder", s.requireOrgAdmin(s.handleAdminReorderOnboardingPresets))
 	mux.HandleFunc("GET /v1/admin/users/{id}/skills", s.requireOrgAdmin(s.handleAdminListUserSkills))
 	mux.HandleFunc("PUT /v1/admin/users/{id}/skills/{name}", s.requireOrgAdmin(s.handleAdminSetUserSkill))
 	mux.HandleFunc("GET /v1/admin/users/{id}/machines", s.requireOrgAdmin(s.handleAdminListUserMachines))
@@ -187,6 +193,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/agents/{id}/skills", s.requireAuth(s.handleReplaceAgentSkills))
 	mux.HandleFunc("PUT /v1/agents/{id}/skills/{name}", s.requireAuth(s.handleSetAgentSkill))
 	mux.HandleFunc("POST /v1/agents/{id}/onboarding", s.requireAuth(s.handleAgentOnboarding))
+	mux.HandleFunc("GET /v1/onboarding/presets", s.requireAuth(s.handleListOnboardingPresets))
 
 	mux.HandleFunc("GET /v1/skills", s.requireAuth(s.handleListSkillsDetailed))
 	mux.HandleFunc("POST /v1/skills", s.requireAuth(s.handleCreateSkill))

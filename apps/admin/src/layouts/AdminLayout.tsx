@@ -34,6 +34,7 @@ const menuRoutes = {
       icon: <DeploymentUnitOutlined />,
       routes: [
         { path: "/bots", name: "Bot 管理" },
+        { path: "/onboarding", name: "岗位引导" },
         { path: "/memory", name: "记忆与压缩" },
       ],
     },

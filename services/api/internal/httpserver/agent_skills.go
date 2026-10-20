@@ -76,65 +76,37 @@ func (s *Server) handleReplaceAgentSkills(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]any{"skills": list, "agent_id": agentID})
 }
 
-// Onboarding focus presets aligned with BotOnboardingCard (Grok-style job descriptions).
-var onboardingPresets = map[string]struct {
-	Description  string
-	SystemPrompt string
-	Skills       []string
-}{
-	"A": {
-		Description:  "负责日常事务与提醒：日程、待办、定时提醒。保持简洁可执行；未经确认不代发外部消息。",
-		SystemPrompt: "你主攻日常事务与提醒（日程、待办、定时提醒）。优先给出可执行的下一步；涉及外发或删除需先征得用户同意。",
-		Skills:       []string{"daily-brief"},
-	},
-	"B": {
-		Description:  "负责查资料与总结：搜索、阅读、整理要点。输出需可核对；重要结论注明来源或依据。",
-		SystemPrompt: "你主攻查资料与总结。先澄清问题边界，再整理要点；区分事实与推测。",
-		Skills:       []string{"summarize-text"},
-	},
-	"C": {
-		Description:  "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。",
-		SystemPrompt: "你主攻写作与改稿。先确认受众与用途，再出草稿；不擅自代发。",
-		Skills:       nil, // all user-enabled until customized
-	},
-	"D": {
-		Description:  "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。远程 SSH 先 load_skill host-ssh。",
-		SystemPrompt: "你主攻写代码与排障。优先小步修改与可验证结果；本机项目用 host_*。复杂编码流程先 load_skill dev-assist（再按需加载排障/TDD/实现/评审等）。远程先 load_skill host-ssh。",
-		Skills: []string{
-			"dev-assist",
-			"diagnosing-bugs",
-			"tdd",
-			"implement",
-			"code-review",
-			"host-ssh",
-			"summarize-text",
-			"grill-me",
-			"grill-with-docs",
-			"improve-codebase-architecture",
-			"codebase-design",
-			"domain-modeling",
-			"prototype",
-			"triage",
-			"find-skills",
-			"frontend-design",
-			"vercel-react-best-practices",
-			"handoff",
-			"teach",
-		},
-	},
-	"E": {
-		Description:  "通用助手：按用户当下话题协助，保持灵活。",
-		SystemPrompt: "你是通用助手，先理解用户意图再行动，不强行套用固定流程。需要深挖需求时 load_skill grill-me；找生态技能用 find-skills。",
-		// Curated skills.sh batch default-on (not full leaderboard). nil would inherit all user-enabled.
-		Skills: db.CuratedBuiltinSlugs(),
-	},
+// resolveOnboardingPreset loads a configured preset by focus id (DB first, then hardcoded A–F).
+func (s *Server) resolveOnboardingPreset(focus string) *db.OnboardingPreset {
+	focus = strings.TrimSpace(focus)
+	if focus == "" {
+		return nil
+	}
+	if p, err := s.db.GetOnboardingPreset(focus); err == nil && p != nil {
+		return p
+	}
+	// Single-letter keys were historically uppercased (A–F).
+	if len(focus) == 1 {
+		up := strings.ToUpper(focus)
+		if p, err := s.db.GetOnboardingPreset(up); err == nil && p != nil {
+			return p
+		}
+		focus = up
+	}
+	for _, p := range db.HardcodedOnboardingFallback() {
+		if p.ID == focus || strings.EqualFold(p.ID, focus) {
+			cp := p
+			return &cp
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleAgentOnboarding(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
 	agentID := r.PathValue("id")
 	var body struct {
-		Focus        string   `json:"focus"` // A–E
+		Focus        string   `json:"focus"` // preset id (A–F or admin-defined slug)
 		Description  string   `json:"description"`
 		SystemPrompt string   `json:"system_prompt"`
 		Skills       []string `json:"skills"`
@@ -143,7 +115,10 @@ func (s *Server) handleAgentOnboarding(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	focus := strings.ToUpper(strings.TrimSpace(body.Focus))
+	focus := strings.TrimSpace(body.Focus)
+	if len(focus) == 1 {
+		focus = strings.ToUpper(focus)
+	}
 	desc := strings.TrimSpace(body.Description)
 	sp := strings.TrimSpace(body.SystemPrompt)
 	var skills []string
@@ -152,16 +127,18 @@ func (s *Server) handleAgentOnboarding(w http.ResponseWriter, r *http.Request) {
 		skills = body.Skills
 		skillsSet = true
 	}
-	if preset, ok := onboardingPresets[focus]; ok {
+	if preset := s.resolveOnboardingPreset(focus); preset != nil {
 		if desc == "" {
 			desc = preset.Description
 		}
 		if sp == "" {
 			sp = preset.SystemPrompt
 		}
-		if !skillsSet && preset.Skills != nil {
-			skills = preset.Skills
-			skillsSet = true
+		if !skillsSet {
+			if sk, set := preset.ResolveSkills(); set {
+				skills = sk
+				skillsSet = true
+			}
 		}
 	}
 	var skillArg []string
