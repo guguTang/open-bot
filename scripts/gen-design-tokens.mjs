@@ -33,10 +33,10 @@ ${colorVars("dark", "  ")}
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* 减少动效：保留短促的颜色/透明度过渡作为状态反馈，统一压到 fast */
   :root {
-    --ob-motion-fast: 0ms;
-    --ob-motion-base: 0ms;
-    --ob-motion-slow: 0ms;
+    --ob-motion-base: ${t.motion.fast}ms;
+    --ob-motion-slow: ${t.motion.fast}ms;
   }
 }
 `;

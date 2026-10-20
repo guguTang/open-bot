@@ -4973,15 +4973,38 @@ html.touch-ui .composer-quote-clear {
   cursor: pointer;
 }
 
+/* 减少动效：去掉位移/缩放/入场与闪烁类运动，但保留颜色、透明度的短渐变，
+   让悬停、选中、展开等状态变化仍然可感知（不做 0.01ms 一刀切）。
+   图表入场、骨架 shimmer 等装饰性循环改为静态；流式光标保留（它是状态本身）。 */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-property: color, background-color, border-color, outline-color, opacity, box-shadow !important;
     scroll-behavior: auto !important;
   }
+  [class*="diagram"],
+  [class*="shimmer"],
+  [class*="skeleton"] {
+    animation: none !important;
+  }
+}
+
+/* 浏览器自带表面也走设计系统：选区、光标、表格数字 */
+::selection {
+  background: var(--ob-color-primary-soft);
+  color: var(--ob-color-foreground);
+}
+:where(input, textarea, [contenteditable="true"]) {
+  caret-color: var(--ob-color-primary);
+}
+.oui-table td,
+.chat-time,
+.oui-field-value {
+  font-variant-numeric: tabular-nums;
 }
 
 /* 触屏设备上主要操作按钮满足 44px 最小可点区域 */
