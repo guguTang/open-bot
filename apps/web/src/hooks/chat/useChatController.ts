@@ -84,6 +84,17 @@ export function useChatController(p: ChatControllerParams) {
     }
   }, []);
 
+  const retryAfterMicroAppGrantRef = useRef<
+    ((args: {
+      conversationId: string;
+      microAppId: string;
+      tool: string;
+      command?: string;
+      pendingArgs?: string;
+      text: string;
+    }) => void) | null
+  >(null);
+
   const host = useHostConfirmChat({
     conversationRef,
     patchConvMessages,
@@ -91,6 +102,7 @@ export function useChatController(p: ChatControllerParams) {
     hostExecPolicy: p.hostExecPolicy,
     toolAllowEntries: p.toolAllowEntries,
     setToolAllowEntries: p.setToolAllowEntries,
+    retryAfterMicroAppGrantRef,
   });
 
   const runs = useChatTurnRuns({
@@ -180,6 +192,16 @@ export function useChatController(p: ChatControllerParams) {
     machines: p.machines,
     deviceDisplayName: p.deviceDisplayName,
   });
+
+  // Fallback only when server reports park_resolved=false (no in-process waiter).
+  useLayoutEffect(() => {
+    retryAfterMicroAppGrantRef.current = (args) => {
+      if (conversationRef.current?.id !== args.conversationId) return;
+      const text = (args.text || "").trim();
+      if (!text || !args.microAppId) return;
+      void sendUserText(text, [], { microAppId: args.microAppId });
+    };
+  }, [sendUserText]);
 
   useChatEventsSocket({
     token: p.token,
@@ -327,6 +349,7 @@ export function useChatController(p: ChatControllerParams) {
     viewingRunActive,
     selectionHydrated,
     settleHostConfirm: host.settleHostConfirm,
+    settleMicroAppGrant: host.settleMicroAppGrant,
     askHostConfirmRef: host.askHostConfirmRef,
     hostConfirmResolvers: host.hostConfirmResolvers,
     applyRemoteHostDecisionRef: host.applyRemoteHostDecisionRef,

@@ -3,32 +3,69 @@ PODS:
     - CapacitorCordova
   - CapacitorApp (7.0.2):
     - Capacitor
+  - CapacitorCamera (7.0.5):
+    - Capacitor
   - CapacitorCordova (7.6.9)
   - CapacitorDevice (7.0.5):
+    - Capacitor
+  - CapacitorGeolocation (7.1.8):
+    - Capacitor
+    - IONGeolocationLib (= 1.0.1)
+  - CapacitorLocalNotifications (7.0.7):
+    - Capacitor
+  - CapacitorShare (7.0.4):
+    - Capacitor
+  - IONGeolocationLib (1.0.1)
+  - MozartecCapacitorMicrophone (7.1.0):
     - Capacitor
 
 DEPENDENCIES:
   - "Capacitor (from `../../../../node_modules/.pnpm/@capacitor+ios@7.6.9_@capacitor+core@7.6.9/node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../../../node_modules/.pnpm/@capacitor+app@7.0.2_@capacitor+core@7.6.9/node_modules/@capacitor/app`)"
+  - "CapacitorCamera (from `../../../../node_modules/.pnpm/@capacitor+camera@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/camera`)"
   - "CapacitorCordova (from `../../../../node_modules/.pnpm/@capacitor+ios@7.6.9_@capacitor+core@7.6.9/node_modules/@capacitor/ios`)"
   - "CapacitorDevice (from `../../../../node_modules/.pnpm/@capacitor+device@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/device`)"
+  - "CapacitorGeolocation (from `../../../../node_modules/.pnpm/@capacitor+geolocation@7.1.8_@capacitor+core@7.6.9/node_modules/@capacitor/geolocation`)"
+  - "CapacitorLocalNotifications (from `../../../../node_modules/.pnpm/@capacitor+local-notifications@7.0.7_@capacitor+core@7.6.9/node_modules/@capacitor/local-notifications`)"
+  - "CapacitorShare (from `../../../../node_modules/.pnpm/@capacitor+share@7.0.4_@capacitor+core@7.6.9/node_modules/@capacitor/share`)"
+  - "MozartecCapacitorMicrophone (from `../../../../node_modules/.pnpm/@mozartec+capacitor-microphone@7.1.0_@capacitor+core@7.6.9/node_modules/@mozartec/capacitor-microphone`)"
+
+SPEC REPOS:
+  trunk:
+    - IONGeolocationLib
 
 EXTERNAL SOURCES:
   Capacitor:
     :path: "../../../../node_modules/.pnpm/@capacitor+ios@7.6.9_@capacitor+core@7.6.9/node_modules/@capacitor/ios"
   CapacitorApp:
     :path: "../../../../node_modules/.pnpm/@capacitor+app@7.0.2_@capacitor+core@7.6.9/node_modules/@capacitor/app"
+  CapacitorCamera:
+    :path: "../../../../node_modules/.pnpm/@capacitor+camera@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/camera"
   CapacitorCordova:
     :path: "../../../../node_modules/.pnpm/@capacitor+ios@7.6.9_@capacitor+core@7.6.9/node_modules/@capacitor/ios"
   CapacitorDevice:
     :path: "../../../../node_modules/.pnpm/@capacitor+device@7.0.5_@capacitor+core@7.6.9/node_modules/@capacitor/device"
+  CapacitorGeolocation:
+    :path: "../../../../node_modules/.pnpm/@capacitor+geolocation@7.1.8_@capacitor+core@7.6.9/node_modules/@capacitor/geolocation"
+  CapacitorLocalNotifications:
+    :path: "../../../../node_modules/.pnpm/@capacitor+local-notifications@7.0.7_@capacitor+core@7.6.9/node_modules/@capacitor/local-notifications"
+  CapacitorShare:
+    :path: "../../../../node_modules/.pnpm/@capacitor+share@7.0.4_@capacitor+core@7.6.9/node_modules/@capacitor/share"
+  MozartecCapacitorMicrophone:
+    :path: "../../../../node_modules/.pnpm/@mozartec+capacitor-microphone@7.1.0_@capacitor+core@7.6.9/node_modules/@mozartec/capacitor-microphone"
 
 SPEC CHECKSUMS:
   Capacitor: 1194c38ae1cc820671aefd94c59ebcbca2f33b26
   CapacitorApp: efc1e9748a8ea5d3e789cd82a4f451341cc7ac93
+  CapacitorCamera: fdbf24f93bc44ca13c4209866368a1972349d3d2
   CapacitorCordova: 2080fc0d6bfbc9dcc0e6d88e77fa624190d343ca
   CapacitorDevice: 12b136398a320a395ddc8d227ab532848058d796
+  CapacitorGeolocation: de4b0ccf90140528184e31676dd5e3a328eb589a
+  CapacitorLocalNotifications: f8ccb7e9c9056a23f415398e51825594e953af3a
+  CapacitorShare: 14b5d7f0a2c6de86dcad8995da80fb707ee32f62
+  IONGeolocationLib: 20f9d0248a0b5264511fb57a37e25dd2badf797a
+  MozartecCapacitorMicrophone: e512da429f6ae9b97cfa4a241774e9d96a8a1f2e
 
-PODFILE CHECKSUM: 706e925fdb7bb783236132ae731d690860419567
+PODFILE CHECKSUM: d518ebefbcbdcd006130a331931d8f0664cb9999
 
 COCOAPODS: 1.16.2

@@ -4,11 +4,17 @@ import {
   approveConversation,
   createHostConfirm,
   decideHostConfirm,
+  decideMicroAppGrantPrompt,
   mergeIncomingMessage,
   type ApprovalDecision,
   type Message,
 } from "../../api";
 import { parseHostConfirm } from "../../components/hostConfirmModel";
+import {
+  microAppGrantRetryUserText,
+  parseMicroAppGrantPrompt,
+} from "../../components/microAppGrantModel";
+import type { MicroAppGrantCardDecision } from "../../components/MicroAppGrantConfirmCard";
 import {
   ALWAYS_ALLOW_TOAST,
   grantToolFamilyAlwaysAllow,
@@ -23,6 +29,15 @@ import type { PatchConvMessages } from "../../lib/app/conversationMessages";
 import type { ToolAllowEntry } from "../../lib/toolAllowlist";
 import type { Dispatch, SetStateAction } from "react";
 
+export type MicroAppGrantRetryArgs = {
+  conversationId: string;
+  microAppId: string;
+  tool: string;
+  command?: string;
+  pendingArgs?: string;
+  text: string;
+};
+
 export function useHostConfirmChat(deps: {
   conversationRef: React.RefObject<Conversation | null>;
   patchConvMessages: PatchConvMessages;
@@ -30,6 +45,10 @@ export function useHostConfirmChat(deps: {
   hostExecPolicy: MachineExecPolicy;
   toolAllowEntries: ToolAllowEntry[];
   setToolAllowEntries: Dispatch<SetStateAction<ToolAllowEntry[]>>;
+  /** Fallback only: when park_resolved=false after allow, parent may send a continue turn. */
+  retryAfterMicroAppGrantRef?: React.MutableRefObject<
+    ((args: MicroAppGrantRetryArgs) => void) | null
+  >;
 }) {
   const hostConfirmResolvers = useRef(new Map<string, (ok: boolean) => void>());
   const askHostConfirmRef = useRef<(req: HostExecRequest) => Promise<boolean>>(async () => false);
@@ -147,7 +166,7 @@ export function useHostConfirmChat(deps: {
             scope,
             reason: parsed.reason || "",
           })
-            .then((saved) => acceptServerMessage(saved))
+            .then((saved: Message) => acceptServerMessage(saved))
             .catch(() => {});
         }
         // Host-confirm for email_send parks on Go's confirm gate, not LangGraph
@@ -169,11 +188,86 @@ export function useHostConfirmChat(deps: {
     [acceptServerMessage, deps, releaseHostConfirm],
   );
 
+  const settleMicroAppGrant = useCallback(
+    (message: Message, choice: MicroAppGrantCardDecision) => {
+      const parsed = parseMicroAppGrantPrompt(message.content);
+      if (!parsed?.req_id || parsed.status === "allowed" || parsed.status === "denied") return;
+      const status = choice.decision === "deny" ? "denied" : "allowed";
+      const content = JSON.stringify({
+        ...parsed,
+        status,
+        decision: choice.decision,
+        allowlist_entry: choice.allowlistEntry || "",
+        auto_retry: false,
+      });
+      const convId = message.conversation_id || deps.conversationRef.current?.id || "";
+      if (!convId) return;
+
+      deps.patchConvMessages(convId, (prev) =>
+        prev.map((m) => (m.id === message.id ? { ...m, content } : m)),
+      );
+
+      if (message.id.startsWith("local-")) {
+        if (choice.decision === "deny") {
+          toast.message("已拒绝微应用授权", { duration: 2500 });
+        }
+        return;
+      }
+
+      void (async () => {
+        try {
+          const saved = await decideMicroAppGrantPrompt(convId, message.id, {
+            decision: choice.decision,
+            allowlist_entry: choice.allowlistEntry,
+            machine_id: parsed.machine_id || "",
+          });
+          acceptServerMessage(saved);
+          if (choice.decision === "deny") {
+            toast.message("已拒绝微应用授权", { duration: 2500 });
+            return;
+          }
+          const savedParsed = parseMicroAppGrantPrompt(saved.content);
+          const parked = Boolean(savedParsed?.park_resolved);
+          if (parked) {
+            toast.message("已授权，正在继续原工具调用…", { duration: 2500 });
+            return;
+          }
+          // Documented fallback: no in-process waiter (runtime restart / durable-only).
+          const reason = savedParsed?.park_reason || "";
+          const restartish = reason === "waiter_lost" || reason === "expired" || reason === "runtime_unreachable";
+          toast.message(
+            restartish
+              ? "已授权；服务已重启无法恢复原调用，将发续跑消息…"
+              : "已授权；未找到暂停中的工具调用，将发续跑消息…",
+            { duration: 3500 },
+          );
+          const retryText = microAppGrantRetryUserText({
+            ...parsed,
+            status: "allowed",
+            decision: choice.decision,
+          });
+          deps.retryAfterMicroAppGrantRef?.current?.({
+            conversationId: convId,
+            microAppId: parsed.micro_app_id,
+            tool: parsed.tool || "",
+            command: parsed.command || "",
+            pendingArgs: parsed.pending_args || "",
+            text: retryText,
+          });
+        } catch {
+          toast.message("授权写入失败", { duration: 3000 });
+        }
+      })();
+    },
+    [acceptServerMessage, deps],
+  );
+
   return {
     hostConfirmResolvers,
     askHostConfirmRef,
     applyRemoteHostDecisionRef,
     acceptServerMessage,
     settleHostConfirm,
+    settleMicroAppGrant,
   };
 }

@@ -42,6 +42,9 @@ type Server struct {
 	runs            *activeRuns
 	// Last published owner-host online bit (bot_online SSE dedupe).
 	botOnline *botOnlineCache
+	// Micro-app MinIO / local object store (lazy).
+	microAppStoreOnce sync.Once
+	microAppStore     *microAppObjectStore
 }
 
 func Listen(addr, runtimeURL string, database *db.DB) error {
@@ -146,6 +149,12 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/admin/skills/{name}/package", s.requireOrgAdmin(s.handleAdminSaveSkillPackage))
 	mux.HandleFunc("GET /v1/admin/bots/{id}/skills", s.requireOrgAdmin(s.handleAdminListBotSkills))
 	mux.HandleFunc("PUT /v1/admin/bots/{id}/skills/{name}", s.requireOrgAdmin(s.handleAdminSetBotSkill))
+
+	mux.HandleFunc("GET /v1/admin/onboarding-presets", s.requireOrgAdmin(s.handleAdminListOnboardingPresets))
+	mux.HandleFunc("POST /v1/admin/onboarding-presets", s.requireOrgAdmin(s.handleAdminCreateOnboardingPreset))
+	mux.HandleFunc("PATCH /v1/admin/onboarding-presets/{id}", s.requireOrgAdmin(s.handleAdminPatchOnboardingPreset))
+	mux.HandleFunc("DELETE /v1/admin/onboarding-presets/{id}", s.requireOrgAdmin(s.handleAdminDeleteOnboardingPreset))
+	mux.HandleFunc("PUT /v1/admin/onboarding-presets/reorder", s.requireOrgAdmin(s.handleAdminReorderOnboardingPresets))
 	mux.HandleFunc("GET /v1/admin/users/{id}/skills", s.requireOrgAdmin(s.handleAdminListUserSkills))
 	mux.HandleFunc("PUT /v1/admin/users/{id}/skills/{name}", s.requireOrgAdmin(s.handleAdminSetUserSkill))
 	mux.HandleFunc("GET /v1/admin/users/{id}/machines", s.requireOrgAdmin(s.handleAdminListUserMachines))
@@ -184,6 +193,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/agents/{id}/skills", s.requireAuth(s.handleReplaceAgentSkills))
 	mux.HandleFunc("PUT /v1/agents/{id}/skills/{name}", s.requireAuth(s.handleSetAgentSkill))
 	mux.HandleFunc("POST /v1/agents/{id}/onboarding", s.requireAuth(s.handleAgentOnboarding))
+	mux.HandleFunc("GET /v1/onboarding/presets", s.requireAuth(s.handleListOnboardingPresets))
 
 	mux.HandleFunc("GET /v1/skills", s.requireAuth(s.handleListSkillsDetailed))
 	mux.HandleFunc("POST /v1/skills", s.requireAuth(s.handleCreateSkill))
@@ -201,6 +211,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("DELETE /v1/conversations/{id}", s.requireAuth(s.handleDeleteConversation))
 	mux.HandleFunc("GET /v1/conversations/{id}/messages", s.requireAuth(s.handleListMessages))
 	mux.HandleFunc("POST /v1/conversations/{id}/host-confirms", s.requireAuth(s.handleCreateHostConfirm))
+	mux.HandleFunc("POST /v1/conversations/{id}/micro-app-grants/{msgId}/decide", s.requireAuth(s.handleDecideMicroAppGrantPrompt))
 	mux.HandleFunc("POST /v1/conversations/{id}/host-confirms/{msgId}", s.requireAuth(s.handleDecideHostConfirm))
 	mux.HandleFunc("POST /v1/conversations/{id}/messages", s.requireAuth(s.handleSendMessage))
 	mux.HandleFunc("POST /v1/conversations/{id}/cancel", s.requireAuth(s.handleCancelConversationRun))
@@ -256,6 +267,26 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/inbound-hooks", s.requireAuth(s.handleListInboundHooks))
 	mux.HandleFunc("POST /v1/inbound-hooks", s.requireAuth(s.handleCreateInboundHook))
 	mux.HandleFunc("DELETE /v1/inbound-hooks/{id}", s.requireAuth(s.handleDeleteInboundHook))
+
+	// Micro apps (Phase 0: DB + API + hub shell; iframe/SDK Phase 1)
+	mux.HandleFunc("GET /v1/micro-apps", s.requireAuth(s.handleListMicroApps))
+	mux.HandleFunc("POST /v1/micro-apps", s.requireAuth(s.handleCreateMicroApp))
+	mux.HandleFunc("GET /v1/micro-apps/{id}", s.requireAuth(s.handleGetMicroApp))
+	mux.HandleFunc("PATCH /v1/micro-apps/{id}", s.requireAuth(s.handlePatchMicroApp))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/pin", s.requireAuth(s.handlePinMicroApp))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/archive", s.requireAuth(s.handleArchiveMicroApp))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/placements", s.requireAuth(s.handlePutMicroAppPlacements))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/grants", s.requireAuth(s.handleListMicroAppGrants))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handlePutMicroAppGrant))
+	mux.HandleFunc("DELETE /v1/micro-apps/{id}/grants/{capability}", s.requireAuth(s.handleDeleteMicroAppGrant))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/session", s.requireAuth(s.handleMicroAppSession))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/bundle", s.requireAuth(s.handleGetMicroAppBundle))
+	mux.HandleFunc("PUT /v1/micro-apps/{id}/bundle", s.requireAuth(s.handlePutMicroAppBundle))
+	mux.HandleFunc("GET /v1/micro-apps/{id}/runtime", s.requireAuth(s.handleGetMicroAppRuntime))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/cloud.http", s.requireAuth(s.handleMicroAppCloudHTTP))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/grant-check", s.requireAuth(s.handleMicroAppGrantCheck))
+	mux.HandleFunc("POST /v1/micro-apps/{id}/rpc/grant-consume", s.requireAuth(s.handleMicroAppGrantConsume))
+
 	mux.HandleFunc("POST /v1/webhooks/slack/{token}", s.handleSlackWebhook)
 	mux.HandleFunc("POST /v1/webhooks/github/{token}", s.handleGitHubWebhook)
 
@@ -310,6 +341,18 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/routines/create", s.requireInternal(s.handleInternalCreateRoutine))
 	mux.HandleFunc("POST /internal/routines/update", s.requireInternal(s.handleInternalUpdateRoutine))
 	mux.HandleFunc("POST /internal/routines/delete", s.requireInternal(s.handleInternalDeleteRoutine))
+	mux.HandleFunc("POST /internal/micro-apps/create", s.requireInternal(s.handleInternalCreateMicroApp))
+	mux.HandleFunc("POST /internal/micro-apps/pin", s.requireInternal(s.handleInternalPinMicroApp))
+	mux.HandleFunc("POST /internal/micro-apps/bundle", s.requireInternal(s.handleInternalUploadMicroAppBundle))
+	mux.HandleFunc("POST /internal/micro-apps/list", s.requireInternal(s.handleInternalListMicroApps))
+	mux.HandleFunc("POST /internal/micro-apps/update", s.requireInternal(s.handleInternalUpdateMicroApp))
+	mux.HandleFunc("POST /internal/micro-apps/tool-gate", s.requireInternal(s.handleInternalMicroAppToolGate))
+	mux.HandleFunc("POST /internal/micro-apps/grant-consume", s.requireInternal(s.handleInternalMicroAppGrantConsume))
+	mux.HandleFunc("POST /internal/micro-apps/grant-prompt", s.requireInternal(s.handleInternalMicroAppGrantPrompt))
+	mux.HandleFunc("POST /internal/micro-apps/parks", s.requireInternal(s.handleInternalMicroAppParkUpsert))
+	mux.HandleFunc("POST /internal/micro-apps/parks/resolve", s.requireInternal(s.handleInternalMicroAppParkResolve))
+	mux.HandleFunc("POST /internal/micro-apps/parks/expire", s.requireInternal(s.handleInternalMicroAppParkExpire))
+	mux.HandleFunc("POST /internal/micro-apps/parks/get", s.requireInternal(s.handleInternalMicroAppParkGet))
 	mux.HandleFunc("POST /internal/agents/clone", s.requireInternal(s.handleInternalCloneAgent))
 	mux.HandleFunc("POST /internal/agents/ask", s.requireInternal(s.handleInternalAskAgent))
 
@@ -853,7 +896,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	// New-bot default template: curated skills.sh batch default-on (+ account-enabled first-party).
+	// New-bot default template: curated default-on (skills.sh + first-party public e.g. generative-ui) + account-enabled first-party.
 	// Old bots are never rewritten (SeedNewAgentDefaultSkills no-ops when agent_skills already exist).
 	if err := s.db.SeedNewAgentDefaultSkills(uid, a.ID); err != nil {
 		// Best-effort; agent row already created.
@@ -1282,6 +1325,8 @@ type sendBody struct {
 	Attachments     []AttachmentRef `json:"attachments"`
 	AgentIDs        []string        `json:"agent_ids"` // @ subset or UI pick; empty/full-members = server AutoPick
 	Client          map[string]any  `json:"client"`    // client environment envelope (platform/app/os/…)
+	// MicroAppID (Phase 6): when set, runtime enforces dual-gate on host_* tools.
+	MicroAppID string `json:"micro_app_id"`
 	// ReplyToID is set only when the user explicitly clicks「回复」(quote / mainline).
 	// Normal sends leave it empty. Bot assistant saves must never copy this onto reply_to_id;
 	// turn linkage uses request_id (runtime run_id) instead.
@@ -1773,6 +1818,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		if body.Client != nil {
 			payloadMap["client"] = body.Client
 		}
+		if mid := strings.TrimSpace(body.MicroAppID); mid != "" {
+			payloadMap["micro_app_id"] = mid
+		}
 		attachUserTimezone(payloadMap, s.userSettingsOrDefault(uid))
 		attachToolAllowlist(payloadMap, s.toolAllowlistOrEmpty(uid))
 		s.attachPreferredMachine(payloadMap, uid, agentID)
@@ -2003,6 +2051,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 					if body.Client != nil {
 						payloadMap["client"] = body.Client
 					}
+					if mid := strings.TrimSpace(body.MicroAppID); mid != "" {
+						payloadMap["micro_app_id"] = mid
+					}
 					attachUserTimezone(payloadMap, s.userSettingsOrDefault(uid))
 					attachToolAllowlist(payloadMap, s.toolAllowlistOrEmpty(uid))
 					s.attachPreferredMachine(payloadMap, uid, agentID)
@@ -2104,6 +2155,30 @@ func (s *Server) resolveSendTargets(uid string, conv *db.Conversation, explicit 
 // planSendTargets resolves targets and optional AutoPick metadata for the send pipeline.
 func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []string, content string, replyParent *db.Message) (*groupSendPlan, error) {
 	plan := &groupSendPlan{Targets: []string{conv.AgentID}}
+
+	// Pending background task owns the turn (product: check open task before
+	// selecting who answers). Skip Auto选人 / decision; pin to the same bot.
+	// Structured: conversation_tasks row. Fallback: host continuation prompt.
+	if s.db != nil && conv != nil {
+		if open, err := s.db.OpenConversationTask(conv.ID); err == nil && open != nil {
+			agentID := strings.TrimSpace(open.AgentID)
+			if agentID == "" {
+				agentID = conv.AgentID
+			}
+			out := openTaskSendPlan(agentID)
+			log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)
+			return out, nil
+		}
+	}
+	if isPendingTaskContinuationPrompt(content) {
+		out := openTaskSendPlan(conv.AgentID)
+		if len(out.Targets) == 0 {
+			out.Targets = []string{conv.AgentID}
+		}
+		log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; continuation prompt marker)", out.Targets)
+		return out, nil
+	}
+
 	if conv.ChannelID == "" {
 		return plan, nil
 	}
@@ -2415,6 +2490,51 @@ func formatAssistantRunFailure(err error) string {
 		msg = string(runes[:300]) + "…"
 	}
 	return "（失败）" + msg
+}
+
+func microAppGrantRuntimeNote(content string) string {
+	var payload microAppGrantPromptPayload
+	if json.Unmarshal([]byte(content), &payload) != nil {
+		return ""
+	}
+	cap := strings.TrimSpace(payload.Capability)
+	if cap == "" {
+		return ""
+	}
+	status := strings.TrimSpace(payload.Status)
+	switch status {
+	case "allowed":
+		status = "已允许"
+	case "denied":
+		status = "已拒绝"
+	case "pending":
+		status = "等待用户在对话里点授权"
+	case "":
+		status = "未知"
+	}
+	note := "[微应用授权] capability=" + cap + " 结果=" + status
+	if tool := strings.TrimSpace(payload.Tool); tool != "" {
+		note += " tool=" + tool
+	}
+	if cmd := strings.TrimSpace(payload.Command); cmd != "" {
+		note += " command=" + cmd
+	}
+	note += "。这是系统记录。禁止编造与此相反的批准/拒绝。"
+	switch strings.TrimSpace(payload.Status) {
+	case "allowed":
+		note += "用户已授权；同一工具调用将继续执行（tool-loop park/resume），勿再索要授权、勿新开一轮重试。"
+		if args := strings.TrimSpace(payload.PendingArgs); args != "" {
+			if len(args) > 400 {
+				args = args[:400] + "…"
+			}
+			note += " pending_args=" + args
+		}
+	case "denied":
+		note += "用户已拒绝；停止该操作，勿重试。"
+	default:
+		note += "授权通过后同一工具调用将继续；拒绝则该工具失败并停止。"
+	}
+	return note
 }
 
 func hostConfirmRuntimeNote(content string) string {

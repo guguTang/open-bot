@@ -112,15 +112,30 @@ importers:
       '@capacitor/app':
         specifier: 7.0.2
         version: 7.0.2(@capacitor/core@7.6.9)
+      '@capacitor/camera':
+        specifier: 7.0.5
+        version: 7.0.5(@capacitor/core@7.6.9)
       '@capacitor/core':
         specifier: ^7.6.9
         version: 7.6.9
       '@capacitor/device':
         specifier: 7.0.5
         version: 7.0.5(@capacitor/core@7.6.9)
+      '@capacitor/geolocation':
+        specifier: 7.1.8
+        version: 7.1.8(@capacitor/core@7.6.9)
       '@capacitor/ios':
         specifier: ^7.6.9
         version: 7.6.9(@capacitor/core@7.6.9)
+      '@capacitor/local-notifications':
+        specifier: 7.0.7
+        version: 7.0.7(@capacitor/core@7.6.9)
+      '@capacitor/share':
+        specifier: 7.0.4
+        version: 7.0.4(@capacitor/core@7.6.9)
+      '@mozartec/capacitor-microphone':
+        specifier: 7.1.0
+        version: 7.1.0(@capacitor/core@7.6.9)
     devDependencies:
       '@capacitor/cli':
         specifier: ^7.6.9
@@ -974,6 +989,11 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/camera@7.0.5':
+    resolution: {integrity: sha512-+53f1xHq8on7O+ULXbgWp00ooWvn3fUkWxTP3p5zHi1nVriCxLbYnY0zTpZQqn52M96vclFKkoABbTVQ3x755w==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/cli@7.6.9':
     resolution: {integrity: sha512-QBDEf38yBAFTJehbi5FvAmhDWV1I/e7Zr3Z6XX0Bj+9T+/OY5EkGbw5/1e+3oIyyeepq3WtdSkLWHs3VNH2gCA==}
     engines: {node: '>=20.0.0'}
@@ -987,10 +1007,28 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
+  '@capacitor/geolocation@7.1.8':
+    resolution: {integrity: sha512-x/rJieD2N2zlGvXFRD3ru4ArJWTwXAIYmyhfo5zg4F1DKGos7mCCOvIOSVMdfQmt14SCsmJeO9Qe8EtDGNGCrw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
   '@capacitor/ios@7.6.9':
     resolution: {integrity: sha512-LANP81TfwuJk1zq9EuF+J5AJK71rKDgXB5XD+VFJQHC7BxSH4Dsma6DSMyrjFT03jtqc/0JTMEfSMBE7go3ZjA==}
     peerDependencies:
       '@capacitor/core': ^7.6.0
+
+  '@capacitor/local-notifications@7.0.7':
+    resolution: {integrity: sha512-3qSpa8PpVMONHqBOaJ4RbA/lB5vOdEngtep0myGmP3S56gShPScDCotbw7dwmQy3NCdY4Up9nH3ySrGvUh2jZg==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capacitor/share@7.0.4':
+    resolution: {integrity: sha512-wNXxmXUcChrtbZ5jQv8scFIbIGKo3rk6B7qpWySxfUhYJP5NANgAqQ9Z69m0k/zYsucdh66SBU7XW1ykd9aUug==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capacitor/synapse@1.0.4':
+    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
   '@chenshuai2144/sketch-color@1.0.9':
     resolution: {integrity: sha512-obzSy26cb7Pm7OprWyVpgMpIlrZpZ0B7vbrU0RMbvRg0YAI890S5Xy02Aj1Nhl4+KTbi1lVYHt6HQP8Hm9s+1w==}
@@ -1839,6 +1877,11 @@ packages:
   '@mermaid-js/parser@2.0.1':
     resolution: {integrity: sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA==}
     engines: {node: '>=22.12.0'}
+
+  '@mozartec/capacitor-microphone@7.1.0':
+    resolution: {integrity: sha512-7adiK4UKGOPQbKbPlFNLFFT756EwTv8viFlU0FDLqxzDsMWIIk6+I3RWMhhgQPPIJrPxYS4Wf9O6phtRfmcTnw==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -9754,6 +9797,10 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.6.9
 
+  '@capacitor/camera@7.0.5(@capacitor/core@7.6.9)':
+    dependencies:
+      '@capacitor/core': 7.6.9
+
   '@capacitor/cli@7.6.9':
     dependencies:
       '@ionic/cli-framework-output': 2.2.8
@@ -9784,9 +9831,24 @@ snapshots:
     dependencies:
       '@capacitor/core': 7.6.9
 
+  '@capacitor/geolocation@7.1.8(@capacitor/core@7.6.9)':
+    dependencies:
+      '@capacitor/core': 7.6.9
+      '@capacitor/synapse': 1.0.4
+
   '@capacitor/ios@7.6.9(@capacitor/core@7.6.9)':
     dependencies:
       '@capacitor/core': 7.6.9
+
+  '@capacitor/local-notifications@7.0.7(@capacitor/core@7.6.9)':
+    dependencies:
+      '@capacitor/core': 7.6.9
+
+  '@capacitor/share@7.0.4(@capacitor/core@7.6.9)':
+    dependencies:
+      '@capacitor/core': 7.6.9
+
+  '@capacitor/synapse@1.0.4': {}
 
   '@chenshuai2144/sketch-color@1.0.9(react@19.3.0)':
     dependencies:
@@ -11135,6 +11197,10 @@ snapshots:
   '@mermaid-js/parser@2.0.1':
     dependencies:
       '@chevrotain/types': 13.2.0
+
+  '@mozartec/capacitor-microphone@7.1.0(@capacitor/core@7.6.9)':
+    dependencies:
+      '@capacitor/core': 7.6.9
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true

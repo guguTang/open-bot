@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "skills.sh curated builtins that are default-on for new bots. Not the full leaderboard. Existing first-party disk skills remain available; this file only governs the skills.sh batch. role=always_on (find-skills) is the discovery entry: always mounted, disable blocked; other curated remain toggleable.",
+  "description": "Default-on skills for new bots: skills.sh curated batch + first-party public/common (e.g. generative-ui). Existing first-party disk skills remain available; this file governs the default-on whitelist used by SeedNewAgentDefaultSkills. role=always_on (find-skills) is the discovery entry: always mounted, disable blocked; role=public (generative-ui) is platform public/common: default-on for new bots and survives onboarding presets, still toggleable; other curated remain toggleable. First-party entries use preserve_local (no skills.sh fetch).",
   "skills": [
     {
       "slug": "find-skills",
@@ -13,6 +13,12 @@
       "install": "npx skills add https://github.com/vercel-labs/skills --skill find-skills",
       "note": "Discovery entry: always mounted for new bots; disable blocked. Adapted for open-bot Settings install UX (not npx-only); sync skips overwrite.",
       "preserve_local": true
+    },
+    {
+      "slug": "generative-ui",
+      "preserve_local": true,
+      "note": "First-party public/common skill (OpenUI interactive replies). Default-on for new users/bots; survives onboarding; toggleable; not from skills.sh. Sync skips overwrite.",
+      "role": "public"
     },
     {
       "slug": "grill-me",

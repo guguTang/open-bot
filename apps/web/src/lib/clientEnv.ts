@@ -38,6 +38,13 @@ declare global {
           getInfo?: () => Promise<{ name?: string; model?: string }>;
           getId?: () => Promise<{ identifier?: string }>;
         };
+        Camera?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        LocalNotifications?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Share?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Geolocation?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        Microphone?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        VoiceRecorder?: Record<string, (...args: unknown[]) => Promise<unknown>>;
+        SpeechRecognition?: Record<string, (...args: unknown[]) => Promise<unknown>>;
         StatusBar?: {
           getInfo?: () => Promise<{ visible?: boolean; overlays?: boolean; style?: string }>;
           setOverlaysWebView?: (opts: { overlay: boolean }) => Promise<void>;
@@ -460,4 +467,9 @@ export async function resolveDefaultMachineLabel(
   client: ClientContext = detectClientContext(),
 ): Promise<string> {
   return resolveDeviceDisplayName(client);
+}
+
+/** True when running inside Tauri desktop shell (host tools available locally). */
+export function hasTauriLike(): boolean {
+  return hasTauri();
 }

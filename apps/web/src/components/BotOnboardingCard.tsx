@@ -1,4 +1,4 @@
-import { SubmitEvent } from "react";
+import { SubmitEvent, useEffect, useMemo, useState } from "react";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,11 @@ import {
   QuestionnaireSubmit,
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
-import { ONBOARDING_OPTIONS, type OnboardingOption } from "./botOnboarding";
+import {
+  getCachedOnboardingOptions,
+  loadOnboardingOptions,
+  type OnboardingOption,
+} from "./botOnboarding";
 
 type Props = {
   disabled?: boolean;
@@ -26,20 +30,35 @@ type Props = {
 
 const FOCUS_FIELD = "focus";
 
-const questionnaireItems = [
-  {
-    name: FOCUS_FIELD,
-    required: true,
-    choices: ONBOARDING_OPTIONS.map((opt) => ({ value: opt.letter })),
-  },
-] as const;
-
 export function BotOnboardingCard({
   disabled,
   onSelectOption,
   onCustomSubmit,
   onDismiss,
 }: Props) {
+  const [options, setOptions] = useState<OnboardingOption[]>(() => getCachedOnboardingOptions());
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadOnboardingOptions().then((res) => {
+      if (!cancelled && res.options.length) setOptions(res.options);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const questionnaireItems = useMemo(
+    () => [
+      {
+        name: FOCUS_FIELD,
+        required: true,
+        choices: options.map((opt) => ({ value: opt.id })),
+      },
+    ],
+    [options],
+  );
+
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (disabled) return;
@@ -48,13 +67,18 @@ export function BotOnboardingCard({
     const value = typeof raw === "string" ? raw.trim() : "";
     if (!value) return;
 
-    const option = ONBOARDING_OPTIONS.find((opt) => opt.letter === value);
+    const option = options.find((opt) => opt.id === value);
     if (option) {
       onSelectOption(option);
       return;
     }
     onCustomSubmit(value);
   };
+
+  const shortcutHint =
+    options.length > 0 && options.length <= 26
+      ? `也可按 A–${String.fromCharCode(64 + options.length)} 快捷键选择。`
+      : "也可按字母快捷键选择。";
 
   return (
     <div className="mx-auto my-2 mb-5 box-border w-full max-w-140 px-3">
@@ -88,11 +112,11 @@ export function BotOnboardingCard({
                 你现在最想让我先帮你做什么？
               </QuestionnaireTitle>
               <QuestionnaireDescription>
-                选一个就行，之后还能随时改。也可按 A–E 快捷键选择。
+                选一个就行，之后还能随时改。{shortcutHint}
               </QuestionnaireDescription>
               <QuestionnaireChoices>
-                {ONBOARDING_OPTIONS.map((opt) => (
-                  <QuestionnaireChoice key={opt.letter} value={opt.letter} disabled={disabled}>
+                {options.map((opt) => (
+                  <QuestionnaireChoice key={opt.id} value={opt.id} disabled={disabled}>
                     <span className="font-medium">{opt.title}</span>
                     {opt.desc ? (
                       <QuestionnaireChoiceDescription>{opt.desc}</QuestionnaireChoiceDescription>

@@ -132,6 +132,10 @@ func historyForRuntimeScoped(msgs []db.Message, compactThread bool, currentAgent
 			if note := hostConfirmRuntimeNote(m.Content); note != "" {
 				out = append(out, runtimeMsg{Role: "system", Content: note})
 			}
+		case "micro_app_grant":
+			if note := microAppGrantRuntimeNote(m.Content); note != "" {
+				out = append(out, runtimeMsg{Role: "system", Content: note})
+			}
 		}
 	}
 	return out

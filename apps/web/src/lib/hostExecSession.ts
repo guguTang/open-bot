@@ -58,7 +58,7 @@ function computerInvokeArgs(op: string, args: Record<string, unknown> | undefine
   return out;
 }
 
-async function runOp(req: HostExecRequest): Promise<Record<string, unknown>> {
+export async function runLocalHostOp(req: HostExecRequest): Promise<Record<string, unknown>> {
   const invoke = tauriInvoke();
   if (!invoke) {
     return { ok: false, error: "当前窗口不能操作本机文件" };
@@ -174,6 +174,11 @@ function reviewForRequest(req: HostExecRequest): HostExecReview {
   );
 }
 
+/** Same Auto-review gate the host-exec session uses — micro-app Host Bridge must honour it too. */
+export function reviewLocalHostOp(req: HostExecRequest): HostExecReview {
+  return reviewForRequest(req);
+}
+
 async function refineWriteReview(req: HostExecRequest, base: HostExecReview): Promise<HostExecReview> {
   if (req.op !== "write") return base;
   const invoke = tauriInvoke();
@@ -248,7 +253,7 @@ export function startHostExecSession(opts: {
               error: req.op.startsWith("ssh_") ? "写入已关闭，远程写入、删除和命令也停着" : "本机写入已关闭",
             };
           } else if (req.preconfirmed) {
-            result = await runOp(req);
+            result = await runLocalHostOp(req);
             result.confirmed = true;
           } else if (await needsConfirm(req)) {
             let confirmReq = req;
@@ -273,12 +278,12 @@ export function startHostExecSession(opts: {
               if (!allowed) {
                 result = { ok: false, denied: true, error: "用户拒绝了这次操作" };
               } else {
-                result = await runOp(req);
+                result = await runLocalHostOp(req);
                 result.confirmed = true;
               }
             }
           } else {
-            result = await runOp(req);
+            result = await runLocalHostOp(req);
           }
         } catch (err) {
           result = { ok: false, error: err instanceof Error ? err.message : String(err) };

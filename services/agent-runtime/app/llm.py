@@ -15,6 +15,7 @@ import httpx
 
 from .builtin_tools import BUILTIN_TOOL_DEFS
 from .openbot_api import AGENT_TOOL_DEFS, ROUTINE_TOOL_DEFS
+from .micro_apps_stub import MICRO_APP_TOOL_DEFS
 from .deferral import CONTINUE_WORK, host_followup_prompt, last_real_user_text, turn_unfinished
 from .client_env import (
     ClientContext,
@@ -1574,23 +1575,37 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
 ]
 # Append built-in utility tools (time / calculator / http_fetch).
-TOOL_DEFS = list(TOOL_DEFS) + list(BUILTIN_TOOL_DEFS) + list(ROUTINE_TOOL_DEFS) + list(AGENT_TOOL_DEFS)
+TOOL_DEFS = list(TOOL_DEFS) + list(BUILTIN_TOOL_DEFS) + list(ROUTINE_TOOL_DEFS) + list(AGENT_TOOL_DEFS) + list(MICRO_APP_TOOL_DEFS)
 
 
 def iter_tool_defs(
     *,
     allow_ask_agent: bool = False,
     extra_tools: list[dict[str, Any]] | None = None,
+    allowed_names: list[str] | set[str] | frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Tool list for one turn. ask_agent is omitted unless this turn may ask a colleague."""
+    """Tool list for one turn. ask_agent is omitted unless this turn may ask a colleague.
+
+    When allowed_names is set (e.g. Phase 6 micro-app dual-gate filter), only those
+    names are offered (plus matching extra_tools). None = no name filter.
+    """
+    allow: set[str] | None = None
+    if allowed_names is not None:
+        allow = {str(n) for n in allowed_names if str(n).strip()}
     tools: list[dict[str, Any]] = []
     for tool in TOOL_DEFS:
         name = str((tool.get("function") or {}).get("name") or "")
         if name == "ask_agent" and not allow_ask_agent:
             continue
+        if allow is not None and name not in allow:
+            continue
         tools.append(tool)
     if extra_tools:
-        tools.extend(extra_tools)
+        for tool in extra_tools:
+            name = str((tool.get("function") or {}).get("name") or "")
+            if allow is not None and name and name not in allow:
+                continue
+            tools.append(tool)
     return tools
 
 
@@ -2290,6 +2305,7 @@ async def run_tool_loop(
     ask_routed: bool = False,
     user_id: str = "",
     conversation_id: str = "",
+    allowed_tool_names: list[str] | None = None,
 ) -> tuple[str, list[str], Any | None]:
     """Non-stream tool loop; returns final text, tool names used, and usage_details.
 
@@ -2379,7 +2395,7 @@ async def run_tool_loop(
             if raw.strip() and not (final or "").strip():
                 final = REASONING_ONLY
         return append_present_markdown(final, present_images), used, usage_acc
-    tools = iter_tool_defs(allow_ask_agent=allow_ask_agent, extra_tools=extra_tools)
+    tools = iter_tool_defs(allow_ask_agent=allow_ask_agent, extra_tools=extra_tools, allowed_names=allowed_tool_names)
     choice: str | None = "auto" if profile.tool_choice_auto else None
     # When upstream rejects tools+auto, keep running via XML/Hermes text tool calls
     # instead of silently chatting with a "tools enabled" system prompt (hallucinates).

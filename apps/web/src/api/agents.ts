@@ -98,6 +98,10 @@ export type Skill = {
   /** Bots of this account whose effective skill set includes this skill. */
   bot_count?: number;
   bots?: SkillBotRef[];
+  /** Curated role=always_on discovery entry (find-skills). */
+  always_on?: boolean;
+  /** API refuses disable; UI / skill.toggle must lock. */
+  disable_blocked?: boolean;
 };
 
 /** Editor payload: GET/PUT /v1/skills/{name}/package. */

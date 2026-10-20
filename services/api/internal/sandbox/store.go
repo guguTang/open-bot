@@ -191,3 +191,15 @@ func contentTypeForKey(key string) string {
 func isNotFound(err error) bool {
 	return err != nil && errors.Is(err, os.ErrNotExist)
 }
+
+
+// LoadObjectConfigForMicroApps reuses MinIO env but forces empty prefix so keys
+// are absolute (micro-apps/{owner}/{app}/...). Shares bucket with sandbox.
+func LoadObjectConfigForMicroApps() ObjectConfig {
+	cfg := loadObjectConfig()
+	if !cfg.Enabled() {
+		return cfg
+	}
+	cfg.Prefix = ""
+	return cfg
+}

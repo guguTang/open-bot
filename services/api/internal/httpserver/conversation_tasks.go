@@ -3,7 +3,6 @@ package httpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -241,10 +240,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		systemPrompt = agent.SystemPrompt
 		agentName = agent.Name
 	}
-	instruction := fmt.Sprintf(
-		"你有一条尚未交付的后台任务，必须在本轮用工具真正做完，不能只回复承诺或「稍后」。\n目标：\n%s\n完成后：用简短中文报告结果；若改了文件请给出可打开的链接。若做不到，说明卡在哪一步。",
-		task.Goal,
-	)
+	instruction := buildPendingTaskInstruction(task.Goal)
 	if strings.TrimSpace(systemPrompt) != "" {
 		systemPrompt = systemPrompt + "\n\n" + instruction
 	} else {
@@ -265,18 +261,19 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 	}
 	// Background durable thread: request_id = task.ID aligns with defer_work child thread.
 	payloadMap := map[string]any{
-		"conversation_id": task.ConversationID,
-		"content":         instruction,
-		"agent_id":        task.AgentID,
-		"user_id":         task.UserID,
-		"channel_id":      conv.ChannelID,
-		"system_prompt":   systemPrompt,
-		"messages":        historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
-		"enabled_skills":  enabledSkills,
-		"max_tool_rounds": s.effectiveMaxToolRounds(task.UserID),
-		"request_id":      task.ID,
-		"background":      true,
-		"owner_task":      task.ID,
+		"conversation_id":   task.ConversationID,
+		"content":           instruction,
+		"agent_id":          task.AgentID,
+		"user_id":           task.UserID,
+		"channel_id":        conv.ChannelID,
+		"system_prompt":     systemPrompt,
+		"messages":          historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
+		"enabled_skills":    enabledSkills,
+		"max_tool_rounds":   s.effectiveMaxToolRounds(task.UserID),
+		"request_id":        task.ID,
+		"background":        true,
+		"owner_task":        task.ID,
+		"task_continuation": true,
 	}
 	if llmPayload != nil {
 		payloadMap["llm"] = llmPayload
@@ -532,14 +529,19 @@ func (s *Server) tryShortcutTurn(userID string, conv *db.Conversation, sourceMes
 	if goal == "" {
 		return false
 	}
-	if _, err := s.db.EnqueueConversationTask(userID, conv.ID, agentID, goal, sourceMessageID); err != nil {
+	// Always follow the bot that owns the open task (not Auto选人 targetAgents[0]).
+	owner := strings.TrimSpace(open.AgentID)
+	if owner == "" {
+		owner = agentID
+	}
+	if _, err := s.db.EnqueueConversationTask(userID, conv.ID, owner, goal, sourceMessageID); err != nil {
 		log.Printf("enqueue conversation task conv=%s: %v", conv.ID, err)
 		return false
 	}
 	s.wakeTasks()
-	s.publishTaskStatus(userID, conv.ID, agentID, conv.ChannelID, "running", "正在做…")
+	s.publishTaskStatus(userID, conv.ID, owner, conv.ChannelID, "running", "正在做…")
 	emit("meta", map[string]any{"phase": "task_queued", "conversation_id": conv.ID})
-	s.speakShortcut(userID, conv, agentID, statusWaitText, emit)
+	s.speakShortcut(userID, conv, owner, statusWaitText, emit)
 	return true
 }
 

@@ -13,6 +13,7 @@ import type { UiMessage } from "../types/app-ui";
 import { pinStick, type ScrollStick } from "../lib/scrollStick";
 import { usePresenceStore } from "./presence";
 import { useShellStore } from "./shell";
+import { useMicroAppsStore } from "./microApps";
 import { useWorkspaceStore } from "./workspace";
 
 export type ApprovalGate = {
@@ -122,5 +123,6 @@ export function resetChatSession() {
   useChatStore.getState().resetChat();
   usePresenceStore.getState().reset();
   useShellStore.getState().reset();
+  useMicroAppsStore.getState().reset();
   useWorkspaceStore.getState().reset();
 }

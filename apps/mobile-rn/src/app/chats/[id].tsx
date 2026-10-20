@@ -49,6 +49,7 @@ import {
   type StreamingByAgent,
 } from "@/lib/conversationRun";
 import {
+  getOnboardingCustomFallbackId,
   onboardingStorageKey,
   setOnboardingDismissed,
   type OnboardingOption,
@@ -642,7 +643,7 @@ export default function ChatScreen(): JSX.Element {
    * 引导卡必须**先落库再发消息**。
    *
    * 早期版本这里只 `send(opt.prompt)`，从没调过 `applyAgentOnboarding`，
-   * 结果用户在手机上选的 A–E 方向根本没写进 Bot 的岗位描述 / 人设 / 默认技能，
+   * 结果用户在手机上选的岗位方向根本没写进 Bot 的岗位描述 / 人设 / 默认技能，
    * 选完等于白选。Web 端一直是对的（apps/web/src/App.tsx 先 apply 再 send），
    * RN 跟随时补上。落库失败按 Web 的做法：提示但不阻断发送。
    */
@@ -656,7 +657,7 @@ export default function ChatScreen(): JSX.Element {
       void (async () => {
         if (primaryAgent) {
           try {
-            await api.applyAgentOnboarding(primaryAgent.id, { focus: opt.letter });
+            await api.applyAgentOnboarding(primaryAgent.id, { focus: opt.id || opt.letter });
             await refreshAgentsAfterOnboarding();
           } catch (err) {
             setError(err instanceof Error ? err.message : "初始化助手失败");
@@ -668,14 +669,14 @@ export default function ChatScreen(): JSX.Element {
     [primaryAgent, refreshAgentsAfterOnboarding, send]
   );
 
-  /** 自定义方向走 focus E：后端按「用户自定义」处理，同时把原文写进岗位描述。 */
+  /** 自定义方向走 custom_fallback（默认 E）：把原文写进岗位描述。 */
   const onOnboardingCustom = useCallback(
     (text: string) => {
       void (async () => {
         if (primaryAgent) {
           try {
             await api.applyAgentOnboarding(primaryAgent.id, {
-              focus: "E",
+              focus: getOnboardingCustomFallbackId(),
               description: text.slice(0, 400),
               system_prompt: `用户自定义方向：${text}`,
             });

@@ -19,6 +19,7 @@ from ...llm import (
 from ...model_compat import profile_for, resolve_prompt_cache_mode
 from ...memory import build_recall_payload, scene_kind
 from ..long_task import apply_after_interrupt_hint, apply_host_list_hint
+from ...micro_app_session import apply_recent_micro_app_hint
 from ..state import AgentState
 
 
@@ -149,6 +150,11 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
         after_interrupt=bool(body is not None and getattr(body, "after_interrupt", False)),
     )
     system, dynamic_system = apply_host_list_hint(system, dynamic_system, user_text)
+    system, dynamic_system = apply_recent_micro_app_hint(
+        system,
+        dynamic_system,
+        str(cfg.get("conversation_id") or ""),
+    )
 
     dialog = [m for m in history if m.get("role") in ("user", "assistant", "summary")]
     # After a reset entry, only keep messages tagged at/after reset (or trailing turns).

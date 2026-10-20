@@ -21,6 +21,10 @@
 - 只放行 `@ToAssistant` 与 http(s) 的 `@OpenUrl`；未接 `Query/Mutation`（没有 toolProvider），提示词里也不教。
 - 改组件只在末尾加参数（已存消息按位置解析），改完重跑生成脚本。
 
+## 默认开启
+
+`generative-ui` 是公共技能：列入 `skills/curated-builtins.json`（`preserve_local` 第一方）。新用户账号 seeding 全开；新 Bot 经 `SeedNewAgentDefaultSkills` 始终进入默认白名单（即使账号侧曾关掉）。老 Bot 已有 `agent_skills` 不回填。可在设置里关闭（非 `always_on`）。
+
 ## 测试
 
 - `pnpm --dir apps/web test`：渲染、点击回传、表单值、流式、回退、Markdown 混排、提示词是否最新、web/RN 契约一致。

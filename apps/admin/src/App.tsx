@@ -18,6 +18,7 @@ import DocParsePage from "./pages/DocParsePage";
 import AuditPage from "./pages/AuditPage";
 import MemoryPage from "./pages/MemoryPage";
 import SkillsPage from "./pages/SkillsPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import SkillEditPage from "./pages/SkillEditPage";
 import { getToken } from "./api";
 
@@ -90,6 +91,7 @@ function AppRoutes() {
         <Route path="users" element={<UsersPage />} />
         <Route path="bots" element={<BotsPage />} />
         <Route path="skills" element={<SkillsPage />} />
+        <Route path="onboarding" element={<OnboardingPage />} />
         <Route path="skills/:name" element={<SkillEditPage />} />
         <Route path="memory" element={<MemoryPage />} />
         <Route path="traces" element={<TracesPage />} />

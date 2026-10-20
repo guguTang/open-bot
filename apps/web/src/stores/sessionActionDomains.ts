@@ -1,5 +1,6 @@
 import type { FormEvent, MouseEvent, RefObject } from "react";
 import type { Agent, ApprovalDecision, Channel } from "../api";
+import type { MicroAppGrantCardDecision } from "../components/MicroAppGrantConfirmCard";
 import type { ConvSheetTarget } from "../components/app/AppOverlays";
 import type { OnboardingOption } from "../components/botOnboarding";
 import type { CreateBotInput, NewChatMode } from "../components/newChatTypes";
@@ -9,6 +10,7 @@ import type { SettingsTab, UiMessage } from "../types/app-ui";
 /** Chat transcript / composer / approval actions. */
 export type ChatSessionActions = {
   settleHostConfirm: (message: UiMessage, decision: ApprovalDecision) => void;
+  settleMicroAppGrant: (message: UiMessage, decision: MicroAppGrantCardDecision) => void;
   stopCurrentRun: (opts: { markStopped: boolean }) => void;
   onSubmit: (e: FormEvent) => void | Promise<void>;
   /** 以用户身份发一条纯文本（OpenUI 组件点击等）。 */
@@ -78,6 +80,7 @@ export type SessionActions = ChatSessionActions & OverlaySessionActions & ShellS
 
 export const CHAT_SESSION_KEYS = [
   "settleHostConfirm",
+  "settleMicroAppGrant",
   "stopCurrentRun",
   "onSubmit",
   "sendUserText",

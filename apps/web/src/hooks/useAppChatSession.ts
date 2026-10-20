@@ -13,6 +13,7 @@ import {
 import { type FeedbackTarget } from "../components/feedbackModalTypes";
 import {
   isOnboardingDismissed,
+  getOnboardingCustomFallbackId,
   onboardingStorageKey,
   setOnboardingDismissed,
   type OnboardingOption,
@@ -184,7 +185,7 @@ export function useAppChatSession(p: UseAppChatSessionParams) {
       void (async () => {
         try {
           if (agentId) {
-            await applyAgentOnboarding(agentId, { focus: opt.letter });
+            await applyAgentOnboarding(agentId, { focus: opt.id || opt.letter });
             await refreshAgents();
           }
         } catch (err) {
@@ -203,7 +204,7 @@ export function useAppChatSession(p: UseAppChatSessionParams) {
         try {
           if (agentId) {
             await applyAgentOnboarding(agentId, {
-              focus: "E",
+              focus: getOnboardingCustomFallbackId(),
               description: customText.slice(0, 400),
               system_prompt: `用户自定义方向：${customText}`,
             });

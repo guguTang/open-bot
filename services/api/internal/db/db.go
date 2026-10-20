@@ -537,6 +537,12 @@ CREATE INDEX IF NOT EXISTS idx_bot_lessons_agent ON bot_lessons(user_id, agent_i
 	if err := d.migrateOAuthConnections(); err != nil {
 		return err
 	}
+	if err := d.migrateMicroApps(); err != nil {
+		return err
+	}
+	if err := d.migrateOnboardingPresets(); err != nil {
+		return err
+	}
 	return d.migrateVector()
 }
 

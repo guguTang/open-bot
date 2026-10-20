@@ -4927,6 +4927,491 @@ html.touch-ui .composer-quote-clear {
   border-radius: 8px;
 }
 
+/* === micro-apps hub / shell · align Settings hub chrome (2026-10-20) === */
+
+.micro-apps-hub,
+.micro-app-shell.settings-hub {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.micro-apps-hub-icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #e5e7eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 22px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+[data-theme="dark"] .micro-apps-hub-icon {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.micro-apps-hub-kind {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.micro-apps-hub-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  line-height: 1.2;
+}
+
+.micro-apps-hub-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 48px;
+  padding-bottom: 32px;
+}
+.micro-apps-hub-empty > div {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.micro-apps-hub-empty > p {
+  margin: 0;
+  max-width: 280px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9ca3af;
+}
+.micro-apps-hub-empty-action {
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: var(--accent, #2563eb);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-height: 44px;
+}
+
+.micro-apps-hub-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+  animation: micro-apps-spin 0.8s linear infinite;
+}
+@keyframes micro-apps-spin {
+  to { transform: rotate(360deg); }
+}
+
+.micro-apps-hub-details {
+  font-size: 13px;
+  color: #6b7280;
+  padding: 0 4px;
+}
+.micro-apps-hub-details > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.micro-apps-hub-details-block {
+  margin-top: 8px;
+  padding-bottom: 12px;
+}
+.micro-apps-hub-surface-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.micro-apps-hub-surface {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.micro-apps-hub-form-card {
+  padding: 14px 16px 16px;
+}
+
+/* Shell: ← title · more · × — same circular chrome as Settings */
+.micro-app-shell-subhead {
+  grid-template-columns: 44px 1fr auto;
+}
+.micro-app-shell-subhead-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.micro-app-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.micro-app-shell-panel {
+  flex-shrink: 0;
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 14px;
+  font-size: 13px;
+  color: #6b7280;
+}
+[data-theme="dark"] .micro-app-shell-panel {
+  background: #2c2c2e;
+}
+.micro-app-shell-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 24px;
+}
+.micro-app-shell-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.micro-app-shell-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 16px max(16px, var(--safe-bottom, 0px));
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+}
+[data-theme="dark"] .micro-app-shell-stage {
+  background: #2c2c2e;
+}
+
+.micro-app-shell-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  border: 0;
+  background: #fff;
+}
+
+.micro-app-shell-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  min-height: 240px;
+  padding: 24px 20px;
+  text-align: center;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.micro-app-shell-placeholder-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+
+/* === micro-apps hub / shell · desktop wide (NOT sheetForm) ===
+   Gate: .micro-apps-hub--desktop / .micro-app-shell--desktop (useSheetFormUi false).
+   Align settings-dialog white elevated; keep narrow Settings-hub path untouched. */
+
+.micro-apps-hub--desktop,
+.micro-app-shell--desktop {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elevated, #fff);
+}
+
+[data-theme="dark"] .micro-apps-hub--desktop,
+[data-theme="dark"] .micro-app-shell--desktop {
+  background: var(--bg-elevated, #1c1c1e);
+}
+
+.micro-apps-hub-desktop-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 18px 18px 8px 22px;
+  min-height: 52px;
+  background: transparent;
+}
+
+.micro-app-shell-desktop-head {
+  /* back | title | actions */
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 10px 16px;
+}
+
+.micro-apps-hub-desktop-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.micro-apps-hub-desktop-icon {
+  /* settings-close already ~32; keep icon grid */
+  flex-shrink: 0;
+}
+
+.micro-apps-hub--desktop .settings-close,
+.micro-app-shell--desktop .settings-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.micro-apps-hub--desktop .settings-close:hover,
+.micro-app-shell--desktop .settings-close:hover {
+  color: var(--text);
+  background: var(--bg-soft, #f3f4f6);
+}
+
+.micro-apps-hub-desktop-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+
+.micro-apps-hub-desktop-card {
+  border-radius: 12px !important;
+  border: 1px solid #eceef1;
+  background: #fff;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .micro-apps-hub-desktop-card {
+  background: #2c2c2e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-desktop-row.settings-hub-row,
+.micro-apps-hub--desktop .settings-hub-row.micro-apps-hub-desktop-row {
+  min-height: 44px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.micro-apps-hub--desktop .settings-hub-row:has(.settings-hub-row-sub) {
+  min-height: 48px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+.micro-apps-hub--desktop .settings-hub-row-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.micro-apps-hub--desktop .settings-hub-row-sub {
+  font-size: 12px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-empty-action {
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-details > summary {
+  min-height: 32px;
+}
+
+/* Shell panels on desktop: keep light card chrome for collapsible meta */
+.micro-app-shell--desktop .micro-app-shell-panel {
+  margin: 0 16px 10px;
+  border-radius: 12px;
+  border: 1px solid #eceef1;
+}
+
+/* Stage fills remaining shell — no card-in-card border/margin that squeezes the tool */
+.micro-app-shell--desktop .micro-app-shell-stage {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+}
+
+[data-theme="dark"] .micro-app-shell--desktop .micro-app-shell-panel {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* === micro-app shell content-fit (iframe postMessage resize) ===
+   Hub list keeps fixed settings-dialog ~860×680.
+   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
+   stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
+   Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
+   No hardcoded portrait preference — shell follows reported resize width/height.
+   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport; overflow scrolls.
+   Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
+
+.settings-dialog.settings-dialog--micro-fit {
+  /* Override fixed 860×680 — hug shell child like a tight popover */
+  width: fit-content;
+  min-width: min(280px, calc(100vw - 32px));
+  max-width: min(90vw, calc(100vw - 32px));
+  height: auto;
+  max-height: min(90vh, calc(100vh - 32px));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
+  width: min(90vw, max(280px, var(--micro-shell-content-w, 480px)));
+  max-width: min(90vw, calc(100vw - 32px));
+  height: auto;
+  max-height: min(90vh, calc(100vh - 32px));
+  min-height: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-body {
+  flex: 0 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  /* Do not stretch to fill leftover dialog height with blank white */
+  height: auto;
+  min-height: 0;
+  /* Edge-to-edge under top bar — no card-in-card empty margins */
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  padding: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--sized {
+  display: flex;
+  flex-direction: column;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--scroll {
+  overflow: auto;
+  max-height: min(calc(90vh - 56px), calc(100vh - 88px));
+}
+
+.micro-app-shell--fit .micro-app-shell-frame,
+.micro-app-shell--fit .micro-app-shell-frame--fit {
+  display: block;
+  width: 100%;
+  border: 0;
+  flex: 0 0 auto;
+  /* No host transform / forced aspect that deforms the tool */
+  transform: none;
+  aspect-ratio: auto;
+  position: static;
+}
+
+.micro-app-shell--fit .micro-app-shell-frame--sized {
+  /* height set inline from clampMicroShellSize */
+  min-height: 160px;
+}
+
+.micro-app-shell--fit .micro-app-shell-placeholder {
+  position: static;
+  height: auto;
+  min-height: 160px;
+  justify-content: flex-start;
+  padding: 28px 16px;
+}
+
+/* Narrow / Capacitor fullscreen: keep dialog full size, shrink white stage to content */
+.settings-dialog-shell .micro-app-shell--fit {
+  height: 100%;
+  width: 100%;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  max-height: 100%;
+  margin: 0 16px max(16px, var(--safe-bottom, 0px));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage--scroll {
+  max-height: min(72vh, calc(100dvh - 120px));
+  overflow: auto;
+}
+
+/* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */
+.modal.settings-dialog-shell .micro-apps-hub .settings-hub-close,
+.modal.settings-dialog-shell .micro-apps-hub .settings-shell-back,
+.modal.settings-dialog-shell .micro-app-shell .settings-hub-close,
+.modal.settings-dialog-shell .micro-app-shell .settings-shell-back,
+.modal.settings-dialog-shell .micro-apps-hub-empty-action {
+  margin-top: 0;
+}
+
 /* ---- OpenUI 交互回复（apps/web/src/openui）---- */
 .oui-root { margin: 0.7em 0; }
 .oui-card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated, #fff); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }

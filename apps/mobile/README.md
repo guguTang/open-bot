@@ -70,6 +70,29 @@ iOS 已开 `NSAllowsLocalNetworking`；Android 开发包开了 `usesCleartextTra
 | `android/` | Android Studio 工程 |
 | `CAP_LIVE_RELOAD=1` | 写入 `server.url`（默认 `http://127.0.0.1:5173`） |
 
+
+## 微应用 Device 插件（Camera / Geo / Mic / Notify / Share）
+
+`apps/mobile/package.json` 已声明：
+
+| 能力 | npm |
+|------|-----|
+| `device.camera` | `@capacitor/camera` |
+| `device.geo` | `@capacitor/geolocation` |
+| `device.mic` | `@mozartec/capacitor-microphone`（注册名 `Microphone`） |
+| `device.notify` | `@capacitor/local-notifications` |
+| `device.share` | `@capacitor/share` |
+
+Web 侧 `deviceBridge.ts` **运行时探测** `Capacitor.Plugins.*`：壳 `pnpm install` + `npx cap sync` 后矩阵亮起；未授权 OS 权限时仍灰显/引导系统框（`requestPermissions`）。
+
+iOS：`Info.plist` 含 Camera / Microphone / Location When-In-Use / Photo Library 文案。  
+Android：`AndroidManifest.xml` 含 CAMERA / RECORD_AUDIO / ACCESS_*_LOCATION。
+
+```bash
+pnpm --dir apps/mobile install
+make sync-mobile   # 或 cd apps/mobile && npx cap sync
+```
+
 ## 本轮不做
 
 应用商店上架、推送证书、原生插件大集合、自动更新。

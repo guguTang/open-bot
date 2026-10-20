@@ -22,4 +22,4 @@ export {
   classifyHostExecReviewForMachine,
   classifyHostExecReview,
 } from "./hostExecReview";
-export { startHostExecSession } from "./hostExecSession";
+export { startHostExecSession, runLocalHostOp } from "./hostExecSession";

@@ -34,6 +34,7 @@ from .llm import (
     tools_enabled,
 )
 from .harness.long_task import apply_after_interrupt_hint, apply_host_list_hint
+from .micro_app_session import apply_recent_micro_app_hint, record_touch as record_micro_app_touch
 from .tool_markup import strip_tool_markup
 from .memory import (
     MemoryStore,
@@ -104,6 +105,8 @@ class RunRequest(BaseModel):
     enabled_skills: list[str] | None = None
     client: dict[str, Any] | None = None
     preferred_machine_id: str = ""
+    # Phase 6: when set (agent.invoke / micro-app session), dual-gate host_* tools.
+    micro_app_id: str = ""
     max_tool_rounds: int | None = None
     # Slack/Grok-style thread (Go injects reply context into content/messages).
     reply_to_id: str | None = None
@@ -220,6 +223,12 @@ def _override_from_body(llm: LLMConfig | None) -> LLMOverride | None:
 @app.on_event("startup")
 async def _startup() -> None:
     skills.reload()
+    try:
+        from . import micro_app_park as park_mod
+
+        park_mod.rehydrate_on_startup()
+    except Exception:  # noqa: BLE001
+        pass
     if durable_enabled():
         try:
             await get_checkpointer()
@@ -619,6 +628,16 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                     mcp_extra_tools = []
 
         client_ctx = ClientContext.from_any(body.client)
+        micro_app_id = str(getattr(body, "micro_app_id", "") or "").strip()
+        if micro_app_id and available_tool_names is not None:
+            from . import micro_app_gate as micro_gate
+
+            available_tool_names = micro_gate.apply_offer_filter(
+                available_tool_names,
+                user_id=str(body.user_id or ""),
+                micro_app_id=micro_app_id,
+                client=client_ctx,
+            )
         host_machines: list[dict[str, Any]] | None = None
         if body.user_id:
             from . import machines as machines_mod
@@ -753,6 +772,11 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
             system, dynamic_system = apply_host_list_hint(
                 system, dynamic_system, str(body.content or "")
             )
+            system, dynamic_system = apply_recent_micro_app_hint(
+                system,
+                dynamic_system,
+                str(body.conversation_id or ""),
+            )
 
             dialog = [m for m in history if m["role"] in ("user", "assistant", "summary")]
 
@@ -835,6 +859,7 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
                 thread_root_id=body.thread_root_id,
                 reply_context=body.reply_context,
                 durable_body=body,
+                durable_available_tool_names=available_tool_names,
             ):
                 yield chunk
         else:
@@ -1263,6 +1288,29 @@ async def openai_path(
             from . import machines as machines_mod
             from .host_computer import is_computer_tool, prepare_host_computer
 
+            # Phase 6 dual-gate when this turn was started from a micro-app.
+            _ma_id = str(getattr(turn, "micro_app_id", "") or "").strip() if turn else ""
+            _ma_grant_id = ""
+            if _ma_id:
+                from . import micro_app_gate as micro_gate
+
+                _rid = ""
+                if turn is not None:
+                    _rid = str(getattr(turn, "request_id", "") or "").strip()
+                if not _rid:
+                    _rid = str(durable_run_id or "").strip()
+                _reject, _ma_grant_id = await micro_gate.await_dual_gate_with_park(
+                    user_id=str(user_id or ""),
+                    micro_app_id=_ma_id,
+                    tool=name,
+                    args=args,
+                    client=client,
+                    conversation_id=str(conversation_id or ""),
+                    request_id=_rid,
+                )
+                if _reject:
+                    return _reject
+
             op = name.removeprefix("host_")
             cu_args: dict[str, Any] | None = None
             listed = machines_mod.list_machines(str(user_id or ""))
@@ -1396,6 +1444,10 @@ async def openai_path(
             )
             if result.get("ok"):
                 machines_mod.remember_usual_device(mem_store or mem, result.get("usual"))
+                if _ma_grant_id:
+                    from . import micro_app_gate as micro_gate
+
+                    micro_gate.consume_grant(str(user_id or ""), _ma_grant_id)
             return json.dumps(result, ensure_ascii=False)
         if name == "defer_work":
             from . import openbot_api as obapi
@@ -1463,6 +1515,68 @@ async def openai_path(
                 # drop Nones
                 fields = {k: v for k, v in fields.items() if v is not None}
                 return json.dumps(obapi.create_routine(str(user_id or ""), **fields), ensure_ascii=False)
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "draft_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args = dict(args or {})
+                if not args.get("source_conversation_id") and conversation_id:
+                    args["source_conversation_id"] = str(conversation_id)
+                if not args.get("agent_id") and agent_id:
+                    args["agent_id"] = str(agent_id)
+                result = micro_apps.draft_micro_app(str(user_id or ""), args)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args
+                )
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "upload_micro_app_bundle":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args_u = dict(args or {})
+                result = micro_apps.upload_micro_app_bundle(str(user_id or ""), args_u)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_u
+                )
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "pin_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args_p = dict(args or {})
+                result = micro_apps.pin_micro_app(str(user_id or ""), args_p)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_p
+                )
+                return json.dumps(result, ensure_ascii=False)
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "list_micro_apps":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                return json.dumps(
+                    micro_apps.list_micro_apps(str(user_id or ""), dict(args or {})),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "update_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                args_m = dict(args or {})
+                result = micro_apps.update_micro_app(str(user_id or ""), args_m)
+                record_micro_app_touch(
+                    str(conversation_id or ""), name, result, args=args_m
+                )
+                return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name in ("update_routine", "pause_routine", "resume_routine"):
@@ -1711,6 +1825,7 @@ async def openai_path(
                     ask_routed=bool(getattr(turn, "ask_routed", False)),
                     user_id=str(user_id or ""),
                     conversation_id=str(conversation_id or ""),
+                    allowed_tool_names=durable_available_tool_names,
                 )
             )
             try:
@@ -1860,6 +1975,22 @@ class ApproveRequest(BaseModel):
     request_id: str = Field(..., min_length=1)
     approve: bool = True
     reason: str = ""
+
+
+class MicroAppGrantResolveRequest(BaseModel):
+    """Unblock a parked host_* tool after micro_app_grant decide."""
+
+    req_id: str = Field(..., min_length=1)
+    decision: str = Field(..., min_length=1)  # allow_once | always_allow | deny
+    conversation_id: str = ""
+    request_id: str = ""
+
+
+@app.post("/v1/micro-app-grants/resolve")
+async def micro_app_grants_resolve(body: MicroAppGrantResolveRequest) -> dict:
+    from . import micro_app_park as park_mod
+
+    return await park_mod.resolve(body.req_id, body.decision)
 
 
 @app.post("/v1/runs/steer")

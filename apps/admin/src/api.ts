@@ -1337,3 +1337,92 @@ export function setAdminScopeOrgId(orgId: string | null) {
   if (!orgId) localStorage.removeItem("openbot_admin_scope_org");
   else localStorage.setItem("openbot_admin_scope_org", orgId);
 }
+
+/* ------------------------------------------------------------------ 岗位引导预设 */
+
+export type AdminOnboardingPreset = {
+  id: string;
+  title: string;
+  card_desc: string;
+  user_prompt: string;
+  description: string;
+  system_prompt: string;
+  skills_json: string;
+  sort_order: number;
+  enabled: boolean;
+  is_custom_fallback: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function adminListOnboardingPresets(): Promise<{ presets: AdminOnboardingPreset[] }> {
+  const res = await fetch(`${API_BASE}/v1/admin/onboarding-presets`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminCreateOnboardingPreset(body: {
+  id: string;
+  title: string;
+  card_desc?: string;
+  user_prompt?: string;
+  description?: string;
+  system_prompt?: string;
+  skills_json?: string;
+  skills?: string[] | null;
+  sort_order?: number;
+  enabled?: boolean;
+  is_custom_fallback?: boolean;
+}): Promise<{ preset: AdminOnboardingPreset }> {
+  const res = await fetch(`${API_BASE}/v1/admin/onboarding-presets`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminPatchOnboardingPreset(
+  id: string,
+  body: {
+    title?: string;
+    card_desc?: string;
+    user_prompt?: string;
+    description?: string;
+    system_prompt?: string;
+    skills_json?: string;
+    skills?: string[] | null;
+    sort_order?: number;
+    enabled?: boolean;
+    is_custom_fallback?: boolean;
+  },
+): Promise<{ preset: AdminOnboardingPreset }> {
+  const res = await fetch(`${API_BASE}/v1/admin/onboarding-presets/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminDeleteOnboardingPreset(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/admin/onboarding-presets/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function adminReorderOnboardingPresets(
+  ids: string[],
+): Promise<{ presets?: AdminOnboardingPreset[] }> {
+  const res = await fetch(`${API_BASE}/v1/admin/onboarding-presets/reorder`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}

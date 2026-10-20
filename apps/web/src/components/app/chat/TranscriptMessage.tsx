@@ -50,6 +50,7 @@ export function TranscriptMessage({
       onOpenThread={onOpenThread}
       onJumpToParent={onJumpToParent}
       onHostDecide={message.role === "host_confirm" ? (decision) => chat.settleHostConfirm(message, decision) : undefined}
+      onMicroAppGrantDecide={message.role === "micro_app_grant" ? (decision) => chat.settleMicroAppGrant(message, decision) : undefined}
       onToggleReaction={(messageId, emoji) => void chat.onToggleReaction(messageId, emoji)}
       onFeedback={(msg) => chat.openFeedbackForMessage(msg, "feedback_menu")}
       onNegativeReaction={(msg) => chat.openFeedbackForMessage(msg, "reaction_followup")}
