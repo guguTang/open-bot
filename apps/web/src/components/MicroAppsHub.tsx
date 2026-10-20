@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Pin, Wrench } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   archiveMicroApp,
@@ -24,9 +24,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * 「我的工具」 hub — list + MicroAppShell + capability matrix.
- * Entry surfaces: hub (always) / chat_pin (Phase 2) / desktop_shortcut / mobile_shortcut (Phase 3,
- * in-app shortcut areas — not OS widgets).
+ * 「我的工具」 hub — Settings-hub isomorphic shell (gray #F2F2F7 + white cards +
+ * circular settings-hub-close), not a centered web dialog / sidebar list.
  */
 
 const ENTRY_SURFACES: Array<{ surface: MicroAppSurface; label: string; short: string }> = [
@@ -63,6 +62,12 @@ export function MicroAppsHub({ open, onClose }: Props) {
   }, [open, refresh]);
 
   const openApp = apps.find((a) => a.id === openAppId) || null;
+
+  function handleClose() {
+    setOpenAppId(null);
+    setCreatingRoutine(false);
+    onClose();
+  }
 
   async function onConfirmPin() {
     if (!confirmPin) return;
@@ -130,177 +135,181 @@ export function MicroAppsHub({ open, onClose }: Props) {
       <Dialog
         open={open}
         onOpenChange={(v) => {
-          if (!v) {
-            setOpenAppId(null);
-            onClose();
-          }
+          if (!v) handleClose();
         }}
       >
-        <DialogContent className="flex max-h-[min(720px,90vh)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <DialogHeader className="shrink-0 border-b border-[var(--border)] px-5 py-4 text-left">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Wrench className="size-4 opacity-70" aria-hidden />
-              我的工具
-            </DialogTitle>
-            <DialogDescription className="text-xs text-[var(--muted)]">
-              账号级固定入口。未确认不会自动出现在此列表。可挂到聊天栏、桌面/手机首页快捷区。
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent
+          showCloseButton={false}
+          overlayClassName="settings-backdrop-shell"
+          className={cn(
+            "modal settings-dialog settings-dialog-shell max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
+          )}
+        >
+          <DialogDescription className="sr-only">
+            账号级固定入口。未确认不会自动出现在此列表。
+          </DialogDescription>
 
           {openApp ? (
-            <MicroAppShell
-              app={openApp}
-              onBack={() => setOpenAppId(null)}
-              onAppUpdated={(a) => {
-                void refresh().then(() => setOpenAppId(a.id));
-              }}
-            />
+            <>
+              <DialogTitle className="sr-only">{openApp.title}</DialogTitle>
+              <MicroAppShell
+                app={openApp}
+                onBack={() => setOpenAppId(null)}
+                onClose={handleClose}
+                onArchive={() => void onArchive(openApp)}
+                onAskPin={() => askPin(openApp)}
+                onAppUpdated={(a) => {
+                  void refresh().then(() => setOpenAppId(a.id));
+                }}
+              />
+            </>
+          ) : creatingRoutine ? (
+            <div className="settings-hub settings-hub-v2 micro-apps-hub">
+              <DialogTitle className="sr-only">新建例行工具</DialogTitle>
+              <header className="settings-shell-subhead">
+                <button
+                  type="button"
+                  className="settings-shell-back"
+                  aria-label="返回"
+                  onClick={() => setCreatingRoutine(false)}
+                >
+                  <ChevronLeft size={18} strokeWidth={2} aria-hidden />
+                </button>
+                <h2>新建例行工具</h2>
+                <button
+                  type="button"
+                  className="settings-hub-close"
+                  aria-label="关闭"
+                  onClick={handleClose}
+                >
+                  <X size={16} strokeWidth={2} aria-hidden />
+                </button>
+              </header>
+              <div className="settings-hub-scroll">
+                <section className="settings-hub-card settings-card-padded micro-apps-hub-form-card">
+                  <MicroAppRoutineCreateForm
+                    onCancel={() => setCreatingRoutine(false)}
+                    onCreated={(a) => {
+                      setCreatingRoutine(false);
+                      void refresh().then(() => askPin(a));
+                    }}
+                  />
+                </section>
+              </div>
+            </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              {creatingRoutine ? (
-                <MicroAppRoutineCreateForm
-                  onCancel={() => setCreatingRoutine(false)}
-                  onCreated={(a) => {
-                    setCreatingRoutine(false);
-                    void refresh().then(() => askPin(a));
-                  }}
-                />
-              ) : (
-                <div className="mb-2 flex justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs text-[var(--muted)]"
-                    onClick={() => setCreatingRoutine(true)}
-                  >
-                    ＋ 例行工具
-                  </Button>
-                </div>
-              )}
-              {loading ? (
-                <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--muted)]">
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                  加载中…
-                </div>
-              ) : error ? (
-                <div className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-[var(--danger)]">
-                  {error}
-                </div>
-              ) : apps.length === 0 ? (
-                <EmptyHub />
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {apps.map((app) => (
-                    <li key={app.id}>
+            <div className="settings-hub settings-hub-v2 micro-apps-hub">
+              <DialogTitle className="sr-only">我的工具</DialogTitle>
+              <div className="settings-hub-top">
+                <h2 className="settings-hub-title">我的工具</h2>
+                <button
+                  type="button"
+                  className="settings-hub-close"
+                  aria-label="关闭"
+                  onClick={handleClose}
+                >
+                  <X size={16} strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+
+              <div className="settings-hub-scroll">
+                {loading ? (
+                  <div className="settings-empty" role="status">
+                    <Loader2 className="size-4 animate-spin inline-block align-[-3px] mr-1.5" aria-hidden />
+                    加载中…
+                  </div>
+                ) : error ? (
+                  <div className="settings-empty" role="alert">
+                    {error}
+                  </div>
+                ) : apps.length === 0 ? (
+                  <EmptyHub onCreateRoutine={() => setCreatingRoutine(true)} />
+                ) : (
+                  <>
+                    <section className="settings-hub-card">
+                      {apps.map((app) => (
+                        <button
+                          key={app.id}
+                          type="button"
+                          className={cn(
+                            "settings-hub-row",
+                            app.description || app.status === "draft" ? "settings-hub-row-account" : "",
+                          )}
+                          onClick={() => setOpenAppId(app.id)}
+                        >
+                          <span className="micro-apps-hub-icon" aria-hidden>
+                            {app.icon?.trim() || "🛠️"}
+                          </span>
+                          <span className="settings-hub-row-main">
+                            <span className="settings-hub-row-title">
+                              {app.title}
+                              {app.kind === "skill" || app.kind === "routine" ? (
+                                <span className="micro-apps-hub-kind">
+                                  {app.kind === "routine" ? "例行" : "skill"}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="settings-hub-row-sub">
+                              {app.description || statusLabel(app.status)}
+                            </span>
+                          </span>
+                          {app.status === "draft" ? (
+                            <span className="micro-apps-hub-badge">待固定</span>
+                          ) : (
+                            <ChevronRight className="settings-hub-chevron" size={16} strokeWidth={2} aria-hidden />
+                          )}
+                        </button>
+                      ))}
+                    </section>
+
+                    <section className="settings-hub-card">
                       <button
                         type="button"
-                        className={cn(
-                          "flex w-full cursor-pointer items-start gap-3 rounded-xl border-0 bg-transparent px-3 py-2.5 text-left",
-                          "hover:bg-[var(--bg-soft)]",
-                        )}
-                        onClick={() => setOpenAppId(app.id)}
+                        className="settings-hub-row"
+                        onClick={() => setCreatingRoutine(true)}
                       >
-                        <span
-                          className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--bg-soft)] text-sm"
-                          aria-hidden
-                        >
-                          {app.icon?.trim() || "🛠️"}
+                        <span className="settings-hub-row-main">
+                          <span className="settings-hub-row-title">＋ 例行工具</span>
+                          <span className="settings-hub-row-sub">到点自动运行的轻量工具</span>
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-[var(--text)]">
-                            {app.title}
-                            {app.kind === "skill" || app.kind === "routine" ? (
-                              <span className="ml-1 text-[10px] font-normal text-[var(--muted)]">
-                                {app.kind === "routine" ? "例行" : "skill"}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
-                            {app.description || statusLabel(app.status)}
-                          </span>
-                        </span>
-                        {app.status === "draft" ? (
-                          <span
-                            role="presentation"
-                            className="mt-1 shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-800"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              askPin(app);
-                            }}
-                          >
-                            待固定
-                          </span>
-                        ) : null}
+                        <ChevronRight className="settings-hub-chevron" size={16} strokeWidth={2} aria-hidden />
                       </button>
-                      {app.status === "draft" ? (
-                        <div className="mb-1 flex justify-end gap-2 px-3">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs"
-                            disabled={pinningId === app.id}
-                            onClick={() => askPin(app)}
-                          >
-                            <Pin className="size-3" aria-hidden />
-                            固定到我的工具
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-xs text-[var(--muted)]"
-                            onClick={() => void onArchive(app)}
-                          >
-                            下架
-                          </Button>
-                        </div>
-                      ) : app.status === "pinned" ? (
-                        <div className="mb-2 space-y-1 px-3">
-                          {ENTRY_SURFACES.map(({ surface, label }) => (
-                            <label
-                              key={surface}
-                              className="flex cursor-pointer items-center gap-2 text-[11px] text-[var(--muted)]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={hasSurface(app, surface)}
-                                onChange={(e) => void toggleSurface(app, surface, e.target.checked)}
-                              />
-                              {label}
-                            </label>
-                          ))}
-                          {(app.capabilities?.length || 0) > 0 ? (
-                            <details>
-                              <summary className="cursor-pointer text-[11px] text-[var(--muted)]">
-                                能力矩阵
-                              </summary>
+                    </section>
+
+                    {/* Placement / pin helpers stay reachable from shell more-sheet;
+                        keep capability peek only for pinned apps with caps. */}
+                    {apps.some((a) => a.status === "pinned" && (a.capabilities?.length || 0) > 0) ? (
+                      <details className="micro-apps-hub-details">
+                        <summary>能力矩阵预览</summary>
+                        {apps
+                          .filter((a) => a.status === "pinned" && (a.capabilities?.length || 0) > 0)
+                          .map((app) => (
+                            <div key={app.id} className="micro-apps-hub-details-block">
+                              <div className="settings-hub-section-label">{app.title}</div>
                               <MicroAppCapabilityMatrix
-                                className="mt-1"
                                 capabilities={app.capabilities || []}
                                 client={client}
                                 compact
                               />
-                            </details>
-                          ) : null}
-                          <div className="flex justify-end">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 text-xs text-[var(--muted)]"
-                              onClick={() => void onArchive(app)}
-                            >
-                              下架
-                            </Button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
+                              <div className="micro-apps-hub-surface-list">
+                                {ENTRY_SURFACES.map(({ surface, label }) => (
+                                  <label key={surface} className="micro-apps-hub-surface">
+                                    <input
+                                      type="checkbox"
+                                      checked={hasSurface(app, surface)}
+                                      onChange={(e) => void toggleSurface(app, surface, e.target.checked)}
+                                    />
+                                    {label}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                      </details>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
@@ -315,7 +324,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>确认固定？</DialogTitle>
             <DialogDescription>
@@ -372,16 +381,16 @@ export function MicroAppsHub({ open, onClose }: Props) {
   );
 }
 
-function EmptyHub() {
+function EmptyHub({ onCreateRoutine }: { onCreateRoutine: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-[var(--bg-soft)] text-2xl" aria-hidden>
-        🛠️
-      </span>
-      <div className="text-sm font-medium text-[var(--text)]">还没有固定的工具</div>
-      <p className="max-w-xs text-xs leading-relaxed text-[var(--muted)]">
+    <div className="settings-empty micro-apps-hub-empty">
+      <div>还没有固定的工具</div>
+      <p>
         在对话里让助手做好一个小工具后，明确说「固定到我的工具」，或点确认卡同意后，才会出现在这里。
       </p>
+      <button type="button" className="micro-apps-hub-empty-action" onClick={onCreateRoutine}>
+        ＋ 例行工具
+      </button>
     </div>
   );
 }

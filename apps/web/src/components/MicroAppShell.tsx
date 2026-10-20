@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Upload, X } from "lucide-react";
+import { ChevronLeft, Ellipsis, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchMicroAppRuntime,
@@ -21,11 +21,16 @@ import { Button } from "@/components/ui/button";
 import { MicroAppGrantDialog } from "./MicroAppGrantDialog";
 import { MicroAppShellGrantPanel } from "./MicroAppShellGrantPanel";
 import { MicroAppRoutinePanel } from "./MicroAppRoutinePanel";
+import { MicroAppMoreSheet } from "./MicroAppMoreSheet";
 import { useConfirm } from "./ConfirmProvider";
 
 type Props = {
   app: MicroApp;
   onBack: () => void;
+  /** Close entire「我的工具」hub (Settings subpage ×). */
+  onClose: () => void;
+  onArchive?: () => void;
+  onAskPin?: () => void;
   onAppUpdated?: (app: MicroApp) => void;
 };
 
@@ -33,7 +38,14 @@ type GrantPromptState = GrantPromptOptions & {
   resolve: (d: GrantPromptResult | null) => void;
 };
 
-export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
+export function MicroAppShell({
+  app,
+  onBack,
+  onClose,
+  onArchive,
+  onAskPin,
+  onAppUpdated,
+}: Props) {
   const conversation = useWorkspaceStore((s) => s.conversation);
   const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
@@ -41,6 +53,7 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
   const [srcdoc, setSrcdoc] = useState<string | null>(null);
   const [grantPrompt, setGrantPrompt] = useState<GrantPromptState | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const revokeRef = useRef<(() => void) | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -125,7 +138,6 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
       const res = await uploadMicroAppBundle(app.id, file);
       toast.success("Bundle 已上传");
       onAppUpdated?.(res.micro_app);
-      // reload runtime
       const runtime = await fetchMicroAppRuntime(app.id);
       revokeRef.current?.();
       const built = buildMicroAppSrcdoc(runtime.entrypoint, runtime.files);
@@ -141,108 +153,128 @@ export function MicroAppShell({ app, onBack, onAppUpdated }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
-        <Button type="button" size="sm" variant="ghost" className="h-8 px-2" onClick={onBack}>
-          ← 返回
-        </Button>
-        <div className="min-w-0 flex-1 truncate text-sm font-medium">{app.title}</div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".zip,application/zip"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (f) void onUpload(f);
-          }}
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-8 gap-1 text-xs"
-          disabled={uploading}
-          onClick={() => fileRef.current?.click()}
-        >
-          {uploading ? <Loader2 className="size-3 animate-spin" /> : <Upload className="size-3" />}
-          上传 Bundle
-        </Button>
-        <Button type="button" size="icon" variant="ghost" className="size-8" onClick={onBack} aria-label="关闭">
-          <X className="size-4" />
-        </Button>
-      </div>
+    <div className="micro-app-shell settings-hub">
+      <header className="settings-shell-subhead micro-app-shell-subhead">
+        <button type="button" className="settings-shell-back" aria-label="返回" onClick={onBack}>
+          <ChevronLeft size={18} strokeWidth={2} aria-hidden />
+        </button>
+        <h2>{app.title}</h2>
+        <div className="micro-app-shell-subhead-actions">
+          <button
+            type="button"
+            className="settings-hub-close"
+            aria-label="更多"
+            onClick={() => setMoreOpen(true)}
+          >
+            <Ellipsis size={16} strokeWidth={2} aria-hidden />
+          </button>
+          <button type="button" className="settings-hub-close" aria-label="关闭" onClick={onClose}>
+            <X size={16} strokeWidth={2} aria-hidden />
+          </button>
+        </div>
+      </header>
 
-      {(app.capabilities?.length || 0) > 0 ? (
-        <details className="shrink-0 border-b border-[var(--border)] px-3 py-2">
-          <summary className="cursor-pointer text-xs text-[var(--muted)]">
-            能力矩阵
-            {unavailable.length > 0
-              ? ` · ${unavailable.length} 项在此端不可用`
-              : " · 本端均可尝试"}
-          </summary>
-          <MicroAppCapabilityMatrix
-            className="mt-2"
-            capabilities={app.capabilities || []}
-            client={client}
-            compact
-          />
-        </details>
-      ) : null}
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) void onUpload(f);
+        }}
+      />
 
-      {(app.capabilities || []).includes("host.shell.run") ? (
-        <details className="shrink-0 border-b border-[var(--border)] px-3 py-2">
-          <summary className="cursor-pointer text-xs text-[var(--muted)]">
-            命令授权（host.shell.run · 三态 + 白名单）
-          </summary>
-          <MicroAppShellGrantPanel className="mt-2" microAppId={app.id} />
-        </details>
-      ) : null}
-
-      <div className="relative min-h-[320px] flex-1 bg-[var(--bg)]">
-        {app.kind === "routine" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 overflow-y-auto px-6 py-4 text-center">
-            <p className="text-sm font-medium text-[var(--text)]">例行型微应用</p>
-            <MicroAppRoutinePanel app={app} />
-          </div>
-        ) : app.kind === "skill" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-sm font-medium text-[var(--text)]">技能型微应用</p>
-            <p className="max-w-sm text-xs text-[var(--muted)]">
-              已绑定技能 <code>{app.skill_slug || "（未设置 skill_slug）"}</code>。
-              固定到「我的工具」时会在账号与来源 Bot 上启用对应 agent_skills。
-            </p>
+      <div className="micro-app-shell-body">
+        {(app.capabilities?.length || 0) > 0 ? (
+          <details className="micro-app-shell-panel">
+            <summary>
+              能力矩阵
+              {unavailable.length > 0
+                ? ` · ${unavailable.length} 项在此端不可用`
+                : " · 本端均可尝试"}
+            </summary>
             <MicroAppCapabilityMatrix
+              className="mt-2"
               capabilities={app.capabilities || []}
               client={client}
-              className="w-full max-w-sm text-left"
+              compact
             />
-          </div>
-        ) : loading ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-[var(--muted)]">
-            <Loader2 className="size-4 animate-spin" /> 加载中…
-          </div>
-        ) : error ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-sm text-[var(--muted)]">{error.includes("bundle_not_found") || error.includes("404") ? "尚未上传 UI Bundle" : error}</p>
-            <Button type="button" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              上传 zip（含 index.html / manifest.json）
-            </Button>
-            <p className="max-w-sm text-[11px] text-[var(--muted)]">
-              对象存储键：micro-apps/&#123;owner&#125;/&#123;app&#125;/。沙箱 iframe 无 allow-same-origin；能力经父页面 Host Bridge。
-            </p>
-          </div>
-        ) : srcdoc ? (
-          <iframe
-            title={app.title}
-            className="size-full min-h-[320px] border-0 bg-white"
-            sandbox="allow-scripts allow-forms"
-            srcDoc={srcdoc}
-            // CSP-ish via sandbox; Phase 1 keeps allow-scripts only.
-          />
+          </details>
         ) : null}
+
+        {(app.capabilities || []).includes("host.shell.run") ? (
+          <details className="micro-app-shell-panel">
+            <summary>命令授权（host.shell.run · 三态 + 白名单）</summary>
+            <MicroAppShellGrantPanel className="mt-2" microAppId={app.id} />
+          </details>
+        ) : null}
+
+        <div className="micro-app-shell-stage">
+          {app.kind === "routine" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
+            <div className="micro-app-shell-placeholder">
+              <p className="micro-app-shell-placeholder-title">例行型微应用</p>
+              <MicroAppRoutinePanel app={app} />
+            </div>
+          ) : app.kind === "skill" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
+            <div className="micro-app-shell-placeholder">
+              <p className="micro-app-shell-placeholder-title">技能型微应用</p>
+              <p className="settings-empty" style={{ padding: 0 }}>
+                已绑定技能 <code>{app.skill_slug || "（未设置 skill_slug）"}</code>。
+                固定到「我的工具」时会在账号与来源 Bot 上启用对应 agent_skills。
+              </p>
+              <MicroAppCapabilityMatrix
+                capabilities={app.capabilities || []}
+                client={client}
+                className="w-full max-w-sm text-left"
+              />
+            </div>
+          ) : loading ? (
+            <div className="micro-app-shell-placeholder settings-empty" role="status">
+              <Loader2 className="size-4 animate-spin inline-block align-[-3px] mr-1.5" aria-hidden /> 加载中…
+            </div>
+          ) : error ? (
+            <div className="micro-app-shell-placeholder">
+              <p className="settings-empty" style={{ padding: 0 }}>
+                {error.includes("bundle_not_found") || error.includes("404")
+                  ? "尚未上传 UI Bundle"
+                  : error}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+              >
+                上传 zip（含 index.html / manifest.json）
+              </Button>
+              <p className="settings-empty" style={{ paddingTop: 8 }}>
+                对象存储键：micro-apps/&#123;owner&#125;/&#123;app&#125;/。沙箱 iframe 无 allow-same-origin；能力经父页面 Host Bridge。
+              </p>
+            </div>
+          ) : srcdoc ? (
+            <iframe
+              title={app.title}
+              className="micro-app-shell-frame"
+              sandbox="allow-scripts allow-forms"
+              srcDoc={srcdoc}
+            />
+          ) : null}
+        </div>
       </div>
+
+      <MicroAppMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title={app.title}
+        canPin={app.status === "draft" && Boolean(onAskPin)}
+        canUpload
+        canArchive={Boolean(onArchive)}
+        onPin={onAskPin}
+        onUpload={() => fileRef.current?.click()}
+        onArchive={onArchive}
+      />
 
       <MicroAppGrantDialog
         open={Boolean(grantPrompt)}

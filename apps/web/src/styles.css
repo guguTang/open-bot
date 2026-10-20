@@ -4926,3 +4926,217 @@ html.touch-ui .composer-quote-clear {
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* === micro-apps hub / shell · align Settings hub chrome (2026-10-20) === */
+
+.micro-apps-hub,
+.micro-app-shell.settings-hub {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.micro-apps-hub-icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #e5e7eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 22px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+[data-theme="dark"] .micro-apps-hub-icon {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.micro-apps-hub-kind {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.micro-apps-hub-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  line-height: 1.2;
+}
+
+.micro-apps-hub-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 48px;
+  padding-bottom: 32px;
+}
+.micro-apps-hub-empty > div {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.micro-apps-hub-empty > p {
+  margin: 0;
+  max-width: 280px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #9ca3af;
+}
+.micro-apps-hub-empty-action {
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: var(--accent, #2563eb);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-height: 44px;
+}
+
+.micro-apps-hub-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -3px;
+  animation: micro-apps-spin 0.8s linear infinite;
+}
+@keyframes micro-apps-spin {
+  to { transform: rotate(360deg); }
+}
+
+.micro-apps-hub-details {
+  font-size: 13px;
+  color: #6b7280;
+  padding: 0 4px;
+}
+.micro-apps-hub-details > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.micro-apps-hub-details-block {
+  margin-top: 8px;
+  padding-bottom: 12px;
+}
+.micro-apps-hub-surface-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.micro-apps-hub-surface {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.micro-apps-hub-form-card {
+  padding: 14px 16px 16px;
+}
+
+/* Shell: ← title · more · × — same circular chrome as Settings */
+.micro-app-shell-subhead {
+  grid-template-columns: 44px 1fr auto;
+}
+.micro-app-shell-subhead-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.micro-app-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.micro-app-shell-panel {
+  flex-shrink: 0;
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 14px;
+  font-size: 13px;
+  color: #6b7280;
+}
+[data-theme="dark"] .micro-app-shell-panel {
+  background: #2c2c2e;
+}
+.micro-app-shell-panel > summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 24px;
+}
+.micro-app-shell-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.micro-app-shell-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 16px max(16px, var(--safe-bottom, 0px));
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+}
+[data-theme="dark"] .micro-app-shell-stage {
+  background: #2c2c2e;
+}
+
+.micro-app-shell-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  border: 0;
+  background: #fff;
+}
+
+.micro-app-shell-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  min-height: 240px;
+  padding: 24px 20px;
+  text-align: center;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.micro-app-shell-placeholder-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */
+.modal.settings-dialog-shell .micro-apps-hub .settings-hub-close,
+.modal.settings-dialog-shell .micro-apps-hub .settings-shell-back,
+.modal.settings-dialog-shell .micro-app-shell .settings-hub-close,
+.modal.settings-dialog-shell .micro-app-shell .settings-shell-back,
+.modal.settings-dialog-shell .micro-apps-hub-empty-action {
+  margin-top: 0;
+}
