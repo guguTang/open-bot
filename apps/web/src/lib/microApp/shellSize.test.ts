@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   clampMicroShellSize,
   microShellHeightOverflow,
-  MICRO_SHELL_DESKTOP_MAX_CONTENT_HEIGHT,
   MICRO_SHELL_MIN_HEIGHT,
   MICRO_SHELL_MIN_WIDTH,
+  MICRO_SHELL_VIEWPORT_MAX_RATIO,
+  MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
 } from "./shellSize";
 
 describe("clampMicroShellSize", () => {
@@ -20,21 +21,38 @@ describe("clampMicroShellSize", () => {
     expect(s.height).toBe(MICRO_SHELL_MIN_HEIGHT);
   });
 
-  it("caps tall content on desktop and flags overflow", () => {
+  it("caps tall content on desktop at ~90% viewport and flags overflow", () => {
     const rawH = 2000;
+    const vh = 900;
     const s = clampMicroShellSize({
-      width: 480,
+      width: 320,
       height: rawH,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    expect(s.width).toBe(320);
+    const maxH = Math.floor(
+      Math.min(vh * MICRO_SHELL_VIEWPORT_MAX_RATIO, vh - 32) - MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
+    );
+    expect(s.height).toBe(maxH);
+    expect(microShellHeightOverflow(rawH, s.height)).toBe(true);
+  });
+
+  it("portrait tool stays narrow — does not stretch to hub width", () => {
+    const s = clampMicroShellSize({
+      width: 320,
+      height: 520,
       narrow: false,
       viewportWidth: 1440,
       viewportHeight: 900,
     });
-    expect(s.width).toBe(480);
-    expect(s.height).toBeLessThanOrEqual(MICRO_SHELL_DESKTOP_MAX_CONTENT_HEIGHT);
-    expect(microShellHeightOverflow(rawH, s.height)).toBe(true);
+    expect(s.width).toBe(320);
+    expect(s.height).toBe(520);
+    expect(s.width).toBeLessThan(600);
   });
 
-  it("uses narrower max on small viewports", () => {
+  it("caps width to ~90% viewport on small desktops", () => {
     const s = clampMicroShellSize({
       width: 900,
       height: 400,
@@ -42,8 +60,10 @@ describe("clampMicroShellSize", () => {
       viewportWidth: 800,
       viewportHeight: 600,
     });
-    expect(s.width).toBeLessThanOrEqual(800 - 64);
-    expect(s.height).toBeLessThanOrEqual(600 - 160);
+    expect(s.width).toBeLessThanOrEqual(Math.floor(800 * MICRO_SHELL_VIEWPORT_MAX_RATIO));
+    expect(s.height).toBeLessThanOrEqual(
+      Math.floor(Math.min(600 * MICRO_SHELL_VIEWPORT_MAX_RATIO, 600 - 32) - MICRO_SHELL_DESKTOP_CHROME_HEIGHT),
+    );
   });
 
   it("narrow mode allows larger fraction of viewport height", () => {

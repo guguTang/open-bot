@@ -5297,80 +5297,109 @@ html.touch-ui .composer-quote-clear {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* === micro-app shell fill-available (no content-fit squeeze) ===
-   Hub list: settings-dialog ~860×680.
-   Open tool (wide): settings-dialog--micro-open ≈ near-fullscreen panel;
-   iframe fills chrome under the top bar to the panel edges. No content-fit /
-   fit-content / max-content centering that leaves empty white margins.
-   SDK resize posts do not shrink dialog chrome. */
+/* === micro-app shell content-fit (iframe postMessage resize) ===
+   Hub list keeps fixed settings-dialog ~860×680.
+   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
+   stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
+   Portrait tool → narrow+tall shell (does NOT stretch shell to hub width then center).
+   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport; overflow scrolls.
+   Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
-/* Wide desktop: open tool = near-fullscreen white panel (not 860×680 card) */
-.settings-dialog.settings-dialog--micro-open {
-  width: calc(100vw - 48px);
-  max-width: calc(100vw - 48px);
-  height: calc(100vh - 48px);
-  max-height: calc(100vh - 48px);
-}
-
-.micro-app-shell--fill {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-}
-
-.micro-app-shell--fill .micro-app-shell-body {
-  flex: 1 1 auto;
+.settings-dialog.settings-dialog--micro-fit {
+  /* Override fixed 860×680 — hug shell child like a tight popover */
+  width: fit-content;
+  min-width: min(280px, calc(100vw - 32px));
+  max-width: min(90vw, calc(100vw - 32px));
+  height: auto;
+  max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
   overflow: hidden;
-  overscroll-behavior: contain;
 }
 
-.micro-app-shell--fill .micro-app-shell-stage--fill {
-  position: relative;
-  flex: 1 1 auto;
+.settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
+  width: min(90vw, max(280px, var(--micro-shell-content-w, 360px)));
+  max-width: min(90vw, calc(100vw - 32px));
+  height: auto;
+  max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
-  /* Kill base stage card chrome (margin / radius) so tool reaches panel edges */
+}
+
+.micro-app-shell--fit .micro-app-shell-body {
+  flex: 0 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  /* Do not stretch to fill leftover dialog height with blank white */
+  height: auto;
+  min-height: 0;
+  /* Edge-to-edge under top bar — no card-in-card empty margins */
   margin: 0;
   border-radius: 0;
   border: none;
   padding: 0;
 }
 
-.micro-app-shell--fill .micro-app-shell-frame--fill {
-  /* Absolute fill — iframes as flex items often ignore height:100% */
-  position: absolute;
-  inset: 0;
+.micro-app-shell--fit .micro-app-shell-stage--sized {
+  display: flex;
+  flex-direction: column;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--scroll {
+  overflow: auto;
+  max-height: min(calc(90vh - 56px), calc(100vh - 88px));
+}
+
+.micro-app-shell--fit .micro-app-shell-frame,
+.micro-app-shell--fit .micro-app-shell-frame--fit {
+  display: block;
   width: 100%;
-  height: 100%;
-  min-height: 0;
   border: 0;
-  /* No host transform / aspect-ratio that squashes iframe content */
+  flex: 0 0 auto;
+  /* No host transform / forced aspect that deforms the tool */
   transform: none;
   aspect-ratio: auto;
+  position: static;
 }
 
-.micro-app-shell--fill .micro-app-shell-placeholder {
-  position: absolute;
-  inset: 0;
+.micro-app-shell--fit .micro-app-shell-frame--sized {
+  /* height set inline from clampMicroShellSize */
+  min-height: 160px;
+}
+
+.micro-app-shell--fit .micro-app-shell-placeholder {
+  position: static;
   height: auto;
-  min-height: 0;
-  overflow-y: auto;
+  min-height: 160px;
+  justify-content: flex-start;
+  padding: 28px 16px;
 }
 
-/* Narrow / Capacitor: shell already near-fullscreen; stage fills remaining height */
-.settings-dialog-shell .micro-app-shell--fill {
+/* Narrow / Capacitor fullscreen: keep dialog full size, shrink white stage to content */
+.settings-dialog-shell .micro-app-shell--fit {
   height: 100%;
   width: 100%;
 }
 
-.settings-dialog-shell .micro-app-shell--fill .micro-app-shell-stage--fill {
-  /* Modest inset on gray Settings hub bg; iframe still fills the stage box */
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-body {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  max-height: 100%;
   margin: 0 16px max(16px, var(--safe-bottom, 0px));
   border-radius: 16px;
+  overflow: hidden;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage--scroll {
+  max-height: min(72vh, calc(100dvh - 120px));
+  overflow: auto;
 }
 
 /* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */

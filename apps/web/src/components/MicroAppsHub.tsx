@@ -31,8 +31,8 @@ import { cn } from "@/lib/utils";
  * - sheetForm (touch-ui OR layout-narrow ≤860 / Capacitor): Settings-hub isomorphic
  *   (gray #F2F2F7 + white cards + ≥44 circular chrome).
  * - wide Web / desktop Tauri: hub list stays settings-dialog ~860×680; **open tool**
- *   uses settings-dialog--micro-open (near-fullscreen panel). Iframe fill-available
- *   under top bar — no content-fit shrink / card-in-card / centered small frame.
+ *   uses settings-dialog--micro-fit (Dialog hugs tool content via resize postMessage).
+ *   Stage has no card margin — iframe fills the snug shell under the top bar.
  */
 
 type Props = {
@@ -142,7 +142,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
           className={cn(
             "modal settings-dialog max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
             sheetForm && "settings-dialog-shell",
-            !sheetForm && openApp && "settings-dialog--micro-open",
+            !sheetForm && openApp && "settings-dialog--micro-fit",
           )}
         >
           <DialogDescription className="sr-only">
