@@ -50,6 +50,7 @@ const initialActions: SessionActions = {
   settleHostConfirm: noop,
   stopCurrentRun: noop,
   onSubmit: noop,
+  sendUserText: asyncNoop,
   setOpenThreadRootId: noop,
   toggleAssistantsCollapsed: noop,
   toggleGroupsCollapsed: noop,
