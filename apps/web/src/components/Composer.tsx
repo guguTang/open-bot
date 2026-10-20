@@ -1,4 +1,4 @@
-import { CornerUpLeft, Square, X } from "lucide-react";
+import { ArrowUp, CornerUpLeft, Plus, Square, X } from "lucide-react";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { useAutoGrowTextarea } from "../lib/useAutoGrowTextarea";
@@ -311,7 +311,7 @@ export function Composer({
                 disabled={sending}
                 onClick={() => removeFile(f.key)}
               >
-                ×
+                <X size={12} strokeWidth={2.5} aria-hidden />
               </button>
             </div>
           ))}
@@ -359,7 +359,7 @@ export function Composer({
           disabled={disabled || sending || !onFilesChange}
           onClick={() => fileRef.current?.click()}
         >
-          +
+          <Plus size={18} strokeWidth={2.25} aria-hidden />
         </button>
         <div className="composer-input-wrap">
           {showPicker ? (
@@ -482,7 +482,7 @@ export function Composer({
           </button>
         ) : (
           <button type="submit" className="composer-send" disabled={!canSend} title="发送" aria-label="发送">
-            ↑
+            <ArrowUp size={18} strokeWidth={2.5} aria-hidden />
           </button>
         )}
       </div>

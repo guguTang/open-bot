@@ -1,4 +1,4 @@
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Agent, Channel } from "../api";
@@ -174,7 +174,7 @@ function GroupMembersSettingsDialog({ channel, agents, onClose, onChanged }: Dia
                 aria-label="关闭"
                 onClick={onClose}
               >
-                ×
+                <X size={14} strokeWidth={2.25} aria-hidden />
               </button>
             </>
           ) : (

@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Plus, Search, Settings } from "lucide-react";
+import { ChevronDown, Copy, Plus, Search, Settings, X } from "lucide-react";
 import { memo, useDeferredValue, useMemo } from "react";
 import type { Agent, Channel } from "../../api";
 import { runSearchHints } from "../../lib/runFace";
@@ -339,11 +339,11 @@ function AppSidebarInner() {
                     <button
                       type="button"
                       className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
-                      title="删除助手"
+                      title="删除助手" aria-label="删除助手"
                       disabled={agentBusy}
                       onClick={(e) => void sessionActions().removeAgent(a, e)}
                     >
-                      ×
+                      <X size={14} strokeWidth={2.25} aria-hidden />
                     </button>
                   </div>
                 </div>
@@ -403,11 +403,11 @@ function AppSidebarInner() {
                   <button
                     type="button"
                     className={sidebarConvActionClass({ touchOrSheet, variant: "del" })}
-                    title="删除群聊"
+                    title="删除群聊" aria-label="删除群聊"
                     disabled={channelBusy}
                     onClick={(e) => void sessionActions().removeChannel(ch, e)}
                   >
-                    ×
+                    <X size={14} strokeWidth={2.25} aria-hidden />
                   </button>
                 </div>
               </div>

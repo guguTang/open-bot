@@ -1,4 +1,4 @@
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Agent } from "../api";
 import { cn } from "@/lib/utils";
@@ -250,7 +250,7 @@ export function NewChatPopover({
               aria-label="关闭"
               onClick={onClose}
             >
-              ×
+              <X size={16} strokeWidth={2.25} aria-hidden />
             </button>
           </div>
         ) : null}

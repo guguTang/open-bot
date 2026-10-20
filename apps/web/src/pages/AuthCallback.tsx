@@ -29,10 +29,10 @@ export default function AuthCallback() {
   }, []);
 
   return (
-    <div className="grid min-h-full place-items-center bg-[radial-gradient(ellipse_at_20%_0%,rgba(124,58,237,0.1),transparent_50%),radial-gradient(ellipse_at_80%_100%,rgba(167,139,250,0.08),transparent_45%),var(--bg)] p-6">
+    <div className="grid min-h-full place-items-center bg-(--bg) p-6">
       <div className="flex w-[min(400px,100%)] flex-col gap-3 rounded-2xl border border-(--border) bg-(--bg-elevated) p-6 shadow-(--shadow-md)">
         <div className="flex items-center gap-2.5 pb-2">
-          <div className="grid size-9 place-items-center rounded-[10px] bg-linear-to-br from-(--accent) to-(--accent-2) font-bold text-white">
+          <div className="grid size-9 place-items-center rounded-[10px] bg-(--accent) font-bold text-white">
             ◈
           </div>
           <div>
