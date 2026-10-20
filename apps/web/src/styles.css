@@ -5132,6 +5132,171 @@ html.touch-ui .composer-quote-clear {
   color: var(--text);
 }
 
+
+/* === micro-apps hub / shell · desktop wide (NOT sheetForm) ===
+   Gate: .micro-apps-hub--desktop / .micro-app-shell--desktop (useSheetFormUi false).
+   Align settings-dialog white elevated; keep narrow Settings-hub path untouched. */
+
+.micro-apps-hub--desktop,
+.micro-app-shell--desktop {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elevated, #fff);
+}
+
+[data-theme="dark"] .micro-apps-hub--desktop,
+[data-theme="dark"] .micro-app-shell--desktop {
+  background: var(--bg-elevated, #1c1c1e);
+}
+
+.micro-apps-hub-desktop-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 18px 18px 8px 22px;
+  min-height: 52px;
+  background: transparent;
+}
+
+.micro-app-shell-desktop-head {
+  /* back | title | actions */
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 10px 16px;
+}
+
+.micro-apps-hub-desktop-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.micro-apps-hub-desktop-icon {
+  /* settings-close already ~32; keep icon grid */
+  flex-shrink: 0;
+}
+
+.micro-apps-hub--desktop .settings-close,
+.micro-app-shell--desktop .settings-close {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.micro-apps-hub--desktop .settings-close:hover,
+.micro-app-shell--desktop .settings-close:hover {
+  color: var(--text);
+  background: var(--bg-soft, #f3f4f6);
+}
+
+.micro-apps-hub-desktop-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+
+.micro-apps-hub-desktop-card {
+  border-radius: 12px !important;
+  border: 1px solid #eceef1;
+  background: #fff;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .micro-apps-hub-desktop-card {
+  background: #2c2c2e;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-desktop-row.settings-hub-row,
+.micro-apps-hub--desktop .settings-hub-row.micro-apps-hub-desktop-row {
+  min-height: 44px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.micro-apps-hub--desktop .settings-hub-row:has(.settings-hub-row-sub) {
+  min-height: 48px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+.micro-apps-hub--desktop .settings-hub-row-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.micro-apps-hub--desktop .settings-hub-row-sub {
+  font-size: 12px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-empty-action {
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
+.micro-apps-hub--desktop .micro-apps-hub-details > summary {
+  min-height: 32px;
+}
+
+/* Shell stage on desktop: tighter radius / margins like settings-card */
+.micro-app-shell--desktop .micro-app-shell-panel {
+  margin: 0 16px 10px;
+  border-radius: 12px;
+  border: 1px solid #eceef1;
+}
+
+.micro-app-shell--desktop .micro-app-shell-stage {
+  margin: 0 16px 16px;
+  border-radius: 12px;
+  border: 1px solid #eceef1;
+}
+
+[data-theme="dark"] .micro-app-shell--desktop .micro-app-shell-panel,
+[data-theme="dark"] .micro-app-shell--desktop .micro-app-shell-stage {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 /* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */
 .modal.settings-dialog-shell .micro-apps-hub .settings-hub-close,
 .modal.settings-dialog-shell .micro-apps-hub .settings-shell-back,

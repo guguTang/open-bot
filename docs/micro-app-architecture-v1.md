@@ -360,7 +360,8 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 ### 7.1 Web / Desktop（`apps/web`）
 
 1. 账户菜单「我的工具」→ `MicroAppsHub`（能力矩阵、chat_pin / desktop_shortcut / mobile_shortcut 勾选；pin 弹窗可多选入口；「＋ 例行工具」）
-2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明
+   - **双端分流**（`useSheetFormUi` = touch-ui OR layout-narrow ≤860）：窄屏/Capacitor 走 Settings hub 同构灰底；宽屏 Web/桌面 Tauri 走 `settings-dialog` 白底 elevated（~860×680），顶栏 32 级关闭、列表偏紧，更多操作用 popover（底 sheet 仅 narrow）
+2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明；宽屏同桌面面板尺寸，窄屏全屏沉浸
 3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）
 4. `lib/microApp/hostBridge.ts` + `deviceBridge.ts`：RPC
 5. `MicroAppGrantDialog`：审批三态文案；shell 显示命令 + 前缀白名单

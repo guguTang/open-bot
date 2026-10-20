@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Ellipsis, Loader2, X } from "lucide-react";
+import { ChevronLeft, Ellipsis, Loader2, Pin, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchMicroAppRuntime,
@@ -23,6 +23,14 @@ import { MicroAppShellGrantPanel } from "./MicroAppShellGrantPanel";
 import { MicroAppRoutinePanel } from "./MicroAppRoutinePanel";
 import { MicroAppMoreSheet } from "./MicroAppMoreSheet";
 import { useConfirm } from "./ConfirmProvider";
+import { useSheetFormUi } from "./useIsTouchUi";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 type Props = {
   app: MicroApp;
@@ -48,6 +56,7 @@ export function MicroAppShell({
 }: Props) {
   const conversation = useWorkspaceStore((s) => s.conversation);
   const confirm = useConfirm();
+  const sheetForm = useSheetFormUi();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [srcdoc, setSrcdoc] = useState<string | null>(null);
@@ -152,23 +161,81 @@ export function MicroAppShell({
     }
   }
 
+  const canPin = app.status === "draft" && Boolean(onAskPin);
+  const canUpload = true;
+  const hasBundle = Boolean(app.bundle_hash) || Boolean(srcdoc);
+  const canArchive = Boolean(onArchive);
+
   return (
-    <div className="micro-app-shell settings-hub">
-      <header className="settings-shell-subhead micro-app-shell-subhead">
-        <button type="button" className="settings-shell-back" aria-label="返回" onClick={onBack}>
+    <div
+      className={cn(
+        "micro-app-shell",
+        sheetForm ? "settings-hub" : "micro-app-shell--desktop",
+      )}
+    >
+      <header
+        className={cn(
+          sheetForm
+            ? "settings-shell-subhead micro-app-shell-subhead"
+            : "micro-apps-hub-desktop-head micro-app-shell-desktop-head",
+        )}
+      >
+        <button
+          type="button"
+          className={sheetForm ? "settings-shell-back" : "settings-close micro-apps-hub-desktop-icon"}
+          aria-label="返回"
+          onClick={onBack}
+        >
           <ChevronLeft size={18} strokeWidth={2} aria-hidden />
         </button>
-        <h2>{app.title}</h2>
+        <h2 className={sheetForm ? undefined : "micro-apps-hub-desktop-title"}>{app.title}</h2>
         <div className="micro-app-shell-subhead-actions">
+          {sheetForm ? (
+            <button
+              type="button"
+              className="settings-hub-close"
+              aria-label="更多"
+              onClick={() => setMoreOpen(true)}
+            >
+              <Ellipsis size={16} strokeWidth={2} aria-hidden />
+            </button>
+          ) : (
+            <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="settings-close" aria-label="更多">
+                  <Ellipsis size={16} strokeWidth={2} aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                {canPin && onAskPin ? (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      onAskPin();
+                    }}
+                  >
+                    <Pin size={16} strokeWidth={2} aria-hidden />
+                    固定到我的工具
+                  </DropdownMenuItem>
+                ) : null}
+                {canUpload ? (
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      fileRef.current?.click();
+                    }}
+                  >
+                    <Upload size={16} strokeWidth={2} aria-hidden />
+                    {hasBundle ? "重新上传 Bundle" : "手动上传 Bundle（可选）"}
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <button
             type="button"
-            className="settings-hub-close"
-            aria-label="更多"
-            onClick={() => setMoreOpen(true)}
+            className={sheetForm ? "settings-hub-close" : "settings-close"}
+            aria-label="关闭"
+            onClick={onClose}
           >
-            <Ellipsis size={16} strokeWidth={2} aria-hidden />
-          </button>
-          <button type="button" className="settings-hub-close" aria-label="关闭" onClick={onClose}>
             <X size={16} strokeWidth={2} aria-hidden />
           </button>
         </div>
@@ -270,18 +337,20 @@ export function MicroAppShell({
         </div>
       </div>
 
-      <MicroAppMoreSheet
-        open={moreOpen}
-        onClose={() => setMoreOpen(false)}
-        title={app.title}
-        canPin={app.status === "draft" && Boolean(onAskPin)}
-        canUpload
-        hasBundle={Boolean(app.bundle_hash) || Boolean(srcdoc)}
-        canArchive={Boolean(onArchive)}
-        onPin={onAskPin}
-        onUpload={() => fileRef.current?.click()}
-        onArchive={onArchive}
-      />
+      {sheetForm ? (
+        <MicroAppMoreSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          title={app.title}
+          canPin={canPin}
+          canUpload={canUpload}
+          hasBundle={hasBundle}
+          canArchive={canArchive}
+          onPin={onAskPin}
+          onUpload={() => fileRef.current?.click()}
+          onArchive={onArchive}
+        />
+      ) : null}
 
       <MicroAppGrantDialog
         open={Boolean(grantPrompt)}

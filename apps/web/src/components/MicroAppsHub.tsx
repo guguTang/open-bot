@@ -9,6 +9,7 @@ import {
   type MicroAppSurface,
 } from "../api";
 import { detectClientContext } from "../lib/clientEnv";
+import { useSheetFormUi } from "./useIsTouchUi";
 import { useMicroAppsStore } from "../stores/microApps";
 import { Button } from "@/components/ui/button";
 import { MicroAppShell } from "./MicroAppShell";
@@ -24,8 +25,11 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * 「我的工具」 hub — Settings-hub isomorphic shell (gray #F2F2F7 + white cards +
- * circular settings-hub-close), not a centered web dialog / sidebar list.
+ * 「我的工具」 hub — dual-surface:
+ * - sheetForm (touch-ui OR layout-narrow ≤860 / Capacitor): Settings-hub isomorphic
+ *   (gray #F2F2F7 + white cards + ≥44 circular chrome).
+ * - wide Web / desktop Tauri: settings-dialog white elevated (~860×680), desktop
+ *   title row + 32 close — not fullscreen mobile Settings.
  */
 
 const ENTRY_SURFACES: Array<{ surface: MicroAppSurface; label: string; short: string }> = [
@@ -55,6 +59,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
   const [pinSurfaces, setPinSurfaces] = useState<MicroAppSurface[]>([]);
   const [creatingRoutine, setCreatingRoutine] = useState(false);
   const client = detectClientContext();
+  const sheetForm = useSheetFormUi();
 
   useEffect(() => {
     if (!open) return;
@@ -140,9 +145,10 @@ export function MicroAppsHub({ open, onClose }: Props) {
       >
         <DialogContent
           showCloseButton={false}
-          overlayClassName="settings-backdrop-shell"
+          overlayClassName={cn(sheetForm && "settings-backdrop-shell")}
           className={cn(
-            "modal settings-dialog settings-dialog-shell max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
+            "modal settings-dialog max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
+            sheetForm && "settings-dialog-shell",
           )}
         >
           <DialogDescription className="sr-only">
@@ -164,29 +170,63 @@ export function MicroAppsHub({ open, onClose }: Props) {
               />
             </>
           ) : creatingRoutine ? (
-            <div className="settings-hub settings-hub-v2 micro-apps-hub">
+            <div
+              className={cn(
+                "micro-apps-hub",
+                sheetForm
+                  ? "settings-hub settings-hub-v2"
+                  : "micro-apps-hub--desktop",
+              )}
+            >
               <DialogTitle className="sr-only">新建例行工具</DialogTitle>
-              <header className="settings-shell-subhead">
-                <button
-                  type="button"
-                  className="settings-shell-back"
-                  aria-label="返回"
-                  onClick={() => setCreatingRoutine(false)}
+              {sheetForm ? (
+                <header className="settings-shell-subhead">
+                  <button
+                    type="button"
+                    className="settings-shell-back"
+                    aria-label="返回"
+                    onClick={() => setCreatingRoutine(false)}
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} aria-hidden />
+                  </button>
+                  <h2>新建例行工具</h2>
+                  <button
+                    type="button"
+                    className="settings-hub-close"
+                    aria-label="关闭"
+                    onClick={handleClose}
+                  >
+                    <X size={16} strokeWidth={2} aria-hidden />
+                  </button>
+                </header>
+              ) : (
+                <header className="micro-apps-hub-desktop-head">
+                  <button
+                    type="button"
+                    className="settings-close micro-apps-hub-desktop-icon"
+                    aria-label="返回"
+                    onClick={() => setCreatingRoutine(false)}
+                  >
+                    <ChevronLeft size={18} strokeWidth={2} aria-hidden />
+                  </button>
+                  <h2 className="micro-apps-hub-desktop-title">新建例行工具</h2>
+                  <button
+                    type="button"
+                    className="settings-close"
+                    aria-label="关闭"
+                    onClick={handleClose}
+                  >
+                    <X size={16} strokeWidth={2} aria-hidden />
+                  </button>
+                </header>
+              )}
+              <div className={cn(sheetForm ? "settings-hub-scroll" : "micro-apps-hub-desktop-scroll")}>
+                <section
+                  className={cn(
+                    "settings-card-padded micro-apps-hub-form-card",
+                    sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                  )}
                 >
-                  <ChevronLeft size={18} strokeWidth={2} aria-hidden />
-                </button>
-                <h2>新建例行工具</h2>
-                <button
-                  type="button"
-                  className="settings-hub-close"
-                  aria-label="关闭"
-                  onClick={handleClose}
-                >
-                  <X size={16} strokeWidth={2} aria-hidden />
-                </button>
-              </header>
-              <div className="settings-hub-scroll">
-                <section className="settings-hub-card settings-card-padded micro-apps-hub-form-card">
                   <MicroAppRoutineCreateForm
                     onCancel={() => setCreatingRoutine(false)}
                     onCreated={(a) => {
@@ -198,21 +238,42 @@ export function MicroAppsHub({ open, onClose }: Props) {
               </div>
             </div>
           ) : (
-            <div className="settings-hub settings-hub-v2 micro-apps-hub">
+            <div
+              className={cn(
+                "micro-apps-hub",
+                sheetForm
+                  ? "settings-hub settings-hub-v2"
+                  : "micro-apps-hub--desktop",
+              )}
+            >
               <DialogTitle className="sr-only">我的工具</DialogTitle>
-              <div className="settings-hub-top">
-                <h2 className="settings-hub-title">我的工具</h2>
-                <button
-                  type="button"
-                  className="settings-hub-close"
-                  aria-label="关闭"
-                  onClick={handleClose}
-                >
-                  <X size={16} strokeWidth={2} aria-hidden />
-                </button>
-              </div>
+              {sheetForm ? (
+                <div className="settings-hub-top">
+                  <h2 className="settings-hub-title">我的工具</h2>
+                  <button
+                    type="button"
+                    className="settings-hub-close"
+                    aria-label="关闭"
+                    onClick={handleClose}
+                  >
+                    <X size={16} strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              ) : (
+                <header className="micro-apps-hub-desktop-head">
+                  <h2 className="micro-apps-hub-desktop-title">我的工具</h2>
+                  <button
+                    type="button"
+                    className="settings-close"
+                    aria-label="关闭"
+                    onClick={handleClose}
+                  >
+                    <X size={16} strokeWidth={2} aria-hidden />
+                  </button>
+                </header>
+              )}
 
-              <div className="settings-hub-scroll">
+              <div className={cn(sheetForm ? "settings-hub-scroll" : "micro-apps-hub-desktop-scroll")}>
                 {loading ? (
                   <div className="settings-empty" role="status">
                     <Loader2 className="size-4 animate-spin inline-block align-[-3px] mr-1.5" aria-hidden />
@@ -226,13 +287,18 @@ export function MicroAppsHub({ open, onClose }: Props) {
                   <EmptyHub onCreateRoutine={() => setCreatingRoutine(true)} />
                 ) : (
                   <>
-                    <section className="settings-hub-card">
+                    <section
+                      className={cn(
+                        sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                      )}
+                    >
                       {apps.map((app) => (
                         <button
                           key={app.id}
                           type="button"
                           className={cn(
                             "settings-hub-row",
+                            !sheetForm && "micro-apps-hub-desktop-row",
                             app.description || app.status === "draft" ? "settings-hub-row-account" : "",
                           )}
                           onClick={() => setOpenAppId(app.id)}
@@ -262,10 +328,14 @@ export function MicroAppsHub({ open, onClose }: Props) {
                       ))}
                     </section>
 
-                    <section className="settings-hub-card">
+                    <section
+                      className={cn(
+                        sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                      )}
+                    >
                       <button
                         type="button"
-                        className="settings-hub-row"
+                        className={cn("settings-hub-row", !sheetForm && "micro-apps-hub-desktop-row")}
                         onClick={() => setCreatingRoutine(true)}
                       >
                         <span className="settings-hub-row-main">
