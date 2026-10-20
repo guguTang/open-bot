@@ -14,6 +14,7 @@ import {
   normalizeShape,
   type AvatarShape,
 } from "@/lib/avatar";
+import { runWithFinally } from "@/lib/finally";
 
 const DEFAULT_PROMPT = "你是一个乐于助人的 AI 助手，默认使用中文回答。";
 
@@ -107,19 +108,24 @@ function AgentForm({
       // 传空串表示解除绑定，后端按 PATCH 语义处理
       machine_id: machineId,
     };
-    try {
-      if (agent) {
-        await api.updateAgent(agent.id, body);
-      } else {
-        await api.createAgent(body);
+    await runWithFinally(
+      async () => {
+        try {
+          if (agent) {
+            await api.updateAgent(agent.id, body);
+          } else {
+            await api.createAgent(body);
+          }
+          onClose();
+          await onSaved();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : agent ? "保存失败" : "创建失败");
+        }
+      },
+      () => {
+        setBusy(false);
       }
-      onClose();
-      await onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : agent ? "保存失败" : "创建失败");
-    } finally {
-      setBusy(false);
-    }
+    );
   }
 
   const previewName = name.trim() || "新助手";

@@ -11,6 +11,7 @@ import { FormField } from "@/components/FormField";
 import { ScreenHeader } from "@/components/ScreenScaffold";
 import { EmptyState, ErrorAlert, ListSkeleton } from "@/components/states";
 import { formatRelativeTime } from "@/lib/format";
+import { runWithFinally } from "@/lib/finally";
 
 /**
  * 训练面板：把用户对回复的反馈沉淀成这个 Bot 的经验。
@@ -57,14 +58,19 @@ export default function TrainScreen(): JSX.Element {
     if (!id) return;
     setLoading(true);
     setError(null);
-    try {
-      const list = await api.listAgentLessons(id);
-      setLessons(list);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载失败");
-    } finally {
-      setLoading(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const list = await api.listAgentLessons(id);
+          setLessons(list);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "加载失败");
+        }
+      },
+      () => {
+        setLoading(false);
+      }
+    );
   }, [id]);
 
   useEffect(() => {
@@ -100,14 +106,19 @@ export default function TrainScreen(): JSX.Element {
   const patchStatus = useCallback(async (lessonId: string, status: LessonStatus): Promise<void> => {
     setBusy(true);
     setError(null);
-    try {
-      const updated = await api.updateLesson(lessonId, { status });
-      setLessons((prev) => prev.map((l) => (l.id === lessonId ? updated : l)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "更新失败");
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const updated = await api.updateLesson(lessonId, { status });
+          setLessons((prev) => prev.map((l) => (l.id === lessonId ? updated : l)));
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "更新失败");
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }, []);
 
   const confirmActive = useCallback(
@@ -133,14 +144,19 @@ export default function TrainScreen(): JSX.Element {
       if (!ok) return;
       setBusy(true);
       setError(null);
-      try {
-        await api.deleteLesson(lesson.id);
-        setLessons((prev) => prev.filter((l) => l.id !== lesson.id));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "删除失败");
-      } finally {
-        setBusy(false);
-      }
+      await runWithFinally(
+        async () => {
+          try {
+            await api.deleteLesson(lesson.id);
+            setLessons((prev) => prev.filter((l) => l.id !== lesson.id));
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "删除失败");
+          }
+        },
+        () => {
+          setBusy(false);
+        }
+      );
     },
     [confirm]
   );
@@ -161,15 +177,20 @@ export default function TrainScreen(): JSX.Element {
     }
     setBusy(true);
     setError(null);
-    try {
-      const updated = await api.updateLesson(editing.id, { title, body });
-      setLessons((prev) => prev.map((l) => (l.id === editing.id ? updated : l)));
-      setEditing(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const updated = await api.updateLesson(editing.id, { title, body });
+          setLessons((prev) => prev.map((l) => (l.id === editing.id ? updated : l)));
+          setEditing(null);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "保存失败");
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   };
 
   if (!id) {

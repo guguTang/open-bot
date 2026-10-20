@@ -12,6 +12,7 @@ import { WebPreviewModal } from "@/components/chat/WebPreviewModal";
 import { formatDateTime, formatSize } from "@/lib/format";
 import { friendlyOpenError, normalizeWorkspacePath, previewTitleFromPath } from "@/lib/workspace";
 import { useBusy, useSandbox, useSandboxMutations } from "@/queries";
+import { runWithFinally } from "@/lib/finally";
 
 /**
  * 运行环境（高级）。
@@ -228,47 +229,62 @@ export default function SandboxScreen(): JSX.Element {
     setFileBusy(true);
     setMsg("");
     setExecOut("");
-    try {
-      const res = await api.execSandbox({ cmd: command });
-      setExecOut(
-        `exit=${res.exit_code}\n--- stdout ---\n${res.stdout}\n--- stderr ---\n${res.stderr}`
-      );
-    } catch (err) {
-      setMsg(publicError(err, "执行命令失败"));
-    } finally {
-      setFileBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await api.execSandbox({ cmd: command });
+          setExecOut(
+            `exit=${res.exit_code}\n--- stdout ---\n${res.stdout}\n--- stderr ---\n${res.stderr}`
+          );
+        } catch (err) {
+          setMsg(publicError(err, "执行命令失败"));
+        }
+      },
+      () => {
+        setFileBusy(false);
+      }
+    );
   }
 
   async function listDir(path: string): Promise<void> {
     setListing(true);
     setMsg("");
-    try {
-      const res = await api.listSandbox(normalizeWorkspacePath(path));
-      setDirInput(toPublicPath(res.path));
-      setEntries(res.entries ?? []);
-    } catch (err) {
-      setEntries([]);
-      setMsg(friendlyOpenError(err));
-    } finally {
-      setListing(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await api.listSandbox(normalizeWorkspacePath(path));
+          setDirInput(toPublicPath(res.path));
+          setEntries(res.entries ?? []);
+        } catch (err) {
+          setEntries([]);
+          setMsg(friendlyOpenError(err));
+        }
+      },
+      () => {
+        setListing(false);
+      }
+    );
   }
 
   async function openFile(path: string): Promise<void> {
     setFileBusy(true);
     setMsg("");
-    try {
-      const res = await api.readSandboxFile(normalizeWorkspacePath(path));
-      setFileInput(toPublicPath(res.path));
-      setFileContent(res.content);
-      setOpenedFile(res.path);
-      setMsg(`已读取 ${previewTitleFromPath(res.path)}`);
-    } catch (err) {
-      setMsg(friendlyOpenError(err));
-    } finally {
-      setFileBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await api.readSandboxFile(normalizeWorkspacePath(path));
+          setFileInput(toPublicPath(res.path));
+          setFileContent(res.content);
+          setOpenedFile(res.path);
+          setMsg(`已读取 ${previewTitleFromPath(res.path)}`);
+        } catch (err) {
+          setMsg(friendlyOpenError(err));
+        }
+      },
+      () => {
+        setFileBusy(false);
+      }
+    );
   }
 
   async function saveFile(): Promise<void> {
@@ -279,16 +295,21 @@ export default function SandboxScreen(): JSX.Element {
     }
     setFileBusy(true);
     setMsg("");
-    try {
-      const res = await api.writeSandboxFile(normalizeWorkspacePath(path), fileContent);
-      setFileInput(toPublicPath(res.path));
-      setOpenedFile(res.path);
-      setMsg(`已写入 ${previewTitleFromPath(res.path)}`);
-    } catch (err) {
-      setMsg(friendlyOpenError(err));
-    } finally {
-      setFileBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await api.writeSandboxFile(normalizeWorkspacePath(path), fileContent);
+          setFileInput(toPublicPath(res.path));
+          setOpenedFile(res.path);
+          setMsg(`已写入 ${previewTitleFromPath(res.path)}`);
+        } catch (err) {
+          setMsg(friendlyOpenError(err));
+        }
+      },
+      () => {
+        setFileBusy(false);
+      }
+    );
   }
 
   const segments = dirInput.split("/").filter(Boolean);

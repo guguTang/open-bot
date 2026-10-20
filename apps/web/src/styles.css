@@ -1,5 +1,7 @@
 @import "tailwindcss/theme" layer(theme);
 @import "tailwindcss/utilities" layer(utilities);
+/* 共享设计 token（design/tokens.json 生成），与 RN 端一致 */
+@import "./styles/tokens.css";
 
 /* Map open-bot tokens → Tailwind utilities used by shadcn components (border-input, text-muted-foreground, …). */
 @theme inline {
@@ -46,7 +48,7 @@
     --destructive: var(--danger);
     --destructive-foreground: #ffffff;
     --input: var(--border);
-    --ring: var(--text);
+    --ring: var(--ob-color-ring);
     --radius: var(--radius-md);
   }
 }
@@ -61,32 +63,32 @@
   --chat-immersive-bg: var(--bg-elevated, #ffffff);
   --chat-top-chrome: 48px; /* floating row (~44) + tight pad; safe offset is separate (+12) */
   --chat-composer-chrome: 72px;
-  --bg: #f0f1f3;
-  --bg-elevated: #ffffff;
-  --bg-soft: #f5f5f7;
-  --bg-hover: #eceef1;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --text: #1a1a1b;
-  --muted: #6b7280;
-  --accent: #3b82f6;
-  --accent-2: #6366f1;
+  --bg: var(--ob-color-background);
+  --bg-elevated: var(--ob-color-surface);
+  --bg-soft: var(--ob-color-surface-soft);
+  --bg-hover: var(--ob-color-surface-hover);
+  --border: var(--ob-color-border);
+  --border-strong: var(--ob-color-border-strong);
+  --text: var(--ob-color-foreground);
+  --muted: var(--ob-color-muted-foreground);
+  --accent: var(--ob-color-primary);
+  --accent-2: var(--ob-color-primary-2);
   --user-bg: #1a1a1b;
   --user-fg: #ffffff;
   --assistant-bg: #e4e7ec;
   --assistant-fg: #1a1a1b;
-  --danger: #dc2626;
+  --danger: var(--ob-color-danger);
   --inline-code-bg: #fde8e8;
   --inline-code-fg: #c4314b;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.08);
   --sidebar-w: 280px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-pill: 999px;
-  font-family: "Inter", "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --radius-sm: var(--ob-radius-sm);
+  --radius-md: var(--ob-radius-md);
+  --radius-lg: var(--ob-radius-lg);
+  --radius-pill: var(--ob-radius-pill);
+  font-family: var(--ob-font-sans);
   line-height: 1.5;
 }
 
@@ -964,8 +966,11 @@ body,
   color: var(--text);
   padding: 8px 4px;
   outline: none;
-  max-height: 160px;
+  /* 自动增高上限：约 40% 视口，封顶 280px（design token），超出后内部滚动 */
+  max-height: var(--ob-composer-max-h, 160px);
   min-height: 24px;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
   line-height: 1.45;
   font-size: 14.5px;
 }
@@ -1198,7 +1203,7 @@ button.ghost {
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
 /* Product rule A: phone presence row — secondary grey, not danger */
@@ -1218,7 +1223,7 @@ button.ghost {
   font-weight: 500;
 }
 .tag.machine-host-ready {
-  background: rgba(59, 130, 246, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent, #3b82f6);
   font-weight: 550;
 }
@@ -1227,7 +1232,7 @@ button.ghost {
   color: #6ee7b7;
 }
 [data-theme="dark"] .tag.machine-host-ready {
-  background: rgba(59, 130, 246, 0.22);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: #93c5fd;
 }
 
@@ -1549,7 +1554,7 @@ button.ghost {
 }
 
 .settings-card > .llm-list > .llm-item.default {
-  background: rgba(59, 130, 246, 0.04);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .settings-card > .llm-form {
@@ -1591,7 +1596,7 @@ button.ghost {
 .settings-dialog .settings-card select:focus,
 .settings-dialog .settings-card textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .settings-dialog .llm-form textarea,
@@ -1664,7 +1669,7 @@ button.ghost {
 }
 .agent-prompt:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 .skill-toggle {
   margin: 0 !important;
@@ -1807,7 +1812,7 @@ button.ghost {
 }
 .artifact-action {
   font-size: 12px;
-  color: #2563eb;
+  color: var(--accent);
   background: none;
   border: none;
   padding: 0;
@@ -2365,7 +2370,7 @@ button.ghost {
   background: #fff;
 }
 .msg-action-thread {
-  color: #2563eb;
+  color: var(--accent);
   border-color: #bfdbfe;
 }
 /* Light in-bubble quote: 2px bar + one-line text (design v1 §3). */
@@ -5454,11 +5459,14 @@ html.touch-ui .composer-quote-clear {
 .oui-btn { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
 .oui-btn:hover:not(:disabled) { background: var(--bg-hover, #eceef1); }
 .oui-btn:disabled { opacity: 0.5; cursor: default; }
+.oui-btn { min-height: 36px; transition: background-color var(--ob-motion-fast) var(--ob-easing), opacity var(--ob-motion-fast) var(--ob-easing); }
+@media (pointer: coarse) { .oui-btn { min-height: var(--ob-touch-min); } }
 .oui-btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
 .oui-btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; }
 .oui-table-wrap { overflow-x: auto; }
 .oui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left;; vertical-align: top; overflow-wrap: normal; word-break: normal; }
+.oui-table th { white-space: nowrap; }
 .oui-table th { background: var(--bg-soft, #f5f5f7); font-weight: 600; }
 .oui-list { margin: 0; padding-left: 1.3em; }
 .oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
@@ -5467,3 +5475,40 @@ html.touch-ui .composer-quote-clear {
 .oui-form { display: flex; flex-direction: column; gap: 10px; }
 .oui-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .oui-input input, .oui-input select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: inherit; background: transparent; }
+
+/* ── 可访问性基线（design/tokens.json）────────────────────────────────
+   :where() 零优先级：只给没有自定义焦点样式的控件补上可见焦点环，
+   组件里已有的 :focus-visible 规则照常优先。 */
+:where(a, button, [role="button"], [role="tab"], [role="menuitem"], summary, select, input, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--ob-color-ring);
+  outline-offset: 2px;
+}
+
+:where(button, [role="button"], [role="tab"], summary, label[for]):not(:disabled) {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 触屏设备上主要操作按钮满足 44px 最小可点区域 */
+@media (pointer: coarse) {
+  .composer-attach,
+  .composer-send {
+    width: var(--ob-touch-min);
+    height: var(--ob-touch-min);
+    flex-shrink: 0;
+  }
+  .composer-chip-remove {
+    min-width: 32px;
+    min-height: 32px;
+  }
+}

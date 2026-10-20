@@ -11,6 +11,7 @@ import { Icon } from "@/components/Icon";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { EmptyState, ErrorAlert, ListSkeleton } from "@/components/states";
 import { formatRelativeTime } from "@/lib/format";
+import { runWithFinally } from "@/lib/finally";
 
 /**
  * 会话列表。
@@ -84,14 +85,19 @@ export function ConversationList({
   const selfManaged = conversations === undefined;
 
   const load = useCallback(async (): Promise<void> => {
-    try {
-      setError(null);
-      setOwned(await api.listConversations());
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "加载会话失败");
-    } finally {
-      setInternalLoading(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          setError(null);
+          setOwned(await api.listConversations());
+        } catch (err) {
+          setError(err instanceof Error && err.message ? err.message : "加载会话失败");
+        }
+      },
+      () => {
+        setInternalLoading(false);
+      }
+    );
   }, []);
 
   useEffect(() => {
@@ -132,22 +138,27 @@ export function ConversationList({
       if (!ok) return;
 
       setBusyId(conversation.id);
-      try {
-        await api.deleteConversation(conversation.id);
-        setHidden((prev) => {
-          const next = new Set(prev);
-          next.add(conversation.id);
-          return next;
-        });
-        if (selfManaged) {
-          setOwned((prev) => prev.filter((c) => c.id !== conversation.id));
+      await runWithFinally(
+        async () => {
+          try {
+            await api.deleteConversation(conversation.id);
+            setHidden((prev) => {
+              const next = new Set(prev);
+              next.add(conversation.id);
+              return next;
+            });
+            if (selfManaged) {
+              setOwned((prev) => prev.filter((c) => c.id !== conversation.id));
+            }
+            onDeleted?.(conversation);
+          } catch (err) {
+            setError(err instanceof Error && err.message ? err.message : "删除失败");
+          }
+        },
+        () => {
+          setBusyId(null);
         }
-        onDeleted?.(conversation);
-      } catch (err) {
-        setError(err instanceof Error && err.message ? err.message : "删除失败");
-      } finally {
-        setBusyId(null);
-      }
+      );
     },
     [confirm, onDeleted, selfManaged]
   );

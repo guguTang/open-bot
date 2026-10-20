@@ -6,6 +6,7 @@ import { View } from "react-native";
 import * as api from "@/api";
 import type { BotSecretRequest } from "@/api/types";
 import { FormField } from "@/components/FormField";
+import { runWithFinally } from "@/lib/finally";
 
 type Props = {
   request: BotSecretRequest | null;
@@ -29,37 +30,47 @@ export function SecretPromptModal({ request, onClose, onResolved }: Props): JSX.
     if (!request) return;
     setBusy(true);
     setErr(null);
-    try {
-      await api.resolveBotSecretRequest(request.id, {
-        value,
-        name: request.name,
-        origin: request.origin,
-        auth_type: request.auth_type,
-        agent_id: request.agent_id,
-      });
-      setValue("");
-      onResolved();
-      onClose();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          await api.resolveBotSecretRequest(request.id, {
+            value,
+            name: request.name,
+            origin: request.origin,
+            auth_type: request.auth_type,
+            agent_id: request.agent_id,
+          });
+          setValue("");
+          onResolved();
+          onClose();
+        } catch (e) {
+          setErr(e instanceof Error ? e.message : String(e));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   };
 
   const dismiss = async (): Promise<void> => {
     if (!request) return;
     setBusy(true);
     setErr(null);
-    try {
-      await api.resolveBotSecretRequest(request.id, { dismiss: true });
-      onResolved();
-      onClose();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          await api.resolveBotSecretRequest(request.id, { dismiss: true });
+          onResolved();
+          onClose();
+        } catch (e) {
+          setErr(e instanceof Error ? e.message : String(e));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   };
 
   return (
