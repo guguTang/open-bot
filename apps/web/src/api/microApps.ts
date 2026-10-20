@@ -9,6 +9,42 @@ export type MicroAppGrantDecision = "allow_once" | "always_allow" | "deny";
 /** In-app shortcut surfaces selectable at pin time (Phase 3; not OS widgets). */
 export const MICRO_APP_SHORTCUT_SURFACES = ["desktop_shortcut", "mobile_shortcut"] as const;
 
+/** Pin / unpin entry surfaces shown in hub more-menu & pin dialog (not hub itself). */
+export const MICRO_APP_ENTRY_SURFACES: ReadonlyArray<{
+  surface: MicroAppSurface;
+  /** Short name for toast */
+  short: string;
+  label: string;
+  cancelLabel: string;
+  addLabel: string;
+}> = [
+  {
+    surface: "chat_pin",
+    short: "聊天栏",
+    label: "聊天输入框上方快捷条（chat_pin）",
+    cancelLabel: "取消聊天栏快捷",
+    addLabel: "加入聊天栏快捷",
+  },
+  {
+    surface: "desktop_shortcut",
+    short: "侧栏",
+    label: "桌面端首页快捷区（desktop_shortcut）",
+    cancelLabel: "取消侧栏快捷",
+    addLabel: "加入侧栏快捷",
+  },
+  {
+    surface: "mobile_shortcut",
+    short: "手机快捷",
+    label: "手机端首页快捷区（mobile_shortcut）",
+    cancelLabel: "取消手机快捷",
+    addLabel: "加入手机快捷",
+  },
+];
+
+export function microAppHasSurface(app: { placements?: MicroAppPlacement[] }, surface: MicroAppSurface): boolean {
+  return (app.placements || []).some((pl) => pl.surface === surface && pl.enabled);
+}
+
 /** kind=routine recipe — materialized into a /v1/routines row on pin (Phase 3). */
 export type MicroAppRoutineTrigger = {
   source: "slack" | "github" | "http" | string;

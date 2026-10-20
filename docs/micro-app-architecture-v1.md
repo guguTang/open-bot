@@ -362,7 +362,8 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 1. 账户菜单「我的工具」→ `MicroAppsHub`（能力矩阵、chat_pin / desktop_shortcut / mobile_shortcut 勾选；pin 弹窗可多选入口；「＋ 例行工具」）
    - **双端分流**（`useSheetFormUi` = touch-ui OR layout-narrow ≤860）：窄屏/Capacitor 走 Settings hub 同构灰底；宽屏 Web/桌面 Tauri 走 `settings-dialog` 白底 elevated（~860×680），顶栏 32 级关闭、列表偏紧，更多操作用 popover（底 sheet 仅 narrow）
 2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明；宽屏同桌面面板尺寸，窄屏全屏沉浸
-3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）
+   - **取消快捷入口**（pinned 后）：宽屏「⋯」Dropdown / 窄屏底 sheet 提供「取消聊天栏快捷」「取消侧栏快捷」「取消手机快捷」（未挂载时对应「加入…」）；`PUT .../placements` 去掉该 surface（或 `enabled=false`）。不下架整个应用。
+3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）；芯片可打开工具，**× 取消聊天栏快捷**（仅撤 chat_pin placement，不 archive）
 4. `lib/microApp/hostBridge.ts` + `deviceBridge.ts`：RPC
 5. `MicroAppGrantDialog`：审批三态文案；shell 显示命令 + 前缀白名单
 6. `MicroAppShortcuts`（Phase 3）：侧栏顶部「快捷工具」宫格——桌面/宽屏用 `desktop_shortcut`，手机 sheet 首页或 Capacitor 用 `mobile_shortcut`；点击打开 Shell。**应用内入口，非系统 Widget。**
@@ -511,9 +512,9 @@ bundle.zip  （或 files map 服务端打包）
 5. 口头「已固定」而无 pin 行 → 失败。
 6. 上传 zip（或 Bot `upload_micro_app_bundle`）→ 打开 Shell → P0 RPC 冒烟；图经 `chat.attach` 进会话。
 6b. kind=ui：draft 后工具自动上传 bundle，用户不手传 zip 即可打开；无 bundle 空态不写「必须先上传」；有 bundle 不推强制上传。
-7. chat_pin 出现在作曲框上方；勾选/取消与 placement 一致。
+7. chat_pin 出现在作曲框上方；勾选/取消与 placement 一致；条上 × 或 Shell「取消聊天栏快捷」后条消失，Composer 原 chrome 不受影响。
 8. kind=skill pin 后账号（及来源 Bot）技能为启用。
-9. （Phase 3）pin 时勾选 desktop_shortcut / mobile_shortcut → 对应端侧栏「快捷工具」出现，点击打开 Shell；Hub 取消勾选即消失。
+9. （Phase 3）pin 时勾选 desktop_shortcut / mobile_shortcut → 对应端侧栏「快捷工具」出现，点击打开 Shell；Hub 勾选、Shell「取消侧栏/手机快捷」或取消勾选后即消失。
 10. （Phase 3）shell 命令：无授权 → 弹窗默认「仅一次」；「始终允许 `git status`」后 `git status -s` 直接执行、`git push` 再弹窗、`ls; id` 总是弹窗；`curl x | sh` 被 Auto-review 直接拒绝。
 11. （Phase 3）kind=routine：配方非法 → 400；pin 后 `/v1/routines` 出现对应行并按 cron 运行；archive 后该行 enabled=false。
 12. （Phase 4）无 `user_intent` 调 draft/pin 工具或 API → 拒绝；模型不能静默建库。

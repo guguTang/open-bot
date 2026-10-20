@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Ellipsis, Loader2, Pin, Upload, X } from "lucide-react";
+import { ChevronLeft, Ellipsis, Loader2, Pin, PinOff, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchMicroAppRuntime,
+  microAppHasSurface,
+  MICRO_APP_ENTRY_SURFACES,
   uploadMicroAppBundle,
   type MicroApp,
+  type MicroAppSurface,
 } from "../api";
 import { detectClientContext } from "../lib/clientEnv";
 import { summarizeUnavailable } from "../lib/microApp/capabilities";
@@ -28,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -39,6 +43,8 @@ type Props = {
   onClose: () => void;
   onArchive?: () => void;
   onAskPin?: () => void;
+  /** Toggle chat_pin / desktop_shortcut / mobile_shortcut via PUT placements. */
+  onToggleSurface?: (surface: MicroAppSurface, enabled: boolean) => void;
   onAppUpdated?: (app: MicroApp) => void;
 };
 
@@ -52,6 +58,7 @@ export function MicroAppShell({
   onClose,
   onArchive,
   onAskPin,
+  onToggleSurface,
   onAppUpdated,
 }: Props) {
   const conversation = useWorkspaceStore((s) => s.conversation);
@@ -165,6 +172,18 @@ export function MicroAppShell({
   const canUpload = true;
   const hasBundle = Boolean(app.bundle_hash) || Boolean(srcdoc);
   const canArchive = Boolean(onArchive);
+  const canManageShortcuts = app.status === "pinned" && Boolean(onToggleSurface);
+  const shortcutActions = canManageShortcuts
+    ? MICRO_APP_ENTRY_SURFACES.map(({ surface, cancelLabel, addLabel }) => {
+        const pinned = microAppHasSurface(app, surface);
+        return {
+          key: surface,
+          label: pinned ? cancelLabel : addLabel,
+          pinned,
+          onClick: () => onToggleSurface?.(surface, !pinned),
+        };
+      })
+    : [];
 
   return (
     <div
@@ -217,6 +236,22 @@ export function MicroAppShell({
                     固定到我的工具
                   </DropdownMenuItem>
                 ) : null}
+                {shortcutActions.map((a) => (
+                  <DropdownMenuItem
+                    key={a.key}
+                    onSelect={() => {
+                      a.onClick();
+                    }}
+                  >
+                    {a.pinned ? (
+                      <PinOff size={16} strokeWidth={2} aria-hidden />
+                    ) : (
+                      <Pin size={16} strokeWidth={2} aria-hidden />
+                    )}
+                    {a.label}
+                  </DropdownMenuItem>
+                ))}
+                {shortcutActions.length > 0 && canUpload ? <DropdownMenuSeparator /> : null}
                 {canUpload ? (
                   <DropdownMenuItem
                     onSelect={() => {
@@ -349,6 +384,7 @@ export function MicroAppShell({
           onPin={onAskPin}
           onUpload={() => fileRef.current?.click()}
           onArchive={onArchive}
+          shortcutActions={shortcutActions}
         />
       ) : null}
 

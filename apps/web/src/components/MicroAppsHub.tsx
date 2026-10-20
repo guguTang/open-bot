@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   archiveMicroApp,
+  microAppHasSurface,
+  MICRO_APP_ENTRY_SURFACES,
   pinMicroApp,
   putMicroAppPlacements,
   type MicroApp,
@@ -31,16 +33,6 @@ import { cn } from "@/lib/utils";
  * - wide Web / desktop Tauri: settings-dialog white elevated (~860×680), desktop
  *   title row + 32 close — not fullscreen mobile Settings.
  */
-
-const ENTRY_SURFACES: Array<{ surface: MicroAppSurface; label: string; short: string }> = [
-  { surface: "chat_pin", label: "聊天输入框上方快捷条（chat_pin）", short: "聊天栏" },
-  { surface: "desktop_shortcut", label: "桌面端首页快捷区（desktop_shortcut）", short: "桌面快捷" },
-  { surface: "mobile_shortcut", label: "手机端首页快捷区（mobile_shortcut）", short: "手机快捷" },
-];
-
-function hasSurface(app: MicroApp, surface: MicroAppSurface): boolean {
-  return (app.placements || []).some((pl) => pl.surface === surface && pl.enabled);
-}
 
 type Props = {
   open: boolean;
@@ -111,7 +103,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
     }
     try {
       await putMicroAppPlacements(app.id, others);
-      const short = ENTRY_SURFACES.find((x) => x.surface === surface)?.short || surface;
+      const short = MICRO_APP_ENTRY_SURFACES.find((x) => x.surface === surface)?.short || surface;
       toast.success(enabled ? `已加入${short}` : `已从${short}移除`);
       await refresh();
     } catch (e) {
@@ -164,6 +156,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
                 onClose={handleClose}
                 onArchive={() => void onArchive(openApp)}
                 onAskPin={() => askPin(openApp)}
+                onToggleSurface={(surface, enabled) => void toggleSurface(openApp, surface, enabled)}
                 onAppUpdated={(a) => {
                   void refresh().then(() => setOpenAppId(a.id));
                 }}
@@ -362,11 +355,11 @@ export function MicroAppsHub({ open, onClose }: Props) {
                                 compact
                               />
                               <div className="micro-apps-hub-surface-list">
-                                {ENTRY_SURFACES.map(({ surface, label }) => (
+                                {MICRO_APP_ENTRY_SURFACES.map(({ surface, label }) => (
                                   <label key={surface} className="micro-apps-hub-surface">
                                     <input
                                       type="checkbox"
-                                      checked={hasSurface(app, surface)}
+                                      checked={microAppHasSurface(app, surface)}
                                       onChange={(e) => void toggleSurface(app, surface, e.target.checked)}
                                     />
                                     {label}
@@ -421,7 +414,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
           </DialogHeader>
           <div className="space-y-1.5">
             <div className="text-[11px] text-[var(--muted)]">同时放到（应用内入口，非系统小组件）：</div>
-            {ENTRY_SURFACES.map(({ surface, label }) => (
+            {MICRO_APP_ENTRY_SURFACES.map(({ surface, label }) => (
               <label key={surface} className="flex cursor-pointer items-center gap-2 text-xs text-[var(--muted)]">
                 <input
                   type="checkbox"

@@ -259,6 +259,8 @@ export {
   type MicroAppRoutineConfig,
   type MicroAppRoutineTrigger,
   MICRO_APP_SHORTCUT_SURFACES,
+  MICRO_APP_ENTRY_SURFACES,
+  microAppHasSurface,
   deleteMicroAppGrant,
   listMicroApps,
   getMicroApp,

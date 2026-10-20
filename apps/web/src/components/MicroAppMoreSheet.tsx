@@ -1,5 +1,13 @@
-import { Pin, Trash2, Upload } from "lucide-react";
+import { Pin, PinOff, Trash2, Upload } from "lucide-react";
 import { useDialogChrome } from "./useDialogOpen";
+
+export type MicroAppShortcutMenuAction = {
+  key: string;
+  label: string;
+  /** Currently pinned → show cancel (PinOff); else add (Pin). */
+  pinned: boolean;
+  onClick: () => void;
+};
 
 type Props = {
   open: boolean;
@@ -13,10 +21,12 @@ type Props = {
   onPin?: () => void;
   onUpload?: () => void;
   onArchive?: () => void;
+  /** Cancel / add chat_pin · desktop/mobile shortcut (pinned apps). */
+  shortcutActions?: MicroAppShortcutMenuAction[];
 };
 
 /**
- * Micro-app shell 「更多」— same bottom Action Sheet chrome as session「+」.
+ * Micro-app shell 「更多」— same bottom Action Sheet chrome as session「+».
  */
 export function MicroAppMoreSheet({
   open,
@@ -29,12 +39,15 @@ export function MicroAppMoreSheet({
   onPin,
   onUpload,
   onArchive,
+  shortcutActions,
 }: Props) {
   const { ref: dialogRef, maskProps } = useDialogChrome(open, onClose, {
     maskClassName: "action-sheet-mask",
   });
 
   if (!open) return null;
+
+  const shortcuts = shortcutActions || [];
 
   return (
     <dialog ref={dialogRef} className="action-sheet-root" aria-label={title ? `${title} 更多` : "更多"}>
@@ -57,6 +70,26 @@ export function MicroAppMoreSheet({
             固定到我的工具
           </button>
         ) : null}
+        {shortcuts.map((a) => (
+          <button
+            key={a.key}
+            type="button"
+            className="action-sheet-row action-sheet-row-icon"
+            onClick={() => {
+              onClose();
+              a.onClick();
+            }}
+          >
+            <span className="action-sheet-row-leading" aria-hidden>
+              {a.pinned ? (
+                <PinOff size={20} strokeWidth={2} aria-hidden />
+              ) : (
+                <Pin size={20} strokeWidth={2} aria-hidden />
+              )}
+            </span>
+            {a.label}
+          </button>
+        ))}
         {canUpload && onUpload ? (
           <button
             type="button"
