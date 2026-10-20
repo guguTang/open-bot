@@ -34,6 +34,7 @@
   --ob-motion-slow: 300ms;
   --ob-easing: cubic-bezier(0.2, 0, 0, 1);
   --ob-touch-min: 44px;
+  --ob-composer-max-h: min(40dvh, 280px);
   --ob-font-sans: "Inter", "SF Pro Text", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
 }
 

@@ -1,6 +1,7 @@
 import { CornerUpLeft, Square, X } from "lucide-react";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
+import { useAutoGrowTextarea } from "../lib/useAutoGrowTextarea";
 
 export type PendingFile = {
   key: string;
@@ -103,6 +104,7 @@ export function Composer({
   const taRef = useRef<HTMLTextAreaElement>(null);
   /** True while an IME session is active (incl. Safari gap after compositionend). */
   const imeComposingRef = useRef(false);
+  useAutoGrowTextarea(taRef, value);
   const [trigger, setTrigger] = useState<TriggerState | null>(null);
   const [pickerIndex, setPickerIndex] = useState(0);
 

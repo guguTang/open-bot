@@ -966,8 +966,11 @@ body,
   color: var(--text);
   padding: 8px 4px;
   outline: none;
-  max-height: 160px;
+  /* 自动增高上限：约 40% 视口，封顶 280px（design token），超出后内部滚动 */
+  max-height: var(--ob-composer-max-h, 160px);
   min-height: 24px;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
   line-height: 1.45;
   font-size: 14.5px;
 }

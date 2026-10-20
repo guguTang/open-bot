@@ -65,6 +65,10 @@ export const designTokens = {
   },
   "touchTarget": {
     "min": 44
+  },
+  "composer": {
+    "maxHeight": 280,
+    "maxViewportRatio": 0.4
   }
 } as const;
 

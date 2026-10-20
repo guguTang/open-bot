@@ -23,6 +23,7 @@ ${Object.entries(t.space).map(([k, v]) => `  --ob-space-${k}: ${v}px;`).join("\n
   --ob-motion-slow: ${t.motion.slow}ms;
   --ob-easing: ${t.motion.easing};
   --ob-touch-min: ${t.touchTarget.min}px;
+  --ob-composer-max-h: min(${t.composer.maxViewportRatio * 100}dvh, ${t.composer.maxHeight}px);
   --ob-font-sans: ${t.font.sans};
 }
 
@@ -65,7 +66,7 @@ ${heroMap("dark", "      ")}
 
 const rnTs = `// ${HEADER}
 export const designTokens = ${JSON.stringify(
-  { color: t.color, radius: t.radius, space: t.space, motion: t.motion, touchTarget: t.touchTarget },
+  { color: t.color, radius: t.radius, space: t.space, motion: t.motion, touchTarget: t.touchTarget, composer: t.composer },
   null,
   2,
 )} as const;
