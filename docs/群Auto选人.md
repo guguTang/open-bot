@@ -1,6 +1,6 @@
 # 群 Auto 选人（轻量设计）
 
-日期：2026-10-11 · 状态：三策略已落地；decision **可返回多人子集**（opaque `all` + `count` noul + top-N probabilities；**谁会/who can** 能力普查 → 有能力成员全选，不误成全员或 K=1）；**生效模式仅跟 Admin 组织功能开关**（`feature_flags_json.auto_pick`）；客户端不配置群级 auto_pick  
+日期：2026-10-20 · 状态：三策略已落地；**未交付后台任务 → 跳过 Decide / 直达原 bot（`open_task`）**；decision **可返回多人子集**（opaque `all` + `count` noul + top-N probabilities；**谁会/who can** 能力普查 → 有能力成员全选，不误成全员或 K=1）；**生效模式仅跟 Admin 组织功能开关**（`feature_flags_json.auto_pick`）；客户端不配置群级 auto_pick  
 对照现状：`resolveGroupSendTargets` — 有 `@` → 强制集合；无人 `@` → 按 org `auto_pick` 模式选人。
 
 ---
@@ -42,6 +42,10 @@ K 默认 **1**（org 级约定；专长上限 3）。`count` noul / 多路高概
 
 ```
 resolveGroupSendTargets / planSendTargets
+  ├─ 会话有未完成后台任务（conversation_tasks queued/running）
+  │     → auto_pick=open_task：跳过 heuristic/decision，仅原 task.agent_id
+  │       （追问入队同一后台 / 取消；与 docs/产品功能与完成度.md「先看后台任务」一致）
+  ├─ 内容为 host 续跑提示（「尚未交付的后台任务…」字符串兜底）→ 同上 open_task
   ├─ @ / @everyone / explicit → 现状（forced）
   └─ no @ → org feature_flags.auto_pick（忽略 channel）
         auto_pick=off        → 全员候选（现状）
@@ -141,6 +145,23 @@ resolveGroupSendTargets / planSendTargets
 
 ---
 
+## 4.3 未交付后台任务（`open_task`，跳过 Decide）
+
+无人 `@` 且会话已有 `conversation_tasks` 为 `queued`/`running` 时：
+
+| 信号 | 行为 |
+|---|---|
+| **结构化（主）** | `OpenConversationTask` → `planSendTargets` 直接 `Targets=[task.agent_id]`，`Method=open_task`，**不**调 SystemOne / heuristic |
+| **字符串兜底** | 正文含 host 续跑前缀「你有一条尚未交付的后台任务」→ 同上（正常用户话不会命中） |
+| **执行侧** | `runConversationTaskOnce` 已带 `agent_id` + `background` + `owner_task` + `task_continuation=true`；不经 Auto选人 |
+| **追问** | `tryShortcutTurn` 入队时用 **open.AgentID**（不用 Auto选人的 `targetAgents[0]`） |
+
+与 ask-lowconf soft-hint **无关**（那是 runtime 同事求助置信路径，不经过 `planSendTargets`）。
+
+日志：`auto_pick=open_task ids=[…] conf=1.00 fallback= (skip decision; pending background task)`
+
+---
+
 ## 5. 与 PASS / 全员候选并存
 
 - 选中的非 forced 候选：**保留** `[PASS]` 提示与「不落泡」逻辑（who-can / specialty 亦然）。  
@@ -190,6 +211,8 @@ resolveGroupSendTargets / planSendTargets
 8. 历史 bool `true/false` 在 org flags / channel 存储可读为 heuristic / off；channel 显式值**不**覆盖 org。  
 9. Admin 功能开关可选三策略中文标签，写回 `feature_flags_json.auto_pick`。  
 10. channel `settings.auto_pick=off` 且 org=`decision` → 仍按 decision 规划。
+11. 有未完成后台任务时发追问（无人 `@` + decision 模式）→ **不**调 SystemOne；日志 `auto_pick=open_task`；入队 agent = 原 task 的 bot。
+12. 普通用户消息（无后台任务）→ 仍走 §3 三策略 Decide/heuristic。
 
 ## 10. 本地验证（Unsloth / Jev）
 

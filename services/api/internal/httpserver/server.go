@@ -2155,6 +2155,30 @@ func (s *Server) resolveSendTargets(uid string, conv *db.Conversation, explicit 
 // planSendTargets resolves targets and optional AutoPick metadata for the send pipeline.
 func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []string, content string, replyParent *db.Message) (*groupSendPlan, error) {
 	plan := &groupSendPlan{Targets: []string{conv.AgentID}}
+
+	// Pending background task owns the turn (product: check open task before
+	// selecting who answers). Skip Auto选人 / decision; pin to the same bot.
+	// Structured: conversation_tasks row. Fallback: host continuation prompt.
+	if s.db != nil && conv != nil {
+		if open, err := s.db.OpenConversationTask(conv.ID); err == nil && open != nil {
+			agentID := strings.TrimSpace(open.AgentID)
+			if agentID == "" {
+				agentID = conv.AgentID
+			}
+			out := openTaskSendPlan(agentID)
+			log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)
+			return out, nil
+		}
+	}
+	if isPendingTaskContinuationPrompt(content) {
+		out := openTaskSendPlan(conv.AgentID)
+		if len(out.Targets) == 0 {
+			out.Targets = []string{conv.AgentID}
+		}
+		log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; continuation prompt marker)", out.Targets)
+		return out, nil
+	}
+
 	if conv.ChannelID == "" {
 		return plan, nil
 	}
