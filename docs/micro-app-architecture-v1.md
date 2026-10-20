@@ -135,6 +135,22 @@ Placement 只指向 MicroApp.id
 `user_id`, `micro_app_id`, `capability`, `machine_id`, `decision`（`allow_once` / `always_allow` / `deny`；API 也接受别名 `allow_always`）, `expires_at`, `command_allowlist_json`（**Phase 3**，仅 `host.shell.run`）  
 高敏默认建议 `allow_once`：`host.shell.run`、`host.clipboard.read`/`write`、`device.mic`、`device.geo` 等（见 `DefaultGrantDecisionForCapability`）。无记录 = 每次弹窗（默认「仅一次」）。
 
+
+### 3.4 `micro_app_parks`（抗重启）
+
+Durable park / grant_required waiter，键 = 授权卡 `req_id`。
+
+| 列 | 说明 |
+|----|------|
+| `req_id` | PK；与 `micro_app_grant` 卡相同 |
+| `status` | `pending` / `resolved` / `expired` / `cancelled` |
+| `decision` | allow_once / always_allow / deny / timeout |
+| `expires_at` | 默认 create+900s；lazy + startup expire |
+| `tool` / `capability` / `args_json` / `conversation_id` / `request_id` | 恢复与审计上下文 |
+
+内部 API：`POST /internal/micro-apps/parks`（upsert）、`/parks/resolve`、`/parks/expire`、`/parks/get`。
+
+
 ### 3.3.1 迁移（Phase 3）
 
 `migrateMicroApps()` 末尾幂等追加：
@@ -185,7 +201,7 @@ WS：`micro_apps_changed`（`chat_hub`，对齐 `agents_changed`）；Web `useCh
 代码：
 
 - DB/handlers：`services/api/internal/db/micro_apps.go`、`micro_apps_phase3.go`（routine 配方 / shell 白名单）、`httpserver/micro_apps.go`、`micro_app_bundle.go`、`micro_app_rpc.go`、`micro_app_store.go`
-- Web：`apps/web/src/api/microApps.ts`、`components/MicroAppsHub.tsx`、`MicroAppShell.tsx`、`MicroAppGrantDialog.tsx`、`MicroAppShortcuts.tsx`、`MicroAppShellGrantPanel.tsx`、`MicroAppRoutinePanel.tsx`、`MicroAppRoutineCreateForm.tsx`、`lib/microApp/*`
+- Web：`apps/web/src/api/microApps.ts`、`components/MicroAppsHub.tsx`、`MicroAppShell.tsx`、`MicroAppGrantDialog.tsx`、`MicroAppGrantDecisionPanel.tsx`、`MicroAppGrantConfirmCard.tsx`、`MicroAppShortcuts.tsx`、`MicroAppShellGrantPanel.tsx`、`MicroAppRoutinePanel.tsx`、`MicroAppRoutineCreateForm.tsx`、`lib/microApp/*`
 
 ---
 
@@ -316,10 +332,23 @@ agent.invoke(micro_app_id)
 ```
 
 结构化错误码：`capability_not_declared` / `grant_denied` / `grant_required` / `host_required`。  
-**缺口收口 + tool-loop park/resume**：模型路径遇 `grant_required` 时，runtime 在**同一工具调用内** park（`micro_app_park` in-process Future，键 = 授权卡 `req_id`），并调 `POST /internal/micro-apps/grant-prompt` 插入 `role=micro_app_grant` 卡（`tool` / `pending_args` / `run_request_id`）。用户点「仅一次」或「始终允许」→ `UpsertMicroAppGrant` 后 Go 调 runtime `POST /v1/micro-app-grants/resolve` **恢复同一 `host_*` 调用**；点「拒绝」→ resolve(deny) → 该工具以 `grant_denied` 失败。  
-**不走** LangGraph `interrupt()`/`Command(resume)`：`approve_thread` 无法 rebound `tool_handler`，无法在 resume 后执行 host_*。park 语义对齐 iframe `MicroAppGrantDialog` / Go host_confirm 等待。  
-进程重启会丢 park；decide 仍写 Grant，响应 `park_resolved=false` 时客户端才 fallback 发续跑 turn（避免双续跑）。  
-轻量审计：表 `micro_app_gate_audit`（tool-gate / grant-prompt / decide 写入）+ runtime 日志 `micro_app_dual_gate …` / `micro_app_park …`。
+**缺口收口 + tool-loop park/resume + 抗重启**：模型路径遇 `grant_required` 时，runtime 在**同一工具调用内** park：
+1. **热路径缓存**：`micro_app_park` in-process `asyncio.Future`（键 = 授权卡 `req_id`）
+2. **耐久源**：表 `micro_app_parks`（Go `POST /internal/micro-apps/parks*`）；create 时 upsert pending + `expires_at`（默认 900s）
+3. 调 `POST /internal/micro-apps/grant-prompt` 插入 `role=micro_app_grant` 卡（`tool` / `pending_args` / `run_request_id`）
+
+用户点「仅一次」或「始终允许」→ `UpsertMicroAppGrant` → **先** `ResolveMicroAppPark`（清 durable pending，防孤儿）→ Go 调 runtime `POST /v1/micro-app-grants/resolve`：
+- 有 in-process waiter → **恢复同一 `host_*` 调用**（`park_resolved=true`）
+- waiter 已因重启丢失但 durable 曾存在 → `park_resolved=false` / `park_reason=waiter_lost`（**无法同栈恢复**；Grant 已写入；客户端 toast + **fallback 发续跑 turn 一次**）
+- 点「拒绝」→ resolve(deny) → 该工具 `grant_denied`；durable 标 resolved
+
+超时：await 超时或 `expires_at` 到期 → status=`expired`（lazy expire + runtime startup `rehydrate_on_startup`）。  
+**不走** LangGraph `interrupt()`/`Command(resume)`：`approve_thread` 无法 rebound `tool_handler`。  
+轻量审计：表 `micro_app_gate_audit` + runtime 日志 `micro_app_dual_gate …` / `micro_app_park …`。
+
+**统一授权 UI**：iframe 与模型路径共用 `MicroAppGrantDecisionPanel`（三态：仅一次 / 始终允许 / 拒绝；shell 前缀白名单文案一致）。
+- **模型路径**：聊天卡 `MicroAppGrantConfirmCard` → `POST .../micro-app-grants/{msgId}/decide`（UpsertGrant + park resolve）
+- **iframe Host Bridge**：`MicroAppGrantDialog`（面板同一套）→ `putMicroAppGrant`（无 park；RPC 同步等待用户选择）
 
 Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，便于客户端灰显/引导。
 
@@ -516,16 +545,17 @@ bundle.zip
 |----|------|------|
 | Mobile Capacitor geo + mic（+ camera/notify/share） | ✅ | `apps/mobile` deps + iOS/Android 权限文案；deviceBridge 运行时探测；OS 未授权仍灰显+系统框 |
 | 模型路径 `grant_required` → 客户端审批卡 | ✅ | 会话卡 `micro_app_grant` / `MicroAppGrantConfirmCard`；decide → UpsertGrant |
-| 授权后 **同调用** 继续 host_* | ✅ | park：`micro_app_park`（req_id Future）；resume：decide → `/v1/micro-app-grants/resolve`；deny 失败该工具；**默认不再** sendUserText 新 turn |
+| 授权后 **同调用** 继续 host_* | ✅ | 热路径 Future + **durable `micro_app_parks`**；resume：decide → resolve；重启 → waiter_lost + fallback 续跑；deny 失败该工具 |
 | 双闸门审计落库 | ✅ 轻量 | 表 `micro_app_gate_audit`；保留 runtime logger |
 | OS Widget / 团队模板 / store / 入站 Hook 代建 / `device.contacts` | ⏸ 跳过 | 见 §10.5；本批明确不实现 |
 
 **仍打开的边界（有意留下）**
 
-1. Park 存 **runtime 进程内** Future（非 LangGraph checkpoint）。进程重启 → `park_resolved=false`，客户端 **fallback** 发续跑 turn（仅此时）；正常路径无双续跑。
+1. **同栈 resume 在进程重启后不可用**（诚实上限）：durable `micro_app_parks` + resolve/expiry 已落地，避免授权卡/Grant 静默孤儿；重启后 `park_resolved=false` / `park_reason=waiter_lost|expired`，客户端 **fallback 发续跑 turn 一次**。热路径仍用 in-process Future（非 LangGraph checkpoint）。
 2. 未用 LangGraph `interrupt()`：`approve_thread` 无 rebound `tool_handler`，无法在 resume 后跑 host_*（见 §6.2）。
-3. iframe Host Bridge 仍用 `MicroAppGrantDialog`；模型路径用聊天卡——两套 UI，语义同为三态 Grant。
+3. **统一授权 UI 已落地**：共用 `MicroAppGrantDecisionPanel`；iframe 仍为 Dialog 壳、模型路径仍为聊天卡壳——决策 API 因路径而异（decide+park vs putMicroAppGrant），三态文案与控件一致。
 4. `cap sync` / 真机权限仍需本地执行；CI 不强制跑原生构建。
+5. **仍延期**：OS Widget、团队模板、store、入站/proxy Hook 代建、`device.contacts`（见 §10.5）。
 
 ## 13. 仓内索引
 
@@ -539,7 +569,8 @@ bundle.zip
 | SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
 | Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`）；内部 API `httpserver/micro_apps_internal.go` |
 | Phase 6 dual-gate | `httpserver/micro_apps_tool_gate.go`；runtime `micro_app_gate.py`；`agent.invoke` → `micro_app_id` |
-| 缺口收口 Grant 卡 + park/resume | `httpserver/micro_apps_grant_prompt.go`；runtime `micro_app_park.py` / `await_dual_gate_with_park`；Web `settleMicroAppGrant`；role=`micro_app_grant`；decide→resolve |
+| 缺口收口 Grant 卡 + park/resume + 抗重启 | `httpserver/micro_apps_grant_prompt.go` / `micro_apps_parks.go`；表 `micro_app_parks`；runtime `micro_app_park.py` / `await_dual_gate_with_park`；Web `settleMicroAppGrant`；decide→durable+resolve |
+| 统一授权 UI | `MicroAppGrantDecisionPanel` → `MicroAppGrantConfirmCard`（聊天）/ `MicroAppGrantDialog`（iframe） |
 | 缺口收口审计 | 表 `micro_app_gate_audit`（`InsertMicroAppGateAudit`） |
 | Mobile device 插件 | `apps/mobile/package.json`（camera/geo/mic/notify/share） |
 

@@ -3,15 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+from unittest import mock
 
 import pytest
 
 from . import micro_app_park as park
 
 
+@pytest.fixture(autouse=True)
+def _no_persist(monkeypatch):
+    monkeypatch.setattr(park, "_persist_upsert", lambda *a, **k: None)
+    monkeypatch.setattr(park, "_persist_resolve", lambda *a, **k: None)
+    monkeypatch.setattr(park, "_persist_expire", lambda *a, **k: None)
+    park.clear_all()
+    yield
+    park.clear_all()
+
+
 @pytest.mark.asyncio
 async def test_park_resolve_allow():
-    park.clear_all()
     await park.create_park(
         req_id="mag-test-1",
         micro_app_id="app1",
@@ -30,12 +40,10 @@ async def test_park_resolve_allow():
     out = await resolve_task
     assert decision == "allow_once"
     assert out.get("park_resolved") is True
-    park.clear_all()
 
 
 @pytest.mark.asyncio
 async def test_park_resolve_missing():
-    park.clear_all()
     out = await park.resolve("mag-missing", "deny")
     assert out.get("park_resolved") is False
     assert out.get("reason") == "not_parked"
@@ -43,7 +51,6 @@ async def test_park_resolve_missing():
 
 @pytest.mark.asyncio
 async def test_park_alias():
-    park.clear_all()
     await park.create_park(
         req_id="mag-canon",
         micro_app_id="app1",
@@ -60,4 +67,30 @@ async def test_park_alias():
     decision = await park.await_decision("mag-canon", timeout_sec=2.0)
     await t
     assert decision == "always_allow"
-    park.clear_all()
+
+
+@pytest.mark.asyncio
+async def test_park_resolve_waiter_lost_via_durable():
+    """After restart: no Future, but durable pending row → waiter_lost."""
+
+    def fake_resolve(req_id, decision):
+        return {
+            "ok": True,
+            "park_found": True,
+            "was_pending": True,
+            "reason": "resolved",
+            "req_id": req_id,
+            "park": {
+                "tool": "host_shell",
+                "micro_app_id": "app1",
+                "conversation_id": "c1",
+                "request_id": "r1",
+            },
+        }
+
+    with mock.patch.object(park, "_persist_resolve", side_effect=fake_resolve):
+        out = await park.resolve("mag-after-restart", "allow_once")
+    assert out.get("park_resolved") is False
+    assert out.get("reason") == "waiter_lost"
+    assert out.get("durable") is True
+    assert out.get("tool") == "host_shell"

@@ -234,6 +234,29 @@ CREATE INDEX IF NOT EXISTS idx_micro_app_gate_audit_app_created
   ON micro_app_gate_audit(micro_app_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_micro_app_gate_audit_user_created
   ON micro_app_gate_audit(user_id, created_at DESC);
+
+-- Park persistence: durable grant_required waiters (source of truth across runtime restarts).
+-- Hot path still uses in-process Future in agent-runtime; this table survives API/runtime restart.
+CREATE TABLE IF NOT EXISTS micro_app_parks (
+  req_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT '',
+  micro_app_id TEXT NOT NULL DEFAULT '',
+  conversation_id TEXT NOT NULL DEFAULT '',
+  request_id TEXT NOT NULL DEFAULT '',
+  tool TEXT NOT NULL DEFAULT '',
+  capability TEXT NOT NULL DEFAULT '',
+  args_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  decision TEXT NOT NULL DEFAULT '',
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  resolved_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_micro_app_parks_status_expires
+  ON micro_app_parks(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_micro_app_parks_conversation
+  ON micro_app_parks(conversation_id, created_at DESC);
 `)
 	return err
 }
@@ -1119,4 +1142,163 @@ func (d *DB) RecentMicroAppGrantPrompts(conversationID string) ([]Message, error
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// MicroAppPark statuses for durable grant_required waiters.
+const (
+	MicroAppParkPending  = "pending"
+	MicroAppParkResolved = "resolved"
+	MicroAppParkExpired  = "expired"
+	MicroAppParkCancelled = "cancelled"
+)
+
+// MicroAppPark is a durable park row keyed by grant-card req_id.
+type MicroAppPark struct {
+	ReqID          string     `json:"req_id"`
+	UserID         string     `json:"user_id,omitempty"`
+	MicroAppID     string     `json:"micro_app_id,omitempty"`
+	ConversationID string     `json:"conversation_id,omitempty"`
+	RequestID      string     `json:"request_id,omitempty"`
+	Tool           string     `json:"tool,omitempty"`
+	Capability     string     `json:"capability,omitempty"`
+	ArgsJSON       string     `json:"args_json,omitempty"`
+	Status         string     `json:"status"`
+	Decision       string     `json:"decision,omitempty"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+}
+
+// UpsertMicroAppPark inserts or refreshes a pending park (idempotent on req_id).
+func (d *DB) UpsertMicroAppPark(p MicroAppPark) (*MicroAppPark, error) {
+	reqID := strings.TrimSpace(p.ReqID)
+	if reqID == "" {
+		return nil, fmt.Errorf("req_id required")
+	}
+	now := Now()
+	expires := p.ExpiresAt
+	if expires.IsZero() {
+		expires = now.Add(15 * time.Minute)
+	}
+	argsJSON := strings.TrimSpace(p.ArgsJSON)
+	if argsJSON == "" || !json.Valid([]byte(argsJSON)) {
+		argsJSON = "{}"
+	}
+	_, err := d.SQL.Exec(`
+INSERT INTO micro_app_parks
+  (req_id, user_id, micro_app_id, conversation_id, request_id, tool, capability, args_json,
+   status, decision, expires_at, created_at, updated_at, resolved_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'',$10,$11,$11,NULL)
+ON CONFLICT (req_id) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  micro_app_id = EXCLUDED.micro_app_id,
+  conversation_id = EXCLUDED.conversation_id,
+  request_id = EXCLUDED.request_id,
+  tool = EXCLUDED.tool,
+  capability = EXCLUDED.capability,
+  args_json = EXCLUDED.args_json,
+  status = CASE
+    WHEN micro_app_parks.status = 'pending' THEN 'pending'
+    ELSE micro_app_parks.status
+  END,
+  expires_at = EXCLUDED.expires_at,
+  updated_at = EXCLUDED.updated_at
+`, reqID, strings.TrimSpace(p.UserID), strings.TrimSpace(p.MicroAppID),
+		strings.TrimSpace(p.ConversationID), strings.TrimSpace(p.RequestID),
+		strings.TrimSpace(p.Tool), strings.TrimSpace(p.Capability), argsJSON,
+		MicroAppParkPending, expires, now)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetMicroAppPark(reqID)
+}
+
+// GetMicroAppPark loads one park by req_id.
+func (d *DB) GetMicroAppPark(reqID string) (*MicroAppPark, error) {
+	reqID = strings.TrimSpace(reqID)
+	if reqID == "" {
+		return nil, ErrNotFound
+	}
+	var p MicroAppPark
+	var resolved sql.NullTime
+	err := d.SQL.QueryRow(`
+SELECT req_id, COALESCE(user_id,''), COALESCE(micro_app_id,''), COALESCE(conversation_id,''),
+       COALESCE(request_id,''), COALESCE(tool,''), COALESCE(capability,''), COALESCE(args_json,'{}'),
+       status, COALESCE(decision,''), expires_at, created_at, updated_at, resolved_at
+  FROM micro_app_parks WHERE req_id = $1`, reqID).Scan(
+		&p.ReqID, &p.UserID, &p.MicroAppID, &p.ConversationID, &p.RequestID,
+		&p.Tool, &p.Capability, &p.ArgsJSON, &p.Status, &p.Decision,
+		&p.ExpiresAt, &p.CreatedAt, &p.UpdatedAt, &resolved,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if resolved.Valid {
+		t := resolved.Time
+		p.ResolvedAt = &t
+	}
+	return &p, nil
+}
+
+// ResolveMicroAppPark marks a pending (or already-resolved same decision) park as resolved.
+// Returns the row and whether it was still pending before this call.
+func (d *DB) ResolveMicroAppPark(reqID, decision string) (*MicroAppPark, bool, error) {
+	reqID = strings.TrimSpace(reqID)
+	decision = strings.TrimSpace(decision)
+	if reqID == "" {
+		return nil, false, fmt.Errorf("req_id required")
+	}
+	if decision == "" {
+		decision = MicroAppGrantDeny
+	}
+	now := Now()
+	res, err := d.SQL.Exec(`
+UPDATE micro_app_parks
+   SET status = $2, decision = $3, resolved_at = $4, updated_at = $4
+ WHERE req_id = $1 AND status = $5
+`, reqID, MicroAppParkResolved, decision, now, MicroAppParkPending)
+	if err != nil {
+		return nil, false, err
+	}
+	n, _ := res.RowsAffected()
+	p, gerr := d.GetMicroAppPark(reqID)
+	if gerr != nil {
+		return nil, false, gerr
+	}
+	return p, n > 0, nil
+}
+
+// ExpireStaleMicroAppParks marks pending parks past expires_at as expired.
+func (d *DB) ExpireStaleMicroAppParks() (int64, error) {
+	now := Now()
+	res, err := d.SQL.Exec(`
+UPDATE micro_app_parks
+   SET status = $1, decision = CASE WHEN decision = '' THEN 'timeout' ELSE decision END,
+       resolved_at = COALESCE(resolved_at, $2), updated_at = $2
+ WHERE status = $3 AND expires_at <= $2
+`, MicroAppParkExpired, now, MicroAppParkPending)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// AliasMicroAppPark copies a park row under a new req_id (card dedupe).
+func (d *DB) AliasMicroAppPark(aliasReqID, canonicalReqID string) error {
+	alias := strings.TrimSpace(aliasReqID)
+	canon := strings.TrimSpace(canonicalReqID)
+	if alias == "" || canon == "" || alias == canon {
+		return nil
+	}
+	src, err := d.GetMicroAppPark(canon)
+	if err != nil {
+		return err
+	}
+	src.ReqID = alias
+	_, err = d.UpsertMicroAppPark(*src)
+	return err
 }

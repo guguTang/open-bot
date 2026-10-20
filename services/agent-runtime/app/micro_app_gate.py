@@ -514,9 +514,9 @@ async def await_dual_gate_with_park(
 ) -> tuple[str | None, str]:
     """Enforce dual-gate; on grant_required park until allow/deny resolves the same call.
 
-    Park store: ``micro_app_park`` in-process Future keyed by grant-card ``req_id``.
-    Resume trigger: client decide → UpsertGrant → runtime ``/v1/micro-app-grants/resolve``.
-    Deny/timeout fails this tool cleanly (no new-turn sendUserText).
+    Park store: in-process Future (hot) + durable ``micro_app_parks`` (req_id).
+    Resume: decide → UpsertGrant → durable resolve → runtime ``/v1/micro-app-grants/resolve``.
+    Deny/timeout fails this tool; restart → waiter_lost (no same-stack resume).
     """
     import uuid
 

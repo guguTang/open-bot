@@ -339,6 +339,10 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/micro-apps/tool-gate", s.requireInternal(s.handleInternalMicroAppToolGate))
 	mux.HandleFunc("POST /internal/micro-apps/grant-consume", s.requireInternal(s.handleInternalMicroAppGrantConsume))
 	mux.HandleFunc("POST /internal/micro-apps/grant-prompt", s.requireInternal(s.handleInternalMicroAppGrantPrompt))
+	mux.HandleFunc("POST /internal/micro-apps/parks", s.requireInternal(s.handleInternalMicroAppParkUpsert))
+	mux.HandleFunc("POST /internal/micro-apps/parks/resolve", s.requireInternal(s.handleInternalMicroAppParkResolve))
+	mux.HandleFunc("POST /internal/micro-apps/parks/expire", s.requireInternal(s.handleInternalMicroAppParkExpire))
+	mux.HandleFunc("POST /internal/micro-apps/parks/get", s.requireInternal(s.handleInternalMicroAppParkGet))
 	mux.HandleFunc("POST /internal/agents/clone", s.requireInternal(s.handleInternalCloneAgent))
 	mux.HandleFunc("POST /internal/agents/ask", s.requireInternal(s.handleInternalAskAgent))
 

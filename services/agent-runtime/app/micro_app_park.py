@@ -1,16 +1,14 @@
-"""In-process park/resume for model-path micro-app grant_required.
+"""Park/resume for model-path micro-app grant_required.
 
-When Gate B returns grant_required, the tool handler awaits a Future keyed by
-park req_id (same id as the micro_app_grant chat card). After the user allows
-(UpsertGrant) or denies, Go calls POST /v1/micro-app-grants/resolve which
-resolves the Future so the **same** tool call continues or fails cleanly.
+Hot path: in-process asyncio.Future keyed by grant-card req_id.
+Durable source of truth: Postgres micro_app_parks via Go internal API
+(`/internal/micro-apps/parks*`) so decide still completes cleanly after
+API/runtime restart.
 
-This mirrors Go host_confirm parking and iframe MicroAppGrantDialog — not a
-LangGraph interrupt()/Command(resume) path (approve_thread has no rebound
-tool_handler, so interrupt resume cannot execute host_* today).
-
-Process restart drops parks; decide still UpsertsGrant and returns
-park_resolved=false for a documented client fallback.
+After restart the in-flight tool stack is gone — resolve returns
+park_resolved=false with reason waiter_lost; client fallback continue
+(sendUserText) runs only then. Same-stack resume after restart is not
+supported (documented limitation).
 """
 
 from __future__ import annotations
@@ -50,6 +48,62 @@ def _loop_future() -> asyncio.Future[str]:
     return loop.create_future()
 
 
+def _persist_upsert(rec: ParkRecord, *, timeout_sec: float = DEFAULT_TIMEOUT_SEC, alias_of: str = "") -> None:
+    """Best-effort durable park upsert (source of truth across restarts)."""
+    try:
+        from . import openbot_api as obapi
+
+        payload: dict[str, Any] = {
+            "req_id": rec.req_id,
+            "user_id": rec.user_id,
+            "micro_app_id": rec.micro_app_id,
+            "conversation_id": rec.conversation_id,
+            "request_id": rec.request_id,
+            "tool": rec.tool,
+            "capability": rec.capability,
+            "args": rec.args,
+            "timeout_sec": int(timeout_sec) if timeout_sec > 0 else int(DEFAULT_TIMEOUT_SEC),
+        }
+        if alias_of:
+            payload["alias_of"] = alias_of
+        obapi._post("/internal/micro-apps/parks", payload, timeout=8.0)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "micro_app_park persist upsert failed req_id=%s err=%s",
+            rec.req_id,
+            e,
+        )
+
+
+def _persist_resolve(req_id: str, decision: str) -> dict[str, Any] | None:
+    """Best-effort durable park resolve. Returns Go response or None."""
+    try:
+        from . import openbot_api as obapi
+
+        out = obapi._post(
+            "/internal/micro-apps/parks/resolve",
+            {"req_id": req_id, "decision": decision},
+            timeout=8.0,
+        )
+        return out if isinstance(out, dict) else None
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "micro_app_park persist resolve failed req_id=%s err=%s",
+            req_id,
+            e,
+        )
+        return None
+
+
+def _persist_expire() -> None:
+    try:
+        from . import openbot_api as obapi
+
+        obapi._post("/internal/micro-apps/parks/expire", {}, timeout=8.0)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def create_park(
     *,
     req_id: str,
@@ -60,6 +114,8 @@ async def create_park(
     request_id: str = "",
     user_id: str = "",
     args: dict[str, Any] | None = None,
+    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    persist: bool = True,
 ) -> ParkRecord:
     """Register a park Future for req_id (idempotent if already pending)."""
     rid = (req_id or "").strip()
@@ -68,6 +124,8 @@ async def create_park(
     async with _lock:
         existing = _parks.get(rid)
         if existing is not None and not existing.future.done():
+            if persist:
+                _persist_upsert(existing, timeout_sec=timeout_sec)
             return existing
         fut = _loop_future()
         rec = ParkRecord(
@@ -88,7 +146,10 @@ async def create_park(
             rec.tool,
             rec.micro_app_id,
         )
-        return rec
+    if persist:
+        # Outside lock: HTTP must not hold the park lock.
+        _persist_upsert(rec, timeout_sec=timeout_sec)
+    return rec
 
 
 async def await_decision(
@@ -121,43 +182,91 @@ async def await_decision(
 
 
 async def resolve(req_id: str, decision: str) -> dict[str, Any]:
-    """Unblock a parked tool call. Called from the grant-decide API path."""
+    """Unblock a parked tool call. Called from the grant-decide API path.
+
+    Durable store is consulted when the in-process waiter is gone (restart):
+    park_resolved=false, reason=waiter_lost|expired|not_parked — client may
+    fallback-continue; grant upsert still applies.
+    """
     rid = (req_id or "").strip()
     dec = (decision or "").strip() or "deny"
     async with _lock:
         rec = _parks.get(rid)
-        if rec is None:
-            return {
-                "ok": True,
-                "park_resolved": False,
-                "reason": "not_parked",
-                "req_id": rid,
-            }
-        if rec.future.done():
-            return {
-                "ok": True,
-                "park_resolved": True,
-                "reason": "already_resolved",
-                "req_id": rid,
-                "decision": str(rec.future.result()),
-            }
-        rec.future.set_result(dec)
+        if rec is not None:
+            if rec.future.done():
+                hot = {
+                    "ok": True,
+                    "park_resolved": True,
+                    "reason": "already_resolved",
+                    "req_id": rid,
+                    "decision": str(rec.future.result()),
+                    "tool": rec.tool,
+                    "micro_app_id": rec.micro_app_id,
+                    "conversation_id": rec.conversation_id,
+                    "request_id": rec.request_id,
+                }
+            else:
+                rec.future.set_result(dec)
+                logger.info(
+                    "micro_app_park resolve req_id=%s decision=%s tool=%s",
+                    rid,
+                    dec,
+                    rec.tool,
+                )
+                hot = {
+                    "ok": True,
+                    "park_resolved": True,
+                    "reason": "resolved",
+                    "req_id": rid,
+                    "decision": dec,
+                    "tool": rec.tool,
+                    "micro_app_id": rec.micro_app_id,
+                    "conversation_id": rec.conversation_id,
+                    "request_id": rec.request_id,
+                }
+        else:
+            hot = None
+
+    # Always sync durable row (decide path may have already resolved it).
+    durable = _persist_resolve(rid, dec)
+
+    if hot is not None:
+        return hot
+
+    # No in-process waiter — restart or never parked in this process.
+    if durable and durable.get("park_found"):
+        dreason = str(durable.get("reason") or "")
+        # Same-stack resume is impossible without the Future; treat as safe fail.
+        if dreason == "expired":
+            reason = "expired"
+        else:
+            reason = "waiter_lost"
         logger.info(
-            "micro_app_park resolve req_id=%s decision=%s tool=%s",
+            "micro_app_park resolve durable-only req_id=%s reason=%s decision=%s",
             rid,
+            reason,
             dec,
-            rec.tool,
         )
+        park = durable.get("park") if isinstance(durable.get("park"), dict) else {}
         return {
             "ok": True,
-            "park_resolved": True,
+            "park_resolved": False,
+            "reason": reason,
             "req_id": rid,
             "decision": dec,
-            "tool": rec.tool,
-            "micro_app_id": rec.micro_app_id,
-            "conversation_id": rec.conversation_id,
-            "request_id": rec.request_id,
+            "tool": str(park.get("tool") or ""),
+            "micro_app_id": str(park.get("micro_app_id") or ""),
+            "conversation_id": str(park.get("conversation_id") or ""),
+            "request_id": str(park.get("request_id") or ""),
+            "durable": True,
         }
+
+    return {
+        "ok": True,
+        "park_resolved": False,
+        "reason": "not_parked",
+        "req_id": rid,
+    }
 
 
 def peek(req_id: str) -> dict[str, Any] | None:
@@ -177,20 +286,20 @@ def peek(req_id: str) -> dict[str, Any] | None:
     }
 
 
-
 async def alias_to(alias_req_id: str, canonical_req_id: str) -> bool:
     """Make alias_req_id wait on the same Future as canonical_req_id."""
     alias = (alias_req_id or "").strip()
     canon = (canonical_req_id or "").strip()
     if not alias or not canon or alias == canon:
         return False
+    persist_rec: ParkRecord | None = None
     async with _lock:
         crec = _parks.get(canon)
         if crec is None:
             return False
         arec = _parks.get(alias)
         if arec is None:
-            _parks[alias] = ParkRecord(
+            arec = ParkRecord(
                 req_id=alias,
                 micro_app_id=crec.micro_app_id,
                 tool=crec.tool,
@@ -201,17 +310,20 @@ async def alias_to(alias_req_id: str, canonical_req_id: str) -> bool:
                 args=dict(crec.args),
                 future=crec.future,
             )
-            return True
-        if not arec.future.done() and arec.future is not crec.future:
-            # Prefer canonical; abandon alias future if unused.
-            if not arec.future.done():
-                try:
-                    arec.future.cancel()
-                except Exception:  # noqa: BLE001
-                    pass
+            _parks[alias] = arec
+        elif not arec.future.done() and arec.future is not crec.future:
+            try:
+                arec.future.cancel()
+            except Exception:  # noqa: BLE001
+                pass
             arec.future = crec.future
             _parks[alias] = arec
-        return True
+        persist_rec = _parks[alias]
+    # Persist alias key so decide(card req_id) finds durable row after restart.
+    if persist_rec is not None:
+        _persist_upsert(persist_rec)
+    return True
+
 
 def clear_all() -> None:
     """Test helper."""
@@ -219,3 +331,13 @@ def clear_all() -> None:
         if not rec.future.done():
             rec.future.cancel()
     _parks.clear()
+
+
+def rehydrate_on_startup() -> None:
+    """On runtime start: expire stale durable parks; hot Futures are empty.
+
+    Cannot restore in-flight tool stacks. Decide after restart uses durable
+    resolve → waiter_lost + client fallback continue.
+    """
+    _persist_expire()
+    logger.info("micro_app_park rehydrate_on_startup: hot cache empty; expired stale durable parks")

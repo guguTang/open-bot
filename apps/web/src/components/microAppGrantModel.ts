@@ -17,6 +17,8 @@ export type MicroAppGrantPromptPayload = {
   auto_retry?: boolean;
   /** True when runtime unblocked the parked same tool call. */
   park_resolved?: boolean;
+  /** resolved | waiter_lost | expired | not_parked | runtime_unreachable */
+  park_reason?: string;
   status: "pending" | "allowed" | "denied" | string;
   decision?: string;
   allowlist_entry?: string;

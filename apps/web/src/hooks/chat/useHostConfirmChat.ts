@@ -232,8 +232,15 @@ export function useHostConfirmChat(deps: {
             toast.message("已授权，正在继续原工具调用…", { duration: 2500 });
             return;
           }
-          // Documented fallback: no in-process waiter (runtime restart / non-park path).
-          toast.message("已授权；未找到暂停中的工具调用，将发续跑消息…", { duration: 3500 });
+          // Documented fallback: no in-process waiter (runtime restart / durable-only).
+          const reason = savedParsed?.park_reason || "";
+          const restartish = reason === "waiter_lost" || reason === "expired" || reason === "runtime_unreachable";
+          toast.message(
+            restartish
+              ? "已授权；服务已重启无法恢复原调用，将发续跑消息…"
+              : "已授权；未找到暂停中的工具调用，将发续跑消息…",
+            { duration: 3500 },
+          );
           const retryText = microAppGrantRetryUserText({
             ...parsed,
             status: "allowed",

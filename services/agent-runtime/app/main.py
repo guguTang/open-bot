@@ -222,6 +222,12 @@ def _override_from_body(llm: LLMConfig | None) -> LLMOverride | None:
 @app.on_event("startup")
 async def _startup() -> None:
     skills.reload()
+    try:
+        from . import micro_app_park as park_mod
+
+        park_mod.rehydrate_on_startup()
+    except Exception:  # noqa: BLE001
+        pass
     if durable_enabled():
         try:
             await get_checkpointer()
