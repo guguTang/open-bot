@@ -30,9 +30,9 @@ import { cn } from "@/lib/utils";
  * 「我的工具」 hub — dual-surface:
  * - sheetForm (touch-ui OR layout-narrow ≤860 / Capacitor): Settings-hub isomorphic
  *   (gray #F2F2F7 + white cards + ≥44 circular chrome).
- * - wide Web / desktop Tauri: settings-dialog white elevated (~860×680) for hub list
- *   and open tool (iframe fills shell; no content-fit shrink / card-in-card frame).
- *   Title row + 32 close — not fullscreen mobile Settings.
+ * - wide Web / desktop Tauri: hub list stays settings-dialog ~860×680; **open tool**
+ *   uses settings-dialog--micro-open (near-fullscreen panel). Iframe fill-available
+ *   under top bar — no content-fit shrink / card-in-card / centered small frame.
  */
 
 type Props = {
@@ -142,6 +142,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
           className={cn(
             "modal settings-dialog max-w-none gap-0 overflow-hidden p-0 sm:max-w-none",
             sheetForm && "settings-dialog-shell",
+            !sheetForm && openApp && "settings-dialog--micro-open",
           )}
         >
           <DialogDescription className="sr-only">

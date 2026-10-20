@@ -5298,11 +5298,19 @@ html.touch-ui .composer-quote-clear {
 }
 
 /* === micro-app shell fill-available (no content-fit squeeze) ===
-   Hub list + open tool share fixed settings-dialog ~860×680 on wide desktop.
-   Iframe fills shell content under the minimal top bar; no outer card frame /
-   forced aspect that deforms the tool. Overflow scrolls inside the iframe (or
-   shell body when meta panels are open). SDK may still post resize events;
-   host does not shrink dialog chrome from them. */
+   Hub list: settings-dialog ~860×680.
+   Open tool (wide): settings-dialog--micro-open ≈ near-fullscreen panel;
+   iframe fills chrome under the top bar to the panel edges. No content-fit /
+   fit-content / max-content centering that leaves empty white margins.
+   SDK resize posts do not shrink dialog chrome. */
+
+/* Wide desktop: open tool = near-fullscreen white panel (not 860×680 card) */
+.settings-dialog.settings-dialog--micro-open {
+  width: calc(100vw - 48px);
+  max-width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
+  max-height: calc(100vh - 48px);
+}
 
 .micro-app-shell--fill {
   display: flex;
@@ -5323,7 +5331,11 @@ html.touch-ui .composer-quote-clear {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  /* Fill leftover chrome; do not hug content into a padded card */
+  /* Kill base stage card chrome (margin / radius) so tool reaches panel edges */
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  padding: 0;
 }
 
 .micro-app-shell--fill .micro-app-shell-frame--fill {
@@ -5334,6 +5346,9 @@ html.touch-ui .composer-quote-clear {
   height: 100%;
   min-height: 0;
   border: 0;
+  /* No host transform / aspect-ratio that squashes iframe content */
+  transform: none;
+  aspect-ratio: auto;
 }
 
 .micro-app-shell--fill .micro-app-shell-placeholder {
@@ -5351,9 +5366,11 @@ html.touch-ui .composer-quote-clear {
 }
 
 .settings-dialog-shell .micro-app-shell--fill .micro-app-shell-stage--fill {
-  /* Keep modest inset on gray Settings hub bg, but iframe still fills the stage */
+  /* Modest inset on gray Settings hub bg; iframe still fills the stage box */
   flex: 1 1 auto;
   min-height: 0;
+  margin: 0 16px max(16px, var(--safe-bottom, 0px));
+  border-radius: 16px;
 }
 
 /* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */
