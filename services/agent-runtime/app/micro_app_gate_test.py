@@ -75,6 +75,8 @@ def test_is_hostish():
     assert is_hostish_tool("host_ssh_exec")
     assert not is_hostish_tool("sandbox_shell")
     assert not is_hostish_tool("draft_micro_app")
+    assert not is_hostish_tool("upload_micro_app_bundle")
+    assert not is_hostish_tool("pin_micro_app")
 
 
 def test_iter_tool_defs_allowed_names():

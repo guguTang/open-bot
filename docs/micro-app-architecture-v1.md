@@ -1,6 +1,6 @@
 # open-bot 微应用（Micro App）技术架构与能力实现路径
 
-> 状态：**Phase 0–6 + 缺口收口**已按本文在 `develop` 落地（本地 commit，默认不推）；授权后续跑已支持；系统级 Widget / 团队模板分发 / 入站 Hook 代建 / store / `device.contacts` 为**延期项**（§10.5）  
+> 状态：**Phase 0–6 + 缺口收口**已按本文在 `develop` 落地（本地 commit，默认不推）；**生成后自动落 bundle**（`upload_micro_app_bundle` / `POST /internal/micro-apps/bundle`）已落地，用户无需手传 zip；授权后续跑已支持；系统级 Widget / 团队模板分发 / 入站 Hook 代建 / store / `device.contacts` 为**延期项**（§10.5）  
 > 日期：2026-10-20（Asia/Shanghai）  
 > 校对原则：以仓内现实现为准；改 API/表/能力时同步改本文。
 
@@ -23,7 +23,7 @@
 - 团队模板包分发（**延期**，见 §10.5）。
 - 完整小程序商店与计费。
 - 把所有 skills.sh 包自动变成微应用 UI。
-- （已取消）Runtime 工具曾标为非目标；**Phase 4 已正式注册** `draft_micro_app` / `pin_micro_app`（仍强制 `user_intent`）。
+- （已取消）Runtime 工具曾标为非目标；**Phase 4 已正式注册** `draft_micro_app` / `pin_micro_app`（仍强制 `user_intent`）；另注册 `upload_micro_app_bundle`（自动落 bundle，不 pin）。
 
 ---
 
@@ -74,7 +74,7 @@ Placement 只指向 MicroApp.id
                 ▼                 ▼
      ┌──────────────────┐  ┌─────────────────────┐
      │ agent-runtime    │  │ Object key prefix    │
-     │ draft/pin 工具   │  │ micro-apps/{owner}/  │
+     │ draft/upload/pin │  │ micro-apps/{owner}/  │
      │ → /internal/     │  │ {app_id}/bundle.zip  │
      │   micro-apps/*   │  │                      │
      └──────────────────┘  └─────────────────────┘
@@ -187,7 +187,8 @@ ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEX
 | PUT | `/v1/micro-apps/{id}/grants/{capability}` | 写三态；`host.shell.run` 可带 `command_allowlist`（省略=保留，`[]`=清空） |
 | DELETE | `/v1/micro-apps/{id}/grants/{capability}` | **Phase 3**：恢复「每次询问」（`?machine_id=`） |
 | POST | `/v1/micro-apps/{id}/session` | 短时 scoped token（非全权 JWT） |
-| GET/PUT | `/v1/micro-apps/{id}/bundle` | 下载 / 上传 zip（≤5MiB） |
+| GET/PUT | `/v1/micro-apps/{id}/bundle` | 下载 / **手动**上传 zip（≤5MiB；可选备用） |
+| POST | `/internal/micro-apps/bundle` | Runtime 自动上传：`zip_base64` 或 `files` map；与 PUT 同校验/落库（X-Internal-Token） |
 | GET | `/v1/micro-apps/{id}/runtime` | 解压后的 entry + files（供 iframe srcdoc） |
 | POST | `/v1/micro-apps/{id}/rpc/grant-check` | 查 Grant / 是否弹窗；`host.shell.run` 可带 `command`，返回 `command_allowlisted` / `command_allowlist` / `reason` |
 | POST | `/v1/micro-apps/{id}/rpc/grant-consume` | 消费 `allow_once` |
@@ -263,7 +264,7 @@ Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `a
 
 - Host Bridge `routine.manage`：`enable` / `disable` / `update`（cron、prompt 等）/ `run_now`，走 Grant。
 - PATCH `routine_config` 在 **已 pin 且已有 `routine_id`** 时同步 `UpdateRoutine`；同步失败则 PATCH 失败。
-- Runtime：`draft_micro_app` / `pin_micro_app` 已挂 `TOOL_DEFS`；经 `/internal/micro-apps/create|pin`（与 `/v1/micro-apps` 同语义，强制 `user_intent`）。
+- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` 已挂 `TOOL_DEFS`；经 `/internal/micro-apps/create|bundle|pin`（create/pin 与 `/v1` 同语义并强制 `user_intent`；bundle 不 pin）。
 
 **仍占位/未做**：
 
@@ -359,7 +360,7 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 ### 7.1 Web / Desktop（`apps/web`）
 
 1. 账户菜单「我的工具」→ `MicroAppsHub`（能力矩阵、chat_pin / desktop_shortcut / mobile_shortcut 勾选；pin 弹窗可多选入口；「＋ 例行工具」）
-2. `MicroAppShell`：上传 zip、runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明
+2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明
 3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）
 4. `lib/microApp/hostBridge.ts` + `deviceBridge.ts`：RPC
 5. `MicroAppGrantDialog`：审批三态文案；shell 显示命令 + 前缀白名单
@@ -369,26 +370,31 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 ### 7.2 Android / Runtime
 
 - Capacitor：同 H5 入口；host 能力灰显；侧栏首页显示 `mobile_shortcut` 快捷区。
-- Runtime：`draft_micro_app` / `pin_micro_app` 已注册（`micro_apps_stub.py` → `TOOL_DEFS`）；内部 API `/internal/micro-apps/create|pin`。
+- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` 已注册（`micro_apps_stub.py` → `TOOL_DEFS`）；内部 API `/internal/micro-apps/create|bundle|pin`。
 
 ---
 
-## 8. draft / pin 路径（已拍板，已实现）
+## 8. draft / upload / pin 路径（已拍板，已实现）
 
 ```
 仅当（a）用户表达保存/固定意图，或（b）bot 确认「要不要固定」且用户同意
-  → POST /v1/micro-apps  user_intent=save|pin_agree  → status=draft
-  → 用户确认 → POST .../pin  user_intent=user_pin|confirm
-       · confirmed_* + placement hub
-  → WS micro_apps_changed
+  → draft_micro_app / POST /v1|internal/micro-apps  user_intent=…  → status=draft
+  →（kind=ui，主路径）Bot 生成 HTML 后 upload_micro_app_bundle
+       · POST /internal/micro-apps/bundle  files{} 或 zip_base64
+       · 与 PUT /v1/micro-apps/{id}/bundle 同：解压、路径穿越拒绝、manifest ⊆ capabilities、≤5MiB、MinIO/本地
+       · 用户无需手传 zip；Web 手动上传仅为可选备用
+  → 用户确认 → pin_micro_app / POST .../pin  user_intent=user_pin|confirm
+       · confirmed_* + placement hub（禁止静默 pin）
+  → WS micro_apps_changed（含 reason=bundle）
 ```
 
-禁止：实现完静默建库；禁止仅凭模型一句「已固定」而无 pin API。
+禁止：实现完静默建库；禁止仅凭模型一句「已固定」而无 pin API；**禁止无 user_intent 的 draft/pin**。  
+空态文案：已有 bundle 不提示「必须先上传」；仅无 bundle 时说明可由 Bot 自动上传，手动 zip 可选。
 
 Bundle 规范（ui）：
 
 ```
-bundle.zip
+bundle.zip  （或 files map 服务端打包）
   manifest.json   # entry/entrypoint, capabilities[] ⊆ 服务端声明
   index.html
   assets/...
@@ -445,7 +451,7 @@ bundle.zip
 
 | 项 | 状态 | 说明 |
 |----|------|------|
-| `draft_micro_app` / `pin_micro_app` 注册 `TOOL_DEFS` | ✅ | 强制 `user_intent`；经 `/internal/micro-apps/*` 调与 `/v1/micro-apps` 同语义的 create/pin |
+| `draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` | ✅ | draft/pin 强制 `user_intent`；upload 经 `/internal/micro-apps/bundle` 自动落库，不 pin；用户手传 zip 可选备用 |
 | PATCH `routine_config` → `UpdateRoutine` | ✅ | 仅 pinned + 有 `routine_id`；失败则整次 PATCH 失败 |
 | Host Bridge `routine.manage` | ✅ | enable/disable/update/run_now + Grant |
 | Host Bridge `host.clipboard.read` / `write` | ✅ | Grant 默认 `allow_once`（高敏目录） |
@@ -502,7 +508,8 @@ bundle.zip
 3. 未声明 / 未授权 / deny 不执行；allow_once 可消费。
 4. 无桌面 host 时截屏/shell 灰显并说明原因；能力矩阵展示原因。
 5. 口头「已固定」而无 pin 行 → 失败。
-6. 上传 zip → 打开 Shell → P0 RPC 冒烟；图经 `chat.attach` 进会话。
+6. 上传 zip（或 Bot `upload_micro_app_bundle`）→ 打开 Shell → P0 RPC 冒烟；图经 `chat.attach` 进会话。
+6b. kind=ui：draft 后工具自动上传 bundle，用户不手传 zip 即可打开；无 bundle 空态不写「必须先上传」；有 bundle 不推强制上传。
 7. chat_pin 出现在作曲框上方；勾选/取消与 placement 一致。
 8. kind=skill pin 后账号（及来源 Bot）技能为启用。
 9. （Phase 3）pin 时勾选 desktop_shortcut / mobile_shortcut → 对应端侧栏「快捷工具」出现，点击打开 Shell；Hub 取消勾选即消失。
@@ -567,7 +574,7 @@ bundle.zip
 | API | `services/api/internal/httpserver/micro_apps*.go` |
 | Web Hub/Shell | `apps/web/src/components/MicroAppsHub.tsx`、`MicroAppShell.tsx`、`MicroAppChatPinBar.tsx`、`MicroAppCapabilityMatrix.tsx`、`MicroAppShortcuts.tsx`、`MicroAppShellGrantPanel.tsx`、`MicroAppRoutinePanel.tsx`、`MicroAppRoutineCreateForm.tsx` |
 | SDK / Bridge | `apps/web/src/lib/microApp/`（含 `deviceBridge.ts`） |
-| Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`）；内部 API `httpserver/micro_apps_internal.go` |
+| Runtime tools | `services/agent-runtime/app/micro_apps_stub.py`（`TOOL_DEFS`：draft/upload/pin）；内部 API `httpserver/micro_apps_internal.go`（含 bundle） |
 | Phase 6 dual-gate | `httpserver/micro_apps_tool_gate.go`；runtime `micro_app_gate.py`；`agent.invoke` → `micro_app_id` |
 | 缺口收口 Grant 卡 + park/resume + 抗重启 | `httpserver/micro_apps_grant_prompt.go` / `micro_apps_parks.go`；表 `micro_app_parks`；runtime `micro_app_park.py` / `await_dual_gate_with_park`；Web `settleMicroAppGrant`；decide→durable+resolve |
 | 统一授权 UI | `MicroAppGrantDecisionPanel` → `MicroAppGrantConfirmCard`（聊天）/ `MicroAppGrantDialog`（iframe） |

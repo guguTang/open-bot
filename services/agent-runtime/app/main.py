@@ -1526,6 +1526,16 @@ async def openai_path(
                 )
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "upload_micro_app_bundle":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                return json.dumps(
+                    micro_apps.upload_micro_app_bundle(str(user_id or ""), dict(args or {})),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name == "pin_micro_app":
             from . import micro_apps_stub as micro_apps
 

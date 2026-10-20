@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 // Internal micro-apps endpoints for agent-runtime tools (X-Internal-Token).
 // Same create/pin semantics as /v1/micro-apps (including user_intent gate).
+// Bundle upload reuses PUT /v1/micro-apps/{id}/bundle unpack + MinIO store logic.
 
 func (s *Server) handleInternalCreateMicroApp(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -113,4 +115,79 @@ func (s *Server) handleInternalPinMicroApp(w http.ResponseWriter, r *http.Reques
 	}
 	s.publishMicroAppsChanged(uid, "pinned", app.ID, extra)
 	writeJSON(w, http.StatusOK, app)
+}
+
+// POST /internal/micro-apps/bundle — runtime auto-upload after generating UI files.
+// Accepts zip_base64 and/or files map (utf-8 string or {encoding,content}); same
+// validation as user JWT PUT /v1/micro-apps/{id}/bundle.
+func (s *Server) handleInternalUploadMicroAppBundle(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UserID     string                     `json:"user_id"`
+		ID         string                     `json:"id"`
+		MicroAppID string                     `json:"micro_app_id"`
+		ZipBase64  string                     `json:"zip_base64"`
+		Files      map[string]json.RawMessage `json:"files"`
+		Entrypoint string                     `json:"entrypoint"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	uid := strings.TrimSpace(body.UserID)
+	id := strings.TrimSpace(body.ID)
+	if id == "" {
+		id = strings.TrimSpace(body.MicroAppID)
+	}
+	if uid == "" || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and id required"})
+		return
+	}
+	app, err := s.db.GetMicroApp(uid, id)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if app.Status == db.MicroAppStatusArchived {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "archived"})
+		return
+	}
+
+	var zipBytes []byte
+	zipB64 := strings.TrimSpace(body.ZipBase64)
+	if zipB64 != "" {
+		raw, err := base64.StdEncoding.DecodeString(zipB64)
+		if err != nil {
+			raw, err = base64.RawStdEncoding.DecodeString(zipB64)
+		}
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid zip_base64"})
+			return
+		}
+		zipBytes = raw
+	} else if len(body.Files) > 0 {
+		files, err := decodeMicroAppFilesMap(body.Files)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		zipBytes, err = packMicroAppZip(files)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "zip_base64 or files required"})
+		return
+	}
+
+	result, err := s.applyMicroAppBundleZip(r.Context(), uid, app, zipBytes, body.Entrypoint)
+	if err != nil {
+		writeMicroAppBundleError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }

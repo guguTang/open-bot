@@ -7,6 +7,8 @@ type Props = {
   title?: string;
   canPin?: boolean;
   canUpload?: boolean;
+  /** When true, label is「重新上传」; when false/missing and no bundle,「手动上传（可选）」 */
+  hasBundle?: boolean;
   canArchive?: boolean;
   onPin?: () => void;
   onUpload?: () => void;
@@ -22,6 +24,7 @@ export function MicroAppMoreSheet({
   title,
   canPin,
   canUpload = true,
+  hasBundle = false,
   canArchive = true,
   onPin,
   onUpload,
@@ -66,7 +69,7 @@ export function MicroAppMoreSheet({
             <span className="action-sheet-row-leading" aria-hidden>
               <Upload size={20} strokeWidth={2} aria-hidden />
             </span>
-            上传 Bundle
+            {hasBundle ? "重新上传 Bundle" : "手动上传 Bundle（可选）"}
           </button>
         ) : null}
         {canArchive && onArchive ? (

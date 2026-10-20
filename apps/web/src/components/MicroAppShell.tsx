@@ -236,21 +236,27 @@ export function MicroAppShell({
             </div>
           ) : error ? (
             <div className="micro-app-shell-placeholder">
+              <p className="micro-app-shell-placeholder-title">
+                {error.includes("bundle_not_found") || error.includes("404")
+                  ? "还没有 UI Bundle"
+                  : "加载失败"}
+              </p>
               <p className="settings-empty" style={{ padding: 0 }}>
                 {error.includes("bundle_not_found") || error.includes("404")
-                  ? "尚未上传 UI Bundle"
+                  ? "可在对话里让 Bot 生成界面并自动上传；无需手传 zip。若已有本地包，也可手动上传作为备用。"
                   : error}
               </p>
               <Button
                 type="button"
                 size="sm"
+                variant="secondary"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
               >
-                上传 zip（含 index.html / manifest.json）
+                手动上传 zip（可选）
               </Button>
               <p className="settings-empty" style={{ paddingTop: 8 }}>
-                对象存储键：micro-apps/&#123;owner&#125;/&#123;app&#125;/。沙箱 iframe 无 allow-same-origin；能力经父页面 Host Bridge。
+                zip 通常含 index.html / manifest.json。沙箱 iframe 无 allow-same-origin；能力经父页面 Host Bridge。
               </p>
             </div>
           ) : srcdoc ? (
@@ -270,6 +276,7 @@ export function MicroAppShell({
         title={app.title}
         canPin={app.status === "draft" && Boolean(onAskPin)}
         canUpload
+        hasBundle={Boolean(app.bundle_hash) || Boolean(srcdoc)}
         canArchive={Boolean(onArchive)}
         onPin={onAskPin}
         onUpload={() => fileRef.current?.click()}
