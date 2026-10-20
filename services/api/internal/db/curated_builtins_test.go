@@ -18,7 +18,7 @@ func TestCuratedBuiltinSlugsFromRepo(t *testing.T) {
 		t.Fatalf("expected curated batch, got %v", slugs)
 	}
 	want := map[string]bool{
-		"find-skills": true, "grill-me": true, "tdd": true, "diagnosing-bugs": true,
+		"find-skills": true, "generative-ui": true, "grill-me": true, "tdd": true, "diagnosing-bugs": true,
 		"vercel-react-best-practices": true, "frontend-design": true,
 	}
 	for name := range want {
@@ -41,7 +41,7 @@ func TestFindSkillsAlwaysOnDiscovery(t *testing.T) {
 	if !IsAlwaysOnBuiltin("find-skills") {
 		t.Fatal("find-skills must be role=always_on discovery entry")
 	}
-	if IsAlwaysOnBuiltin("grill-me") || IsAlwaysOnBuiltin("tdd") {
+	if IsAlwaysOnBuiltin("grill-me") || IsAlwaysOnBuiltin("tdd") || IsAlwaysOnBuiltin("generative-ui") {
 		t.Fatal("other curated skills must remain toggleable (not always_on)")
 	}
 	got := AlwaysOnBuiltinSlugs()

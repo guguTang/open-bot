@@ -257,9 +257,10 @@ func (d *DB) ListUserSkills(userID string) ([]UserSkill, error) {
 }
 
 // SeedUserSkills inserts missing user_skills rows.
-// Brand-new accounts: enable all catalog skills (first-party disk + curated skills.sh batch).
-// Existing accounts: newly appeared skills default to enabled=false so adding curated
-// packages does not force-enable them on old bots/users (no backfill). ON CONFLICT DO NOTHING.
+// Brand-new accounts: enable all catalog skills (first-party disk + curated default-on batch).
+// Existing accounts: newly appeared skills default to enabled=false, EXCEPT curated/default-on
+// (public/common, e.g. generative-ui) and always_on discovery entries which insert as enabled=true.
+// Does not rewrite existing user_skills / agent_skills rows (no backfill). ON CONFLICT DO NOTHING.
 func (d *DB) SeedUserSkills(userID string, global []GlobalSkill) error {
 	var n int
 	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM user_skills WHERE user_id = $1`, userID).Scan(&n); err != nil {
@@ -269,11 +270,11 @@ func (d *DB) SeedUserSkills(userID string, global []GlobalSkill) error {
 	for _, g := range global {
 		enabled := true
 		if !brandNew {
-			// Existing user: do not auto-enable skills that just appeared in the catalog.
+			// Existing user: do not auto-enable non-curated skills that just appeared.
 			enabled = false
 		}
-		// Discovery entry (find-skills): always account-enabled.
-		if IsAlwaysOnBuiltin(g.Name) {
+		// Public/common curated default-on + always_on discovery: enable on insert.
+		if IsAlwaysOnBuiltin(g.Name) || IsCuratedBuiltin(g.Name) {
 			enabled = true
 		}
 		_, err := d.SQL.Exec(
@@ -300,10 +301,10 @@ func (d *DB) SeedUserSkills(userID string, global []GlobalSkill) error {
 }
 
 // SeedNewAgentDefaultSkills materializes agent_skills for a newly created bot.
-// Default-on = curated skills.sh batch (always, when present on disk) ∪ currently
-// account-enabled first-party skills. role=always_on (find-skills) is always mounted
-// as the discovery entry. Does not rewrite existing agent_skills rows.
-// Old bots are untouched (no backfill).
+// Default-on = curated default-on list (skills.sh batch + first-party public/common such as
+// generative-ui; always, when present on disk) ∪ currently account-enabled first-party skills.
+// role=always_on (find-skills) is always mounted as the discovery entry.
+// Does not rewrite existing agent_skills rows. Old bots are untouched (no backfill).
 func (d *DB) SeedNewAgentDefaultSkills(userID, agentID string) error {
 	var n int
 	if err := d.SQL.QueryRow(`SELECT COUNT(*) FROM agent_skills WHERE agent_id = $1`, agentID).Scan(&n); err != nil {

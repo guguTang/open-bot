@@ -15,7 +15,7 @@ const (
 	CuratedRoleAlwaysOn = "always_on" // discovery entry: always mounted; disable blocked
 )
 
-// CuratedBuiltin is one skills.sh skill that is default-on for new bots.
+// CuratedBuiltin is one default-on skill for new bots (skills.sh batch or first-party public).
 type CuratedBuiltin struct {
 	Slug          string `json:"slug"`
 	Role          string `json:"role"`
@@ -76,7 +76,7 @@ func loadCuratedManifest() {
 	})
 }
 
-// CuratedBuiltinSlugs returns the ordered curated skills.sh default-on list.
+// CuratedBuiltinSlugs returns the ordered curated default-on list (skills.sh + first-party public).
 // Empty when skills/curated-builtins.json is missing or invalid.
 func CuratedBuiltinSlugs() []string {
 	loadCuratedManifest()
@@ -85,7 +85,7 @@ func CuratedBuiltinSlugs() []string {
 	return out
 }
 
-// IsCuratedBuiltin reports whether name is in the curated skills.sh batch.
+// IsCuratedBuiltin reports whether name is in the curated default-on list.
 func IsCuratedBuiltin(name string) bool {
 	loadCuratedManifest()
 	return curatedSet[strings.TrimSpace(name)]

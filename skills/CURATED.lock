@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-10-12T05:43:02Z",
+  "synced_at": "2026-10-20T05:11:47Z",
   "manifest_version": 1,
   "skills": {
     "find-skills": {
@@ -12,6 +12,18 @@
       "preserve_local": true,
       "status": "preserved_local",
       "content_hash": "913b9d37d0d54047"
+    },
+    "generative-ui": {
+      "slug": "generative-ui",
+      "package": null,
+      "skill": null,
+      "repo": null,
+      "path": null,
+      "ref": null,
+      "preserve_local": true,
+      "status": "preserved_local",
+      "content_hash": "ecc89f219d536115",
+      "note": "First-party OpenUI skill; sync skips overwrite"
     },
     "grill-me": {
       "slug": "grill-me",

@@ -47,6 +47,7 @@ code-review (no parallel sub-agents), Chinese brief notes where helpful.
 默认开启（新 Bot / 新账号），**不是** skills.sh 全榜：
 
 - `find-skills` ← vercel-labs/skills (**always_on** discovery entry: always mounted for new bots; disable blocked; **preserve_local** open-bot Settings install UX, sync 不覆盖)
+- `generative-ui` ← open-bot first-party（OpenUI 交互式回复；**preserve_local** 公共默认技能，可关）
 - `grill-me` / `grill-with-docs` / `improve-codebase-architecture` / `tdd` / `handoff` / `triage` / `prototype` / `domain-modeling` / `teach` / `codebase-design` / `diagnosing-bugs` ← mattpocock/skills（`tdd` 与 `diagnosing-bugs` 保留 open-bot 改编，sync 不覆盖）
 - `frontend-design` ← anthropics/skills
 - `vercel-react-best-practices` ← vercel-labs/agent-skills

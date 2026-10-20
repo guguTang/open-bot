@@ -896,7 +896,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	// New-bot default template: curated skills.sh batch default-on (+ account-enabled first-party).
+	// New-bot default template: curated default-on (skills.sh + first-party public e.g. generative-ui) + account-enabled first-party.
 	// Old bots are never rewritten (SeedNewAgentDefaultSkills no-ops when agent_skills already exist).
 	if err := s.db.SeedNewAgentDefaultSkills(uid, a.ID); err != nil {
 		// Best-effort; agent row already created.
