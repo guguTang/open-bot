@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Ellipsis, Loader2, Pin, PinOff, Upload, X } from "lucide-react";
+import { ChevronLeft, Ellipsis, Loader2, Pin, PinOff, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchMicroAppRuntime,
@@ -315,6 +315,20 @@ export function MicroAppShell({
                     <Upload size={16} strokeWidth={2} aria-hidden />
                     {hasBundle ? "重新上传 Bundle" : "手动上传 Bundle（可选）"}
                   </DropdownMenuItem>
+                ) : null}
+                {canArchive && onArchive ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => {
+                        onArchive();
+                      }}
+                    >
+                      <Trash2 size={16} strokeWidth={2} aria-hidden />
+                      下架
+                    </DropdownMenuItem>
+                  </>
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
