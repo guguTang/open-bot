@@ -22,18 +22,22 @@
 }
 
 /* ── 品牌色 ─────────────────────────────────────────────────────────
-   HeroUI 默认 accent 是 oklch(0.6204 0.195 253.83)，偏青的通用蓝，
-   用它的产品放在一起分不出彼此。这里保持**同样的明度**（对比度不冒险），
-   只把色相推到靛紫并略降彩度，避开「又一个 SaaS 蓝」，
-   同时保留库已验证过的前景对比度。 */
+   与 web 共用一套设计系统（design/tokens.json，紫罗兰 #7C3AED，白字对比度 5.7:1）。
+   下面的区块由脚本生成：node scripts/gen-design-tokens.mjs */
+/* BEGIN design-tokens（由 scripts/gen-design-tokens.mjs 从 design/tokens.json 生成，请勿手改） */
 @layer theme {
   :root {
     @variant light {
-      --accent: oklch(0.615 0.176 272);
+      --accent: #7C3AED;
+      --accent-foreground: #FFFFFF;
+      --focus: #7C3AED;
     }
 
     @variant dark {
-      --accent: oklch(0.615 0.176 272);
+      --accent: #7C3AED;
+      --accent-foreground: #FFFFFF;
+      --focus: #A78BFA;
     }
   }
 }
+/* END design-tokens */

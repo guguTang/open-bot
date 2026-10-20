@@ -12,6 +12,7 @@ import { cloneAgent } from "@/api";
 import type { Agent, CloneAgentResult } from "@/api/types";
 import { SwitchRow } from "@/components/FormField";
 import { errText } from "@/lib/errors";
+import { runWithFinally } from "@/lib/finally";
 
 type Props = {
   agent: Agent | null;
@@ -47,24 +48,33 @@ function CloneForm({
   async function submit(): Promise<void> {
     setBusy(true);
     setErr("");
-    try {
-      const res = await cloneAgent(agent.id, {
-        name: name.trim() || undefined,
-        copy_memory: copyMemory,
-        copy_routines: copyRoutines,
-      });
-      onCloned(res);
-      onClose();
-    } catch (e) {
-      setErr(errText(e, "复制失败"));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await cloneAgent(agent.id, {
+            name: name.trim() || undefined,
+            copy_memory: copyMemory,
+            copy_routines: copyRoutines,
+          });
+          onCloned(res);
+          onClose();
+        } catch (e) {
+          setErr(errText(e, "复制失败"));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   return (
     <View className="flex-1 justify-end bg-black/40">
-      <Pressable className="flex-1" onPress={busy ? undefined : onClose} accessibilityLabel="关闭" />
+      <Pressable
+        className="flex-1"
+        onPress={busy ? undefined : onClose}
+        accessibilityLabel="关闭"
+      />
       <View className="max-h-[85%] rounded-t-3xl bg-background pb-safe-offset-8">
         <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
           <Typography.Heading type="h4">复制助手「{agent.name}」</Typography.Heading>
@@ -114,7 +124,9 @@ function CloneForm({
             私有文件。
           </Typography.Paragraph>
 
-          {err ? <Typography.Paragraph className="text-sm text-danger">{err}</Typography.Paragraph> : null}
+          {err ? (
+            <Typography.Paragraph className="text-sm text-danger">{err}</Typography.Paragraph>
+          ) : null}
 
           <View className="flex-row gap-2">
             <Button className="flex-1" variant="secondary" isDisabled={busy} onPress={onClose}>

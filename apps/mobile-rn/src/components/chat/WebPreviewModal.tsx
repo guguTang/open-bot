@@ -32,6 +32,7 @@ import { Modal, Pressable, View } from "react-native";
 import { WebView } from "react-native-webview";
 
 import { Icon } from "@/components/Icon";
+import { hitSlopFor } from "@/theme/tokens";
 
 /* ------------------------------------------------------------------ *
  * 消毒层

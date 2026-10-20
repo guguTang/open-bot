@@ -16,6 +16,7 @@ import { formatApiNetworkError } from "@/api/config";
 import { Icon } from "@/components/Icon";
 import { OIDCLoginCancelled, isOIDCEnabled, loginWithOIDC } from "@/lib/oidc";
 import { useSession } from "@/providers/session";
+import { runWithFinally } from "@/lib/finally";
 
 /**
  * 登录 / 注册。
@@ -79,13 +80,20 @@ export default function LoginScreen(): JSX.Element {
     setBusy(true);
     setFormError(null);
     setOidcError(null);
-    try {
-      await (mode === "in" ? signIn(username.trim(), password) : signUp(username.trim(), password));
-    } catch (err) {
-      setFormError(formatApiNetworkError(err));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          await (mode === "in"
+            ? signIn(username.trim(), password)
+            : signUp(username.trim(), password));
+        } catch (err) {
+          setFormError(formatApiNetworkError(err));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   async function submitOIDC(): Promise<void> {
@@ -93,19 +101,24 @@ export default function LoginScreen(): JSX.Element {
     setOidcBusy(true);
     setOidcError(null);
     setFormError(null);
-    try {
-      const res = await loginWithOIDC();
-      // 交给 provider 落盘并接管：它会同时更新内存里的 user，
-      // 否则顶栏会一直显示「?」，返回根路由又会被弹回登录页。
-      await adoptSession(res.token, res.user);
-    } catch (err) {
-      // 用户自己关掉授权页不算错误，静默收起 loading 就行
-      if (!(err instanceof OIDCLoginCancelled)) {
-        setOidcError(err instanceof Error ? err.message : "OIDC 登录失败，请重试");
+    await runWithFinally(
+      async () => {
+        try {
+          const res = await loginWithOIDC();
+          // 交给 provider 落盘并接管：它会同时更新内存里的 user，
+          // 否则顶栏会一直显示「?」，返回根路由又会被弹回登录页。
+          await adoptSession(res.token, res.user);
+        } catch (err) {
+          // 用户自己关掉授权页不算错误，静默收起 loading 就行
+          if (!(err instanceof OIDCLoginCancelled)) {
+            setOidcError(err instanceof Error ? err.message : "OIDC 登录失败，请重试");
+          }
+        }
+      },
+      () => {
+        setOidcBusy(false);
       }
-    } finally {
-      setOidcBusy(false);
-    }
+    );
   }
 
   return (

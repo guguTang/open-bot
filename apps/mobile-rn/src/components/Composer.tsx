@@ -390,7 +390,8 @@ export function Composer({
 
           <Input
             variant="secondary"
-            className="min-h-11 flex-1 border-0 bg-transparent px-2"
+            // 多行原生自动增高；max-h-70 = 280pt，与 design/tokens.json composer.maxHeight 一致，超出后内部滚动
+            className="min-h-11 max-h-70 flex-1 border-0 bg-transparent px-2"
             containerClassName="flex-1"
             value={value}
             onChangeText={handleChange}

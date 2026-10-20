@@ -2,7 +2,14 @@ import { Avatar, Button, Dialog, Menu, Separator, Spinner, Typography } from "he
 import { useRouter } from "expo-router";
 import type { JSX } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { InteractionManager, Pressable, RefreshControl, ScrollView, TextInput, View } from "react-native";
+import {
+  InteractionManager,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  TextInput,
+  View,
+} from "react-native";
 import { useShallow } from "zustand/react/shallow";
 
 import * as api from "@/api";
@@ -21,6 +28,7 @@ import { useSession } from "@/providers/session";
 import { useAgentMutations, useAgents, useChannels, useChannelMutations } from "@/queries";
 import { useCurrentBot, useListPrefs, type ListPrefsState } from "@/stores/client";
 import { useRealtimeStore } from "@/stores/realtime";
+import { runWithFinally } from "@/lib/finally";
 
 /** 稳定的空数组引用，避免 `?? []` 破坏下游 memo。 */
 const EMPTY_AGENTS: Agent[] = [];
@@ -42,7 +50,11 @@ function itemSortAt(iso?: string | null): number {
   return Date.parse(iso || "") || 0;
 }
 
-function channelMemberFaces(channel: Channel, agents: Agent[], nameById: Map<string, string>): MemberFace[] {
+function channelMemberFaces(
+  channel: Channel,
+  agents: Agent[],
+  nameById: Map<string, string>
+): MemberFace[] {
   return (channel.members || []).map((id) => {
     const agent = agents.find((a) => a.id === id);
     const profile = channel.member_profiles?.find((p) => p.agent_id === id);
@@ -124,13 +136,16 @@ export default function ChatsScreen(): JSX.Element {
    * 转场开始后再写偏好 / 清 busy。
    * 否则 push 前 setState 会先刷列表一帧，看起来像「列表闪一下才进页」。
    */
-  const afterNavigate = useCallback((record?: NonNullable<ListPrefsState["lastOpened"]>) => {
-    InteractionManager.runAfterInteractions(() => {
-      if (record) setLastOpened(record);
-      openingLockRef.current = false;
-      setOpeningId(null);
-    });
-  }, [setLastOpened]);
+  const afterNavigate = useCallback(
+    (record?: NonNullable<ListPrefsState["lastOpened"]>) => {
+      InteractionManager.runAfterInteractions(() => {
+        if (record) setLastOpened(record);
+        openingLockRef.current = false;
+        setOpeningId(null);
+      });
+    },
+    [setLastOpened]
+  );
 
   const openAgent = useCallback(
     async (agentId: string): Promise<void> => {
@@ -258,7 +273,8 @@ export default function ChatsScreen(): JSX.Element {
     const items: ConvListItem[] = [];
     for (const a of agents) {
       if (q) {
-        const hay = `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
+        const hay =
+          `${a.name} ${a.description || ""} ${a.id} ${a.last_message || ""}`.toLowerCase();
         if (!hay.includes(q)) continue;
       }
       items.push({
@@ -369,7 +385,11 @@ export default function ChatsScreen(): JSX.Element {
                   </View>
                 </Menu.Item>
                 <Separator className="my-1" />
-                <Menu.Item className="items-center gap-3" variant="danger" onPress={() => void signOut()}>
+                <Menu.Item
+                  className="items-center gap-3"
+                  variant="danger"
+                  onPress={() => void signOut()}
+                >
                   <View className="size-6 items-center justify-center">
                     <Icon name="log-out-outline" size={22} tone="danger" />
                   </View>
@@ -596,7 +616,10 @@ function ChannelAvatarStack({
     );
   }
   return (
-    <View className="flex-row items-center" style={{ width: size + (shown.length - 1) * (size * 0.55) }}>
+    <View
+      className="flex-row items-center"
+      style={{ width: size + (shown.length - 1) * (size * 0.55) }}
+    >
       {shown.map((p, i) => (
         <View
           key={p.agent_id}
@@ -841,16 +864,21 @@ function ChannelEditor({
     }
     setBusy(true);
     setError(null);
-    try {
-      await api.createChannel(name.trim());
-      reset();
-      onClose();
-      await onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "创建失败");
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          await api.createChannel(name.trim());
+          reset();
+          onClose();
+          await onSaved();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "创建失败");
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   return (

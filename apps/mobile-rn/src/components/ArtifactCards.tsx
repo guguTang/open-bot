@@ -16,6 +16,7 @@ import {
   previewTitleFromPath,
   type Artifact,
 } from "@/lib/workspace";
+import { runWithFinally } from "@/lib/finally";
 
 type PreviewState = {
   open: boolean;
@@ -96,18 +97,23 @@ export function ArtifactCards({
   const download = async (path: string): Promise<void> => {
     setDownloading(path);
     setNotice("");
-    try {
-      await saveSandboxArtifact(path, agentId ? { agent_id: agentId } : undefined);
-    } catch (err) {
-      // 分享面板不可用时文件其实已经落到本地了，只是没法直接调起分享
-      if (err instanceof ShareUnavailableError) {
-        setNotice("当前设备无法调起分享，文件已保存在本地");
-      } else {
-        setNotice(friendlyOpenError(err));
+    await runWithFinally(
+      async () => {
+        try {
+          await saveSandboxArtifact(path, agentId ? { agent_id: agentId } : undefined);
+        } catch (err) {
+          // 分享面板不可用时文件其实已经落到本地了，只是没法直接调起分享
+          if (err instanceof ShareUnavailableError) {
+            setNotice("当前设备无法调起分享，文件已保存在本地");
+          } else {
+            setNotice(friendlyOpenError(err));
+          }
+        }
+      },
+      () => {
+        setDownloading(null);
       }
-    } finally {
-      setDownloading(null);
-    }
+    );
   };
 
   return (

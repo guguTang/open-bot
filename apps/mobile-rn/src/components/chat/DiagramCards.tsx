@@ -25,6 +25,8 @@ import type { AttachmentMeta } from "@/api/types";
 import { Icon } from "@/components/Icon";
 import { WebPreviewModal } from "@/components/chat/WebPreviewModal";
 import { saveAttachment, saveTextFile } from "@/lib/download";
+import { runWithFinally } from "@/lib/finally";
+import { hitSlopFor } from "@/theme/tokens";
 
 type IconName = Parameters<typeof Icon>[0]["name"];
 
@@ -423,18 +425,23 @@ export function ImageDiagramCard({
   const download = useCallback(async () => {
     setBusy(true);
     setError(null);
-    try {
-      // 交给系统分享面板，用户可存到相册/文件。文件名走统一的命名规则，不带 token。
-      await saveAttachment({
-        url: attachment.url,
-        name: imageDownloadFilename(attachment.name, attachment.mime),
-        mime: attachment.mime,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "下载失败，请重试");
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          // 交给系统分享面板，用户可存到相册/文件。文件名走统一的命名规则，不带 token。
+          await saveAttachment({
+            url: attachment.url,
+            name: imageDownloadFilename(attachment.name, attachment.mime),
+            mime: attachment.mime,
+          });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "下载失败，请重试");
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }, [attachment.mime, attachment.name, attachment.url]);
 
   const actions: DiagramAction[] = [

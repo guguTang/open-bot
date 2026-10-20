@@ -21,6 +21,7 @@ import {
   type ToolAllowEntry,
 } from "@/lib/hostApproval";
 import { useSession } from "@/providers/session";
+import { runWithFinally } from "@/lib/finally";
 
 export default function ReviewSettingsScreen(): JSX.Element {
   const { user } = useSession();
@@ -53,13 +54,16 @@ export default function ReviewSettingsScreen(): JSX.Element {
 
     setBusy(true);
     setMsg("");
-    try {
-      const { entries: next } = await revokeAllowlistEntry(userId, entry);
-      setEntries(next);
-      setMsg("已撤销，下次将再次询问");
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        const { entries: next } = await revokeAllowlistEntry(userId, entry);
+        setEntries(next);
+        setMsg("已撤销，下次将再次询问");
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   return (

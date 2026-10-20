@@ -11,3 +11,6 @@ bun.lockb
 expo-env.d.ts
 uniwind-types.d.ts
 .DS_Store
+
+# 由 scripts/gen-design-tokens.mjs 生成
+src/theme/tokens.ts

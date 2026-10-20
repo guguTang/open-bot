@@ -21,6 +21,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { FormActions, FormStatus, PageIntro } from "@/components/FormField";
 import { ScreenScaffold } from "@/components/ScreenScaffold";
 import { errText } from "@/lib/errors";
+import { runWithFinally } from "@/lib/finally";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -37,14 +38,19 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
   const refresh = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    try {
-      setGmail(await getGmailIntegrationStatus());
-    } catch (err) {
-      setLoadError(errText(err, "无法读取连接状态"));
-      setGmail(null);
-    } finally {
-      setLoading(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          setGmail(await getGmailIntegrationStatus());
+        } catch (err) {
+          setLoadError(errText(err, "无法读取连接状态"));
+          setGmail(null);
+        }
+      },
+      () => {
+        setLoading(false);
+      }
+    );
   }, []);
 
   useEffect(() => {
@@ -70,21 +76,26 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
   async function onConnect(): Promise<void> {
     setBusy(true);
     setMsg("");
-    try {
-      const { authorize_url } = await startGmailConnect();
-      const redirect = Linking.createURL("/settings/integrations");
-      const result = await WebBrowser.openAuthSessionAsync(authorize_url, redirect);
-      if (result.type === "success" && result.url) {
-        const q = Linking.parse(result.url).queryParams ?? {};
-        if (q.gmail_connected === "1") setMsg("Gmail 已连接");
-        if (typeof q.gmail_error === "string") setMsg(`连接失败：${q.gmail_error}`);
+    await runWithFinally(
+      async () => {
+        try {
+          const { authorize_url } = await startGmailConnect();
+          const redirect = Linking.createURL("/settings/integrations");
+          const result = await WebBrowser.openAuthSessionAsync(authorize_url, redirect);
+          if (result.type === "success" && result.url) {
+            const q = Linking.parse(result.url).queryParams ?? {};
+            if (q.gmail_connected === "1") setMsg("Gmail 已连接");
+            if (typeof q.gmail_error === "string") setMsg(`连接失败：${q.gmail_error}`);
+          }
+          await refresh();
+        } catch (err) {
+          setMsg(errText(err, "连接失败"));
+        }
+      },
+      () => {
+        setBusy(false);
       }
-      await refresh();
-    } catch (err) {
-      setMsg(errText(err, "连接失败"));
-    } finally {
-      setBusy(false);
-    }
+    );
   }
 
   async function onDisconnect(): Promise<void> {
@@ -99,15 +110,20 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
 
     setBusy(true);
     setMsg("");
-    try {
-      await disconnectGmail();
-      setMsg("已断开 Gmail");
-      await refresh();
-    } catch (err) {
-      setMsg(errText(err, "断开失败"));
-    } finally {
-      setBusy(false);
-    }
+    await runWithFinally(
+      async () => {
+        try {
+          await disconnectGmail();
+          setMsg("已断开 Gmail");
+          await refresh();
+        } catch (err) {
+          setMsg(errText(err, "断开失败"));
+        }
+      },
+      () => {
+        setBusy(false);
+      }
+    );
   }
 
   const configured = gmail?.oauth_configured !== false;
@@ -154,7 +170,12 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
                 </Typography.Paragraph>
               ) : null}
               <FormActions>
-                <Button size="sm" variant="secondary" isDisabled={busy} onPress={() => void refresh()}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isDisabled={busy}
+                  onPress={() => void refresh()}
+                >
                   <Button.Label>刷新</Button.Label>
                 </Button>
                 <Button
@@ -174,7 +195,12 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
               <Button size="sm" isDisabled={busy} onPress={() => void onConnect()}>
                 <Button.Label>{busy ? "连接中…" : "连接 Gmail"}</Button.Label>
               </Button>
-              <Button size="sm" variant="secondary" isDisabled={busy} onPress={() => void refresh()}>
+              <Button
+                size="sm"
+                variant="secondary"
+                isDisabled={busy}
+                onPress={() => void refresh()}
+              >
                 <Button.Label>刷新</Button.Label>
               </Button>
             </FormActions>
