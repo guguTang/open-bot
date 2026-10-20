@@ -359,6 +359,20 @@ func (d *DB) SeedNewAgentDefaultSkills(userID, agentID string) error {
 		names = append(names, slug)
 	}
 	names = EnsureAlwaysOnSkills(names)
+	names = EnsurePublicCommonSkills(names)
+	// Public/common curated (e.g. generative-ui): enable account row so agent∩account effective=on.
+	// Existing false rows (skill appeared before it became curated/public) would otherwise gate runtime off.
+	for _, slug := range PublicCommonBuiltinSlugs() {
+		_, err := d.SQL.Exec(
+			`INSERT INTO user_skills (user_id, skill_name, enabled)
+			 VALUES ($1, $2, TRUE)
+			 ON CONFLICT (user_id, skill_name) DO UPDATE SET enabled = TRUE`,
+			userID, slug,
+		)
+		if err != nil {
+			return err
+		}
+	}
 	if len(names) == 0 {
 		return nil
 	}

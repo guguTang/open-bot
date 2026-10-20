@@ -13,6 +13,7 @@ import (
 const (
 	CuratedRoleDefault  = ""          // default-on for new bots; toggleable
 	CuratedRoleAlwaysOn = "always_on" // discovery entry: always mounted; disable blocked
+	CuratedRolePublic   = "public"    // platform public/common: default-on + survives onboarding; toggleable
 )
 
 // CuratedBuiltin is one default-on skill for new bots (skills.sh batch or first-party public).
@@ -34,11 +35,13 @@ type curatedManifest struct {
 }
 
 var (
-	curatedOnce   sync.Once
-	curatedSlugs  []string
-	curatedSet    map[string]bool
-	alwaysOnSlugs []string
-	alwaysOnSet   map[string]bool
+	curatedOnce       sync.Once
+	curatedSlugs      []string
+	curatedSet        map[string]bool
+	alwaysOnSlugs     []string
+	alwaysOnSet       map[string]bool
+	publicCommonSlugs []string
+	publicCommonSet   map[string]bool
 )
 
 // ErrSkillDisableBlocked is returned when disabling an always-on discovery skill.
@@ -52,6 +55,7 @@ func loadCuratedManifest() {
 	curatedOnce.Do(func() {
 		curatedSet = map[string]bool{}
 		alwaysOnSet = map[string]bool{}
+		publicCommonSet = map[string]bool{}
 		data, err := os.ReadFile(curatedManifestPath())
 		if err != nil {
 			return
@@ -68,9 +72,13 @@ func loadCuratedManifest() {
 			curatedSlugs = append(curatedSlugs, slug)
 			curatedSet[slug] = true
 			role := strings.TrimSpace(strings.ToLower(s.Role))
-			if role == CuratedRoleAlwaysOn {
+			switch role {
+			case CuratedRoleAlwaysOn:
 				alwaysOnSlugs = append(alwaysOnSlugs, slug)
 				alwaysOnSet[slug] = true
+			case CuratedRolePublic:
+				publicCommonSlugs = append(publicCommonSlugs, slug)
+				publicCommonSet[slug] = true
 			}
 		}
 	})
@@ -127,6 +135,43 @@ func EnsureAlwaysOnSkills(names []string) []string {
 	return out
 }
 
+// PublicCommonBuiltinSlugs returns curated skills marked role=public (platform public/common).
+func PublicCommonBuiltinSlugs() []string {
+	loadCuratedManifest()
+	out := make([]string, len(publicCommonSlugs))
+	copy(out, publicCommonSlugs)
+	return out
+}
+
+// IsPublicCommonBuiltin reports whether name is a platform public/common skill (toggleable).
+func IsPublicCommonBuiltin(name string) bool {
+	loadCuratedManifest()
+	return publicCommonSet[strings.TrimSpace(name)]
+}
+
+// EnsurePublicCommonSkills appends missing role=public slugs to names (deduped, order preserved).
+// Used so onboarding presets (A/B/D/F) cannot drop generative-ui; unlike always_on, disable stays allowed.
+func EnsurePublicCommonSkills(names []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(names)+len(PublicCommonBuiltinSlugs()))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	for _, slug := range PublicCommonBuiltinSlugs() {
+		if seen[slug] {
+			continue
+		}
+		seen[slug] = true
+		out = append(out, slug)
+	}
+	return out
+}
+
 // ResetCuratedBuiltinCacheForTest clears the sync.Once cache (tests only).
 func ResetCuratedBuiltinCacheForTest() {
 	curatedOnce = sync.Once{}
@@ -134,4 +179,6 @@ func ResetCuratedBuiltinCacheForTest() {
 	curatedSet = nil
 	alwaysOnSlugs = nil
 	alwaysOnSet = nil
+	publicCommonSlugs = nil
+	publicCommonSet = nil
 }

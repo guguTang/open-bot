@@ -148,6 +148,8 @@ func (s *Server) handleAgentOnboarding(w http.ResponseWriter, r *http.Request) {
 			skillArg = []string{}
 		}
 		skillArg = db.EnsureAlwaysOnSkills(skillArg)
+		// Platform public/common (generative-ui): keep default-on across presets A/B/D/F.
+		skillArg = db.EnsurePublicCommonSkills(skillArg)
 	} else {
 		skillArg = nil // leave agent_skills unset → all user-enabled
 	}

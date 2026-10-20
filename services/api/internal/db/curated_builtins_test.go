@@ -44,6 +44,12 @@ func TestFindSkillsAlwaysOnDiscovery(t *testing.T) {
 	if IsAlwaysOnBuiltin("grill-me") || IsAlwaysOnBuiltin("tdd") || IsAlwaysOnBuiltin("generative-ui") {
 		t.Fatal("other curated skills must remain toggleable (not always_on)")
 	}
+	if !IsPublicCommonBuiltin("generative-ui") {
+		t.Fatal("generative-ui must be role=public platform common skill")
+	}
+	if IsPublicCommonBuiltin("find-skills") || IsPublicCommonBuiltin("grill-me") {
+		t.Fatal("only generative-ui should be role=public for now")
+	}
 	got := AlwaysOnBuiltinSlugs()
 	if len(got) != 1 || got[0] != "find-skills" {
 		t.Fatalf("AlwaysOnBuiltinSlugs=%v want [find-skills]", got)
@@ -55,5 +61,13 @@ func TestFindSkillsAlwaysOnDiscovery(t *testing.T) {
 	ensured2 := EnsureAlwaysOnSkills([]string{"find-skills", "grill-me"})
 	if len(ensured2) != 2 {
 		t.Fatalf("dedupe failed: %v", ensured2)
+	}
+	pub := EnsurePublicCommonSkills([]string{"summarize-text"})
+	if len(pub) != 2 || pub[0] != "summarize-text" || pub[1] != "generative-ui" {
+		t.Fatalf("EnsurePublicCommonSkills=%v want [summarize-text generative-ui]", pub)
+	}
+	pub2 := EnsurePublicCommonSkills([]string{"generative-ui", "summarize-text"})
+	if len(pub2) != 2 {
+		t.Fatalf("EnsurePublicCommonSkills dedupe failed: %v", pub2)
 	}
 }

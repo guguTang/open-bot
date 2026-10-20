@@ -134,46 +134,46 @@ type onboardingSeed struct {
 func defaultOnboardingSeeds() []onboardingSeed {
 	return []onboardingSeed{
 		{
-			ID:         "A",
-			Title:      "日常事务与提醒",
-			CardDesc:   "日程、待办、定时提醒",
-			UserPrompt: "我想先用你来做：日常事务与提醒（日程、待办、定时提醒）。请按这个方向协助我，之后我还可以随时改。",
+			ID:           "A",
+			Title:        "日常事务与提醒",
+			CardDesc:     "日程、待办、定时提醒",
+			UserPrompt:   "我想先用你来做：日常事务与提醒（日程、待办、定时提醒）。请按这个方向协助我，之后我还可以随时改。",
 			Description:  "负责日常事务与提醒：日程、待办、定时提醒。保持简洁可执行；未经确认不代发外部消息。",
 			SystemPrompt: "你主攻日常事务与提醒（日程、待办、定时提醒）。优先给出可执行的下一步；涉及外发或删除需先征得用户同意。",
 			SkillsJSON:   `["daily-brief"]`,
 			SortOrder:    10,
 		},
 		{
-			ID:         "B",
-			Title:      "查资料与总结",
-			CardDesc:   "搜索、阅读、整理要点",
-			UserPrompt: "我想先用你来做：查资料与总结（搜索、阅读、整理要点）。请按这个方向协助我，之后我还可以随时改。",
+			ID:           "B",
+			Title:        "查资料与总结",
+			CardDesc:     "搜索、阅读、整理要点",
+			UserPrompt:   "我想先用你来做：查资料与总结（搜索、阅读、整理要点）。请按这个方向协助我，之后我还可以随时改。",
 			Description:  "负责查资料与总结：搜索、阅读、整理要点。输出需可核对；重要结论注明来源或依据。",
 			SystemPrompt: "你主攻查资料与总结。先澄清问题边界，再整理要点；区分事实与推测。",
 			SkillsJSON:   `["summarize-text"]`,
 			SortOrder:    20,
 		},
 		{
-			ID:         "C",
-			Title:      "写东西与改稿",
-			CardDesc:   "邮件、文档、文案",
-			UserPrompt: "我想先用你来做：写东西与改稿（邮件、文档、文案）。请按这个方向协助我，之后我还可以随时改。",
+			ID:           "C",
+			Title:        "写东西与改稿",
+			CardDesc:     "邮件、文档、文案",
+			UserPrompt:   "我想先用你来做：写东西与改稿（邮件、文档、文案）。请按这个方向协助我，之后我还可以随时改。",
 			Description:  "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。",
 			SystemPrompt: "你主攻写作与改稿。先确认受众与用途，再出草稿；不擅自代发。",
 			SkillsJSON:   SkillsUnsetMarker,
 			SortOrder:    30,
 		},
 		{
-			ID:         "D",
-			Title:      "写代码与排障",
-			CardDesc:   "改项目、查 bug、联调",
-			UserPrompt: "我想先用你来做：写代码与排障（改项目、查 bug、联调）。请按这个方向协助我，之后我还可以随时改。",
+			ID:           "D",
+			Title:        "写代码与排障",
+			CardDesc:     "改项目、查 bug、联调",
+			UserPrompt:   "我想先用你来做：写代码与排障（改项目、查 bug、联调）。请按这个方向协助我，之后我还可以随时改。",
 			Description:  "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。远程 SSH 先 load_skill host-ssh。",
 			SystemPrompt: "你主攻写代码与排障。优先小步修改与可验证结果；本机项目用 host_*。复杂编码流程先 load_skill dev-assist（再按需加载排障/TDD/实现/评审等）。远程先 load_skill host-ssh。",
 			SkillsJSON: `[
   "dev-assist","diagnosing-bugs","tdd","implement","code-review","host-ssh","summarize-text",
   "grill-me","grill-with-docs","improve-codebase-architecture","codebase-design","domain-modeling",
-  "prototype","triage","find-skills","frontend-design","vercel-react-best-practices","handoff","teach"
+  "prototype","triage","find-skills","generative-ui","frontend-design","vercel-react-best-practices","handoff","teach"
 ]`,
 			SortOrder: 40,
 		},
@@ -189,10 +189,10 @@ func defaultOnboardingSeeds() []onboardingSeed {
 			IsCustomFallback: true,
 		},
 		{
-			ID:         "F",
-			Title:      "微应用与本机工具",
-			CardDesc:   "微应用、本机能力、授权闸门",
-			UserPrompt: "我想先用你来做：微应用与本机工具（搭建/配置微应用、本机能力与授权）。请按这个方向协助我，之后我还可以随时改。",
+			ID:           "F",
+			Title:        "微应用与本机工具",
+			CardDesc:     "微应用、本机能力、授权闸门",
+			UserPrompt:   "我想先用你来做：微应用与本机工具（搭建/配置微应用、本机能力与授权）。请按这个方向协助我，之后我还可以随时改。",
 			Description:  "负责微应用与本机工具：搭建与配置微应用、本机能力调用、授权与能力闸门。涉及敏感操作需先征得用户同意。",
 			SystemPrompt: "你主攻微应用与本机工具。协助用户起草/固定微应用、声明能力与授权；本机操作走 host_*；未经确认不扩大授权范围。需要找生态技能时 load_skill find-skills。",
 			SkillsJSON:   `["prototype","handoff","find-skills"]`,
@@ -298,7 +298,7 @@ LIMIT 1`)
 	p, err := scanOnboardingPreset(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Fallback: enabled E, else first enabled
-		row = d.SQL.QueryRow(`SELECT`+onboardingPresetCols+` FROM onboarding_presets WHERE id = 'E' AND enabled = TRUE`)
+		row = d.SQL.QueryRow(`SELECT` + onboardingPresetCols + ` FROM onboarding_presets WHERE id = 'E' AND enabled = TRUE`)
 		p, err = scanOnboardingPreset(row)
 		if errors.Is(err, sql.ErrNoRows) {
 			row = d.SQL.QueryRow(`
