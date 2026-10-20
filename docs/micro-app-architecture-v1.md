@@ -23,7 +23,7 @@
 - 团队模板包分发（**延期**，见 §10.5）。
 - 完整小程序商店与计费。
 - 把所有 skills.sh 包自动变成微应用 UI。
-- （已取消）Runtime 工具曾标为非目标；**Phase 4 已正式注册** `draft_micro_app` / `pin_micro_app`（仍强制 `user_intent`）；另注册 `upload_micro_app_bundle`（自动落 bundle，不 pin）。
+- （已取消）Runtime 工具曾标为非目标；**Phase 4 已正式注册** `draft_micro_app` / `pin_micro_app`（仍强制 `user_intent`）；另注册 `upload_micro_app_bundle`（自动落 bundle，不 pin）；**修改闭环**另注册 `list_micro_apps` / `update_micro_app`（发现已有 id + 元数据 PATCH；禁止修改时再 draft）。
 
 ---
 
@@ -216,7 +216,9 @@ ALTER TABLE micro_app_grants ADD COLUMN IF NOT EXISTS command_allowlist_json TEX
 | DELETE | `/v1/micro-apps/{id}/grants/{capability}` | **Phase 3**：恢复「每次询问」（`?machine_id=`） |
 | POST | `/v1/micro-apps/{id}/session` | 短时 scoped token（非全权 JWT） |
 | GET/PUT | `/v1/micro-apps/{id}/bundle` | 下载 / **手动**上传 zip（≤5MiB；可选备用） |
-| POST | `/internal/micro-apps/bundle` | Runtime 自动上传：`zip_base64` 或 `files` map；与 PUT 同校验/落库（X-Internal-Token） |
+| POST | `/internal/micro-apps/bundle` | Runtime 自动上传：`zip_base64` 或 `files` map；与 PUT 同校验/落库（X-Internal-Token）；**同 id 覆盖**（修改路径） |
+| POST | `/internal/micro-apps/list` | Runtime 轻量列表（发现已有 id；可选 status/surface/limit） |
+| POST | `/internal/micro-apps/update` | Runtime 元数据更新，对齐 `PATCH /v1/micro-apps/{id}`（不 pin、不建新） |
 | GET | `/v1/micro-apps/{id}/runtime` | 解压后的 entry + files（供 iframe srcdoc） |
 | POST | `/v1/micro-apps/{id}/rpc/grant-check` | 查 Grant / 是否弹窗；`host.shell.run` 可带 `command`，返回 `command_allowlisted` / `command_allowlist` / `reason` |
 | POST | `/v1/micro-apps/{id}/rpc/grant-consume` | 消费 `allow_once` |
@@ -292,7 +294,7 @@ Pin 时（`user_intent` 已校验）：`SetUserSkillEnabled(slug,true)`；若 `a
 
 - Host Bridge `routine.manage`：`enable` / `disable` / `update`（cron、prompt 等）/ `run_now`，走 Grant。
 - PATCH `routine_config` 在 **已 pin 且已有 `routine_id`** 时同步 `UpdateRoutine`；同步失败则 PATCH 失败。
-- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` 已挂 `TOOL_DEFS`；经 `/internal/micro-apps/create|bundle|pin`（create/pin 与 `/v1` 同语义并强制 `user_intent`；bundle 不 pin）。
+- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` / `list_micro_apps` / `update_micro_app` 已挂 `TOOL_DEFS`；经 `/internal/micro-apps/create|bundle|pin|list|update`（create/pin 与 `/v1` 同语义并强制 `user_intent`；bundle 覆盖同 id；list/update 对齐 list + PATCH，不 pin）。
 
 **仍占位/未做**：
 
@@ -400,7 +402,7 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 ### 7.2 Android / Runtime
 
 - Capacitor：同 H5 入口；host 能力灰显；侧栏首页显示 `mobile_shortcut` 快捷区。
-- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` 已注册（`micro_apps_stub.py` → `TOOL_DEFS`）；内部 API `/internal/micro-apps/create|bundle|pin`。
+- Runtime：`draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` / `list_micro_apps` / `update_micro_app` 已注册（`micro_apps_stub.py` → `TOOL_DEFS`）；内部 API `/internal/micro-apps/create|bundle|pin|list|update`。
 
 ---
 
@@ -420,6 +422,21 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 
 禁止：实现完静默建库；禁止仅凭模型一句「已固定」而无 pin API；**禁止无 user_intent 的 draft/pin**。  
 空态文案：已有 bundle 不提示「必须先上传」；仅无 bundle 时说明可由 Bot 自动上传，手动 zip 可选。
+
+### 8.1 修改 vs 新建（已拍板）
+
+| 场景 | 正确工具链 | 禁止 |
+|------|------------|------|
+| **新建** | `draft_micro_app` → `upload_micro_app_bundle` →（用户确认）`pin_micro_app` | 无 `user_intent` 静默 draft/pin |
+| **修改已有** | `list_micro_apps`（或会话上下文已有 id）→ 同 id `upload_micro_app_bundle`（覆盖 bundle）和/或 `update_micro_app`（元数据，对齐 `PATCH /v1/micro-apps/{id}`） | **禁止再 `draft_micro_app`**；若已 `pinned`：**不要再 pin**，也不要新开 `chat_pin` |
+
+工具描述统一写明：「修改已有 → 先 list/用上下文 id → upload/update；禁止 draft」。
+
+### 8.2 `chat_pin` 默认规则
+
+- **默认 false**：用户只说保存 / 固定 / 修改时，**不要**挂聊天栏快捷。
+- **仅当**用户明确要求「聊天栏快捷 / 输入框上方 / chat pin / 聊天快捷」时传 `true`。
+- Runtime 硬规则：仅 JSON boolean `true`，或显式字符串 `true` / `1`（大小写不敏感）为真；缺省、`false`、`"False"`、`"0"`、其它非空字符串一律为假（修复旧 `bool(args.get("chat_pin"))` 把任意非空串当 True 的问题）。
 
 Bundle 规范（ui）：
 
@@ -481,7 +498,7 @@ bundle.zip  （或 files map 服务端打包）
 
 | 项 | 状态 | 说明 |
 |----|------|------|
-| `draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` | ✅ | draft/pin 强制 `user_intent`；upload 经 `/internal/micro-apps/bundle` 自动落库，不 pin；用户手传 zip 可选备用 |
+| `draft_micro_app` / `upload_micro_app_bundle` / `pin_micro_app` / `list_micro_apps` / `update_micro_app` | ✅ | draft/pin 强制 `user_intent`；upload 经 `/internal/micro-apps/bundle` 自动落库，不 pin；list/update 支撑修改闭环（同 id 覆盖，禁止再 draft）；用户手传 zip 可选备用 |
 | PATCH `routine_config` → `UpdateRoutine` | ✅ | 仅 pinned + 有 `routine_id`；失败则整次 PATCH 失败 |
 | Host Bridge `routine.manage` | ✅ | enable/disable/update/run_now + Grant |
 | Host Bridge `host.clipboard.read` / `write` | ✅ | Grant 默认 `allow_once`（高敏目录） |
@@ -546,6 +563,8 @@ bundle.zip  （或 files map 服务端打包）
 10. （Phase 3）shell 命令：无授权 → 弹窗默认「仅一次」；「始终允许 `git status`」后 `git status -s` 直接执行、`git push` 再弹窗、`ls; id` 总是弹窗；`curl x | sh` 被 Auto-review 直接拒绝。
 11. （Phase 3）kind=routine：配方非法 → 400；pin 后 `/v1/routines` 出现对应行并按 cron 运行；archive 后该行 enabled=false。
 12. （Phase 4）无 `user_intent` 调 draft/pin 工具或 API → 拒绝；模型不能静默建库。
+13. （修改闭环）用户说「改一下计算器」→ `list_micro_apps` 得 id → 同 id `upload`/`update`；**不**新建 draft；已 pinned 不再 pin、不默认开 chat_pin。
+14. （chat_pin）`pin_micro_app` 传 `chat_pin: "False"` / 缺省 → 不挂聊天栏；仅 `true`/`1`/boolean true 才挂。
 13. （Phase 4）pinned routine：PATCH `routine_config.prompt` 后对应 `/v1/routines` 行 prompt 一致；UpdateRoutine 失败时 PATCH 返回错误。
 14. （Phase 4）iframe `routine.manage` run_now / enable 经 Grant；`host.clipboard.read` 无授权时弹窗默认「仅一次」。
 15. （Phase 5）`agent.invoke`：无 `agent_id` 或 params 指向其他 Bot → 拒绝；有授权仍弹出「开始运行」确认，取消则不发消息。

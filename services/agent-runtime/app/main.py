@@ -1546,6 +1546,26 @@ async def openai_path(
                 )
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "list_micro_apps":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                return json.dumps(
+                    micro_apps.list_micro_apps(str(user_id or ""), dict(args or {})),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
+        if name == "update_micro_app":
+            from . import micro_apps_stub as micro_apps
+
+            try:
+                return json.dumps(
+                    micro_apps.update_micro_app(str(user_id or ""), dict(args or {})),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
         if name in ("update_routine", "pause_routine", "resume_routine"):
             from . import openbot_api as obapi
 
