@@ -52,6 +52,31 @@ describe("clampMicroShellSize", () => {
     expect(s.width).toBeLessThan(600);
   });
 
+  it("landscape tool stays wide+flat — follows reported w>h", () => {
+    const s = clampMicroShellSize({
+      width: 720,
+      height: 400,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+    expect(s.width).toBe(720);
+    expect(s.height).toBe(400);
+    expect(s.width).toBeGreaterThan(s.height);
+  });
+
+  it("square tool keeps equal sides within clamp", () => {
+    const s = clampMicroShellSize({
+      width: 480,
+      height: 480,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+    expect(s.width).toBe(480);
+    expect(s.height).toBe(480);
+  });
+
   it("caps width to ~90% viewport on small desktops", () => {
     const s = clampMicroShellSize({
       width: 900,

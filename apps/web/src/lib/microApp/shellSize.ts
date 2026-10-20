@@ -7,9 +7,9 @@
 export const MICRO_SHELL_MIN_WIDTH = 280;
 export const MICRO_SHELL_MIN_HEIGHT = 160;
 
-/** Soft default before first resize — modest, not hub 860 width. */
-export const MICRO_SHELL_DEFAULT_WIDTH = 360;
-export const MICRO_SHELL_DEFAULT_HEIGHT = 280;
+/** Soft default before first resize — orientation-neutral (not phone-narrow / not hub 860). */
+export const MICRO_SHELL_DEFAULT_WIDTH = 480;
+export const MICRO_SHELL_DEFAULT_HEIGHT = 360;
 
 /** Open-tool shell max ≈ 90% of viewport (wide desktop). */
 export const MICRO_SHELL_VIEWPORT_MAX_RATIO = 0.9;

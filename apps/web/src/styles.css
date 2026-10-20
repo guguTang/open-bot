@@ -5301,7 +5301,8 @@ html.touch-ui .composer-quote-clear {
    Hub list keeps fixed settings-dialog ~860×680.
    Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
    stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
-   Portrait tool → narrow+tall shell (does NOT stretch shell to hub width then center).
+   Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
+   No hardcoded portrait preference — shell follows reported resize width/height.
    Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport; overflow scrolls.
    Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
@@ -5317,7 +5318,7 @@ html.touch-ui .composer-quote-clear {
 }
 
 .settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
-  width: min(90vw, max(280px, var(--micro-shell-content-w, 360px)));
+  width: min(90vw, max(280px, var(--micro-shell-content-w, 480px)));
   max-width: min(90vw, calc(100vw - 32px));
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));

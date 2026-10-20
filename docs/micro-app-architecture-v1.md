@@ -100,7 +100,7 @@ Placement 只指向 MicroApp.id
 
 #### 2.1.1 Shell / iframe 尺寸适配（content-fit / hug）
 
-**问题**：固定 ~860×680 或近全屏大面板打开小工具时，四周大片空白；若再把工具居中/压进带边框 stage，会出现「大白壳里的小岛」或变形。产品要求：**打开工具 = Shell 贴合内容**（content-fit），外层 chrome 紧裹工具；竖屏工具在宽桌面上应是 **窄+高** 的壳，而不是先拉满宽度再居中。
+**问题**：固定 ~860×680 或近全屏大面板打开小工具时，四周大片空白；若再把工具居中/压进带边框 stage，会出现「大白壳里的小岛」或变形。产品要求：**打开工具 = Shell 贴合内容**（content-fit），外层 chrome 紧裹工具；**横竖均由内容驱动**——横屏（w>h）→ **宽+扁** 壳，竖屏（h>w）→ **窄+高** 壳，正方形亦可；禁止写死竖屏/窄高偏好，禁止先拉满宽度再居中。
 
 **做法**（无 `allow-same-origin`，父页不能读 iframe DOM，故用 postMessage 尺寸）：
 
@@ -121,7 +121,7 @@ iframe → parent:
 
 - **自动**：SDK 内 `ResizeObserver` + `load` / `resize` 测量后 `postMessage`
 - **手动**：`openbot.micro.reportSize({ width?, height? })`
-- **Host 钳制**（`lib/microApp/shellSize.ts`）：min ≈ 280×160；max ≈ 90% viewport（扣顶栏）；超高 → stage 滚动
+- **Host 钳制**（`lib/microApp/shellSize.ts`）：按上报 w/h 独立钳制（横/竖/方均跟随）；软默认 ≈ 480×360（中性，首帧后 hug）；min ≈ 280×160；max ≈ 90% viewport（扣顶栏）；超高 → stage 滚动
 - 注入 shell CSS：`html/body` `height/width:auto`，避免 100% 撑开导致误报尺寸
 
 实现：`sdk.ts`、`shellSize.ts`、`MicroAppShell.tsx`、`MicroAppsHub.tsx`、`styles.css`（`.settings-dialog--micro-fit` / `.micro-app-shell--fit`）。
