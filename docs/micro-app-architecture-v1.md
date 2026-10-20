@@ -86,7 +86,7 @@ Placement 只指向 MicroApp.id
 [我的工具] 点击 MicroApp
     → GET /v1/micro-apps/{id}/runtime
     → MicroAppShell：sandbox iframe（allow-scripts allow-forms，无 allow-same-origin）
-    → 注入 openbot.micro SDK（postMessage）+ shell CSS（html/body height:auto）
+    → 注入 openbot.micro SDK（postMessage）+ shell CSS（html/body 铺满 iframe）
     → iframe: openbot.micro.request(capability, params)
     → parent Host Bridge：
          声明 ∩ 端能力矩阵 ∩ Grant 三态
@@ -98,32 +98,30 @@ Placement 只指向 MicroApp.id
          · ui.notify → sonner toast
 ```
 
-#### 2.1.1 Shell / iframe 尺寸适配（content-fit）
+#### 2.1.1 Shell / iframe 尺寸适配（fill-available）
 
-**问题**：宽屏曾用固定 `settings-dialog` ~860×680，小工具底部大片空白。
+**问题**：content-fit（Dialog `fit-content` + 白底 stage 外边框/边距）会把工具压进带装饰外框的小盒子，宽高被钳制后**挤压变形**；产品要求去掉外框，让工具铺满可用区域。
 
-**做法**（无 `allow-same-origin`，父页不能读 iframe DOM，故不用跨框 ResizeObserver）：
+**做法**：
 
 | 端 | 行为 |
 |----|------|
-| 宽屏桌面 | Hub 列表仍 ~860×680；**打开工具**时 Dialog 加 `settings-dialog--micro-fit`（`height:auto` / `width:fit-content`），Shell 随 bundle 内容伸缩 |
-| 窄屏 / 全屏 | Dialog 仍近全屏；白色 stage **不**用 flex 撑满剩余高度，避免底部空洞 |
+| 宽屏桌面 | Hub 列表与**打开工具**共用固定 `settings-dialog` ~860×680；仅保留顶栏（返回 / 标题 / 关闭）；stage **无**外边距与描边卡片，iframe `width/height: 100%` 填满剩余区域 |
+| 窄屏 / 全屏 | Dialog 仍近全屏；stage 同样 flex 填满剩余高度，iframe 铺满；内容溢出在 **iframe 内滚动**（或 shell body，当能力面板展开时） |
 
-**协议**（事件，非 RPC capability）：
+**不采用**：固定宽高比压缩、按 bundle 内容把外层 Dialog 缩成「卡中卡」。
+
+**协议**（可选事件，非 RPC；Host **不再**据此收缩外层 chrome）：
 
 ```
 iframe → parent:
   { source: "openbot.micro", type: "resize", width: number, height: number }
 ```
 
-- **自动**：SDK 内 `ResizeObserver` + `load` / `resize` 测量后 `postMessage`
-- **手动**：`openbot.micro.reportSize({ width?, height? })`
-- **Host 钳制**（`lib/microApp/shellSize.ts`）：
-  - min ≈ 280×160
-  - 宽屏 max 宽 ≈ min(828, vw−64)；max 高 ≈ min(560, vh−160)；超高则 stage/iframe 滚动
-  - 窄屏 max 高 ≈ 72% vh
+- SDK 仍可自动/`reportSize` 上报，供后续或调试；`shellSize.ts` 保留钳制工具函数，当前 Shell 不驱动 Dialog 尺寸。
+- 注入 shell CSS：`html/body` 铺满 iframe 视口，溢出自行滚动。
 
-实现：`sdk.ts`、`shellSize.ts`、`MicroAppShell.tsx`、`MicroAppsHub.tsx`、`styles.css`（`.settings-dialog--micro-fit` / `.micro-app-shell--fit`）。
+实现：`MicroAppShell.tsx`（`.micro-app-shell--fill`）、`MicroAppsHub.tsx`、`styles.css`、`sdk.ts`。
 
 ---
 
@@ -387,8 +385,8 @@ Host Bridge（iframe RPC）仍走 §6 / §6.1；Phase 6 对齐错误码前缀，
 ### 7.1 Web / Desktop（`apps/web`）
 
 1. 账户菜单「我的工具」→ `MicroAppsHub`（能力矩阵、chat_pin / desktop_shortcut / mobile_shortcut 勾选；pin 弹窗可多选入口；「＋ 例行工具」）
-   - **双端分流**（`useSheetFormUi` = touch-ui OR layout-narrow ≤860）：窄屏/Capacitor 走 Settings hub 同构灰底；宽屏 Web/桌面 Tauri 走 `settings-dialog` 白底 elevated（Hub 列表 ~860×680；**打开工具**时 `settings-dialog--micro-fit` 随内容伸缩，见 §2.1.1），顶栏 32 级关闭、列表偏紧，更多操作用 popover（底 sheet 仅 narrow）
-2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK（含 resize 上报）；skill 型无 bundle 时展示绑定说明；宽屏 content-fit，窄屏近全屏但 stage 不撑出无意义空白（§2.1.1）
+   - **双端分流**（`useSheetFormUi` = touch-ui OR layout-narrow ≤860）：窄屏/Capacitor 走 Settings hub 同构灰底；宽屏 Web/桌面 Tauri 走 `settings-dialog` 白底 elevated（Hub 列表与打开工具均 ~860×680；iframe 填满 Shell，见 §2.1.1），顶栏 32 级关闭、列表偏紧，更多操作用 popover（底 sheet 仅 narrow）
+2. `MicroAppShell`：无 bundle 时提示可由 Bot 自动上传（手动 zip 为可选备用）；有 bundle 不推「必须先上传」；runtime → srcdoc iframe + SDK；skill 型无 bundle 时展示绑定说明；宽屏/窄屏均为 fill-available（无外框挤压，§2.1.1）
    - **取消快捷入口**（pinned 后）：宽屏「⋯」Dropdown / 窄屏底 sheet 提供「取消聊天栏快捷」「取消侧栏快捷」「取消手机快捷」（未挂载时对应「加入…」）；`PUT .../placements` 去掉该 surface（或 `enabled=false`）。不下架整个应用。
 3. `MicroAppChatPinBar`：作曲框上方快捷条（`surface=chat_pin`）；芯片可打开工具，**× 取消聊天栏快捷**（仅撤 chat_pin placement，不 archive）
 4. `lib/microApp/hostBridge.ts` + `deviceBridge.ts`：RPC

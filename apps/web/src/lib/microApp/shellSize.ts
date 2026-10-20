@@ -1,6 +1,7 @@
 /**
- * MicroAppShell iframe / dialog content-fit sizing.
- * Host clamps resize postMessages from openbot.micro SDK.
+ * Clamp helpers for openbot.micro resize postMessages.
+ * MicroAppShell chrome is fill-available (does not shrink dialog from these);
+ * kept for tests / optional future scroll hints.
  */
 
 /** Iframe content min (px) — avoid collapsed flash before first resize. */

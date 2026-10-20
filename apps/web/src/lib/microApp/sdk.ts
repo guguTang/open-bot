@@ -2,9 +2,10 @@
  * Injected into sandboxed iframe as openbot.micro SDK.
  * Uses window.parent.postMessage — no allow-same-origin required.
  *
- * Resize protocol (host listens; not an RPC capability):
+ * Resize protocol (optional event, not an RPC capability):
  *   { source: "openbot.micro", type: "resize", width: number, height: number }
  * Auto: ResizeObserver + load. Manual: openbot.micro.reportSize({ width?, height? }).
+ * Host chrome is fill-available; resize posts are not used to shrink the dialog.
  */
 export const OPENBOT_MICRO_SDK = `
 (function () {
@@ -139,12 +140,14 @@ export const OPENBOT_MICRO_SDK = `
 })();
 `.trim();
 
-/** Host-injected: keep document height content-sized (avoid 100% stretch = false tall measure). */
+/** Host-injected: fill iframe viewport; overflow scrolls inside the tool (not host squeeze). */
 export const OPENBOT_MICRO_SHELL_CSS = `
 html, body {
-  height: auto !important;
-  min-height: 0 !important;
+  width: 100%;
+  height: 100%;
   margin: 0;
+  box-sizing: border-box;
+  overflow: auto;
 }
 `.trim();
 
