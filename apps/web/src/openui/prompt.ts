@@ -14,6 +14,7 @@ export function buildOpenBotPrompt(): string {
 
 const SKILL_FRONTMATTER = `---
 name: generative-ui
+inline: true
 description: 需要给用户可点击的选项、表单、对比表、信息卡片等交互式/结构化回复时加载。用 OpenUI Lang 在回复里嵌一段 \`\`\`openui-lang 围栏，客户端（web / 桌面 / iOS / Android）渲染成原生组件，用户点击会作为新消息回到对话。普通问答不要加载；画图走 diagram。
 ---
 `;

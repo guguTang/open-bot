@@ -199,9 +199,17 @@ export const OPENUI_PROMPT_OPTIONS = {
     "Only use OpenUI when interactive or structured UI clearly helps (choices, forms, comparisons, summaries). Otherwise reply in normal Markdown.",
     "Put OpenUI Lang inside a ```openui-lang fence. Keep explanations as Markdown outside the fence.",
     "At most one openui-lang fence per reply.",
+    "The fence body is OpenUI Lang statements (`name = Component(...)`, first line `root = Card(...)`), NEVER JSON, YAML or HTML. Only the components listed above exist.",
+    "If the UI already contains a table or summary, do not repeat the same table in Markdown outside the fence.",
     'Buttons that continue the conversation must use @ToAssistant("<what the user is saying>"), written in the user\'s language.',
   ],
   examples: [
+    `root = Card([intro, tbl, pick], "耳机对比")
+intro = Text("三款旗舰降噪耳机核心参数：")
+tbl = Table(["型号", "价格", "续航"], [["A", "¥1,899", "6 小时"], ["B", "¥2,999", "30 小时"]])
+pick = Buttons([p1, p2])
+p1 = Button("选 A", @ToAssistant("我选 A"), "primary")
+p2 = Button("选 B", @ToAssistant("我选 B"))`,
     `root = Card([q, opts], "选择套餐")
 q = Text("你更看重哪一点？")
 opts = Buttons([b1, b2])

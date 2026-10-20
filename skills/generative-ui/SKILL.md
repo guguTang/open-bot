@@ -1,5 +1,6 @@
 ---
 name: generative-ui
+inline: true
 description: 需要给用户可点击的选项、表单、对比表、信息卡片等交互式/结构化回复时加载。用 OpenUI Lang 在回复里嵌一段 ```openui-lang 围栏，客户端（web / 桌面 / iOS / Android）渲染成原生组件，用户点击会作为新消息回到对话。普通问答不要加载；画图走 diagram。
 ---
 
@@ -79,6 +80,13 @@ Always write the root = Card(...) statement first so the UI shell appears immedi
 
 ## Examples
 
+root = Card([intro, tbl, pick], "耳机对比")
+intro = Text("三款旗舰降噪耳机核心参数：")
+tbl = Table(["型号", "价格", "续航"], [["A", "¥1,899", "6 小时"], ["B", "¥2,999", "30 小时"]])
+pick = Buttons([p1, p2])
+p1 = Button("选 A", @ToAssistant("我选 A"), "primary")
+p2 = Button("选 B", @ToAssistant("我选 B"))
+
 root = Card([q, opts], "选择套餐")
 q = Text("你更看重哪一点？")
 opts = Buttons([b1, b2])
@@ -102,4 +110,6 @@ Before finishing, walk your output and verify:
 - Only use OpenUI when interactive or structured UI clearly helps (choices, forms, comparisons, summaries). Otherwise reply in normal Markdown.
 - Put OpenUI Lang inside a ```openui-lang fence. Keep explanations as Markdown outside the fence.
 - At most one openui-lang fence per reply.
+- The fence body is OpenUI Lang statements (`name = Component(...)`, first line `root = Card(...)`), NEVER JSON, YAML or HTML. Only the components listed above exist.
+- If the UI already contains a table or summary, do not repeat the same table in Markdown outside the fence.
 - Buttons that continue the conversation must use @ToAssistant("<what the user is saying>"), written in the user's language.
