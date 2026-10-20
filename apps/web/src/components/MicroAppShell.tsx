@@ -14,6 +14,13 @@ import { summarizeUnavailable } from "../lib/microApp/capabilities";
 import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
 import { buildMicroAppSrcdoc } from "../lib/microApp/sdk";
 import {
+  clampMicroShellSize,
+  microShellHeightOverflow,
+  MICRO_SHELL_MIN_HEIGHT,
+  MICRO_SHELL_MIN_WIDTH,
+  type MicroShellSize,
+} from "../lib/microApp/shellSize";
+import {
   createMicroAppMessageHandler,
   type GrantPromptOptions,
   type GrantPromptResult,
@@ -72,6 +79,9 @@ export function MicroAppShell({
   const [moreOpen, setMoreOpen] = useState(false);
   const revokeRef = useRef<(() => void) | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [frameSize, setFrameSize] = useState<MicroShellSize | null>(null);
+  const [frameScroll, setFrameScroll] = useState(false);
 
   const client = useMemo(() => {
     try {
@@ -100,6 +110,8 @@ export function MicroAppShell({
     setLoading(true);
     setError("");
     setSrcdoc(null);
+    setFrameSize(null);
+    setFrameScroll(false);
     revokeRef.current?.();
     revokeRef.current = null;
 
@@ -148,6 +160,35 @@ export function MicroAppShell({
     return () => window.removeEventListener("message", handler);
   }, [app.id, app.agent_id, app.capabilities, conversation?.id, client, confirm]);
 
+  // Content-fit: sandboxed iframe has no allow-same-origin — size via postMessage only.
+  useEffect(() => {
+    const onResizeMsg = (ev: MessageEvent) => {
+      const data = ev.data as {
+        source?: string;
+        type?: string;
+        width?: number;
+        height?: number;
+      } | null;
+      if (!data || data.source !== "openbot.micro" || data.type !== "resize") return;
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow && ev.source && ev.source !== iframe.contentWindow) return;
+      const rawW = Number(data.width);
+      const rawH = Number(data.height);
+      if (!Number.isFinite(rawW) || !Number.isFinite(rawH) || rawW <= 0 || rawH <= 0) return;
+      const clamped = clampMicroShellSize({
+        width: rawW,
+        height: rawH,
+        narrow: sheetForm,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      });
+      setFrameSize(clamped);
+      setFrameScroll(microShellHeightOverflow(rawH, clamped.height));
+    };
+    window.addEventListener("message", onResizeMsg);
+    return () => window.removeEventListener("message", onResizeMsg);
+  }, [app.id, sheetForm]);
+
   async function onUpload(file: File) {
     setUploading(true);
     try {
@@ -158,6 +199,8 @@ export function MicroAppShell({
       revokeRef.current?.();
       const built = buildMicroAppSrcdoc(runtime.entrypoint, runtime.files);
       revokeRef.current = built.revoke;
+      setFrameSize(null);
+      setFrameScroll(false);
       setSrcdoc(built.srcdoc);
       setError("");
     } catch (e) {
@@ -189,8 +232,17 @@ export function MicroAppShell({
     <div
       className={cn(
         "micro-app-shell",
+        "micro-app-shell--fit",
         sheetForm ? "settings-hub" : "micro-app-shell--desktop",
       )}
+      style={
+        frameSize && !sheetForm
+          ? {
+              ["--micro-shell-content-w" as string]: `${Math.max(frameSize.width, MICRO_SHELL_MIN_WIDTH)}px`,
+              ["--micro-shell-content-h" as string]: `${frameSize.height}px`,
+            }
+          : undefined
+      }
     >
       <header
         className={cn(
@@ -313,7 +365,13 @@ export function MicroAppShell({
           </details>
         ) : null}
 
-        <div className="micro-app-shell-stage">
+        <div
+          className={cn(
+            "micro-app-shell-stage",
+            frameSize && "micro-app-shell-stage--sized",
+            frameScroll && "micro-app-shell-stage--scroll",
+          )}
+        >
           {app.kind === "routine" && !loading && (!srcdoc || /bundle_not_found|404/i.test(error)) ? (
             <div className="micro-app-shell-placeholder">
               <p className="micro-app-shell-placeholder-title">例行型微应用</p>
@@ -363,10 +421,22 @@ export function MicroAppShell({
             </div>
           ) : srcdoc ? (
             <iframe
+              ref={iframeRef}
               title={app.title}
-              className="micro-app-shell-frame"
+              className={cn(
+                "micro-app-shell-frame",
+                frameSize && "micro-app-shell-frame--sized",
+              )}
               sandbox="allow-scripts allow-forms"
               srcDoc={srcdoc}
+              style={
+                frameSize
+                  ? {
+                      height: frameSize.height,
+                      minHeight: MICRO_SHELL_MIN_HEIGHT,
+                    }
+                  : { minHeight: MICRO_SHELL_MIN_HEIGHT }
+              }
             />
           ) : null}
         </div>

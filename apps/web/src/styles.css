@@ -5297,6 +5297,99 @@ html.touch-ui .composer-quote-clear {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+/* === micro-app shell content-fit (iframe postMessage resize) ===
+   Hub list keeps fixed settings-dialog ~860×680.
+   When a tool is open on wide desktop: .settings-dialog--micro-fit + .micro-app-shell--fit.
+   Narrow/fullscreen (.settings-dialog-shell): shell stays near full viewport; stage hugs
+   content height so the white card does not leave a large empty bottom.
+   Size source: openbot.micro { type:"resize", width, height } (SDK ResizeObserver). */
+
+.settings-dialog.settings-dialog--micro-fit {
+  /* Hug shell child (NewChatPopover-style h-auto / fit-content). */
+  width: fit-content;
+  min-width: min(360px, calc(100vw - 32px));
+  max-width: min(860px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
+  width: min(
+    calc(100vw - 64px),
+    max(320px, var(--micro-shell-content-w, 828px))
+  );
+  max-width: min(828px, calc(100vw - 64px));
+  height: auto;
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-body {
+  flex: 0 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  /* Do not stretch to fill leftover dialog height with blank white */
+  height: auto;
+  min-height: 0;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--sized {
+  display: flex;
+  flex-direction: column;
+}
+
+.micro-app-shell--fit .micro-app-shell-stage--scroll {
+  overflow: auto;
+  max-height: min(560px, calc(100vh - 160px));
+}
+
+.micro-app-shell--fit .micro-app-shell-frame {
+  width: 100%;
+  height: auto;
+  min-height: 160px;
+  flex: 0 0 auto;
+}
+
+.micro-app-shell--fit .micro-app-shell-frame--sized {
+  /* height set inline from clampMicroShellSize */
+  min-height: 160px;
+}
+
+.micro-app-shell--fit .micro-app-shell-placeholder {
+  height: auto;
+  min-height: 160px;
+  justify-content: flex-start;
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+
+/* Narrow / Capacitor fullscreen: keep dialog full size, shrink white stage to content */
+.settings-dialog-shell .micro-app-shell--fit {
+  height: 100%;
+  width: 100%;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage {
+  flex: 0 1 auto;
+  max-height: 100%;
+}
+
+.settings-dialog-shell .micro-app-shell--fit .micro-app-shell-stage--scroll {
+  max-height: min(72vh, calc(100dvh - 120px));
+  overflow: auto;
+}
+
 /* Beat `.modal button` for hub/shell chrome inside micro-apps dialog */
 .modal.settings-dialog-shell .micro-apps-hub .settings-hub-close,
 .modal.settings-dialog-shell .micro-apps-hub .settings-shell-back,
