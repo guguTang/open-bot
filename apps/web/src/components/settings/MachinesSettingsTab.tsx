@@ -103,13 +103,12 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
                 : DESKTOP_CAPTURE_PERMISSION_HINT}
           </FieldDescription>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => open("screen")}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => open("screen")}>
               打开「屏幕录制」
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
               disabled={busy}
               onClick={() => open("accessibility")}
             >
@@ -118,7 +117,6 @@ function DesktopCapturePermissions({ clientEnv }: { clientEnv: ClientContext }) 
             <Button
               type="button"
               variant="outline"
-              size="sm"
               disabled={busy}
               onClick={() => open("event_posting")}
             >
@@ -334,11 +332,11 @@ export function MachinesSettingsTab({
         title="已注册"
         actions={
           <>
-            <Button type="button" variant="outline" size="sm" onClick={onRefreshMachines} disabled={machinesBusy}>
+            <Button type="button" variant="outline" onClick={onRefreshMachines} disabled={machinesBusy}>
               刷新
             </Button>
             {shouldRegisterAsHost(clientEnv) ? (
-              <Button type="button" size="sm" disabled={machinesBusy} onClick={onReregisterHost}>
+              <Button type="button" disabled={machinesBusy} onClick={onReregisterHost}>
                 重新注册本机
               </Button>
             ) : null}
@@ -400,13 +398,12 @@ export function MachinesSettingsTab({
                       <>
                         <Button
                           type="button"
-                          size="sm"
                           disabled={machinesBusy || !renameDraft.trim()}
                           onClick={() => onSaveRename(m.id)}
                         >
                           保存
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" disabled={machinesBusy} onClick={onCancelRename}>
+                        <Button type="button" variant="ghost" disabled={machinesBusy} onClick={onCancelRename}>
                           取消
                         </Button>
                       </>
@@ -414,7 +411,6 @@ export function MachinesSettingsTab({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         disabled={machinesBusy}
                         onClick={() => onStartRename(m.id, m.label)}
                       >
@@ -424,7 +420,6 @@ export function MachinesSettingsTab({
                     <Button
                       type="button"
                       variant="destructive"
-                      size="sm"
                       disabled={machinesBusy}
                       onClick={() => onDeleteMachine(m)}
                     >

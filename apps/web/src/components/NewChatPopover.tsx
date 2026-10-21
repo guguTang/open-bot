@@ -239,7 +239,7 @@ export function NewChatPopover({
                   </div>
                 </ListView.ItemContent>
                 <ListView.ItemAction>
-                  <Button size="sm" variant="ghost" onPress={() => void onSelectAgent(a)}>
+                  <Button variant="ghost" onPress={() => void onSelectAgent(a)}>
                     打开
                   </Button>
                 </ListView.ItemAction>
@@ -250,7 +250,7 @@ export function NewChatPopover({
       ) : mode === "bot" ? (
         <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" size="sm" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
+            <Button variant="ghost" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
               ← 返回
             </Button>
             <TextField value={botName} onChange={setBotName} isRequired>
@@ -327,7 +327,7 @@ export function NewChatPopover({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" size="sm" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
+            <Button variant="ghost" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
               ← 返回
             </Button>
             <TextField value={groupName} onChange={setGroupName} isRequired>

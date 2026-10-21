@@ -4,7 +4,6 @@ import type { Key } from "react-aria-components";
 import type { LLMConnection } from "../api";
 import { accountInitials } from "./app/accountInitials";
 import { setThemePreference, useThemePreference, type ThemePreference } from "@/lib/theme";
-import { cn } from "@/lib/utils";
 
 type AccountMenuProps = {
   username: string;
@@ -16,7 +15,6 @@ type AccountMenuProps = {
 };
 
 export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onOpenMicroApps, onLogout }: AccountMenuProps) {
-  const modelLabel = llm?.model || llm?.name || "未配置模型";
   const initials = accountInitials(username);
   const theme = useThemePreference();
 
@@ -38,7 +36,8 @@ export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onOp
         </Avatar>
         <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
           <span className="truncate font-medium">{username}</span>
-          <span className={cn("truncate text-xs text-muted", !llm && "text-warning")}>{modelLabel}</span>
+          {/* Model lives under「更改模型」— avoid duplicating a long model id in the footer. */}
+          {!llm ? <span className="truncate text-xs text-warning">未配置模型</span> : null}
         </div>
         <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted" aria-hidden />
       </Dropdown.Trigger>

@@ -1,3 +1,4 @@
+import { ArrowDown } from "lucide-react";
 import { Button } from "@heroui/react";
 import type { RefObject } from "react";
 import { pinStick } from "../../../lib/scrollStick";
@@ -81,7 +82,7 @@ export function ChatComposerDock({ messagesRef }: { messagesRef: RefObject<HTMLD
           aria-label="滚到底部"
           onPress={() => scrollToBottom(true)}
         >
-          <span aria-hidden>↓</span>
+          <ArrowDown size={16} strokeWidth={2.25} aria-hidden />
         </Button>
       ) : null}
       <MicroAppChatPinBar

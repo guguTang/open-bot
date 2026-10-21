@@ -71,18 +71,18 @@ export function MobileSettingsHub({
             <span className="settings-hub-avatar" aria-hidden>
               {accountInitials}
             </span>
-            <span className="settings-hub-row-main">
-              <span className="settings-hub-row-title">{username || "账户"}</span>
-              {email ? <span className="settings-hub-row-sub">{email}</span> : null}
+            <span className="settings-hub-row-main min-w-0">
+              <span className="settings-hub-row-title truncate">{username || "账户"}</span>
+              {email ? <span className="settings-hub-row-sub truncate">{email}</span> : null}
             </span>
             <Chevron />
           </button>
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("server")}>
-            <span className="settings-hub-row-main">
+            <span className="settings-hub-row-main min-w-0">
               <span className="settings-hub-row-title">服务器</span>
-              <span className="settings-hub-row-sub">API 地址 · 局域网 / 隧道配对</span>
+              <span className="settings-hub-row-sub truncate">API 地址</span>
             </span>
-            <span className="settings-hub-row-value">{apiBaseLabel || "默认"}</span>
+            <span className="settings-hub-row-value max-w-[42%] truncate" title={apiBaseLabel || "默认"}>{apiBaseLabel || "默认"}</span>
             <Chevron />
           </button>
         </Card>
@@ -130,17 +130,15 @@ export function MobileSettingsHub({
               else onNavigate("bot");
             }}
           >
-            <span className="settings-hub-row-main">
+            <span className="settings-hub-row-main min-w-0">
               <span className="settings-hub-row-title">形象与优先电脑</span>
-              <span className="settings-hub-row-sub">头像、形状与本 Bot 优先电脑</span>
+              <span className="settings-hub-row-sub truncate">
+                {preferredMachineLabel
+                  ? `头像 · 优先电脑 ${preferredMachineLabel}`
+                  : "头像、形状与优先电脑"}
+              </span>
             </span>
-            <Chevron />
-          </button>
-          <button type="button" className="settings-hub-row" onClick={() => onNavigate("machines")}>
-            <span className="settings-hub-row-main">
-              <span className="settings-hub-row-title">优先电脑</span>
-            </span>
-            <span className="settings-hub-row-value">{preferredMachineLabel || "未指定"}</span>
+            <span className="settings-hub-row-value max-w-[40%] truncate">{preferredMachineLabel || "未指定"}</span>
             <Chevron />
           </button>
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("review")}>
