@@ -68,3 +68,11 @@ e2e/smoke-shots/
 
 # approval pack staging (local only)
 .pack-stack/
+
+# HeroUI Pro agent skills (licensed - do not commit)
+/.claude/skills/heroui-react-pro/
+/.cursor/skills/heroui-react-pro/
+/.opencode/skills/heroui-react-pro/
+/.claude/skills/heroui-pro-design-taste/
+/.cursor/skills/heroui-pro-design-taste/
+/.opencode/skills/heroui-pro-design-taste/
