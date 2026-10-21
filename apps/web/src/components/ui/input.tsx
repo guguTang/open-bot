@@ -7,6 +7,7 @@ function Input({ className, ...props }: React.ComponentProps<"input">) {
   return (
     <HeroInput
       data-slot="input"
+      variant="secondary"
       className={cn("w-full min-w-0", className)}
       {...(props as React.ComponentProps<typeof HeroInput>)}
     />

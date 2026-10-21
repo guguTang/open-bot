@@ -7,6 +7,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <HeroTextArea
       data-slot="textarea"
+      variant="secondary"
       className={cn("w-full min-h-16", className)}
       {...(props as React.ComponentProps<typeof HeroTextArea>)}
     />

@@ -222,7 +222,7 @@ function AppSidebarInner() {
         </div>
       ) : (
         <div className="flex min-w-0 shrink-0 items-center gap-1.5 px-1 py-0.5">
-          <SearchField
+          <SearchField variant="secondary"
             aria-label="搜索助手或群聊"
             value={convSearch}
             onChange={setConvSearch}

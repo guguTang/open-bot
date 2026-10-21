@@ -162,6 +162,7 @@ export function NewChatPopover({
       {mode === "list" ? (
         <>
           <SearchField
+            variant="secondary"
             aria-label="搜索或创建 Bot"
             value={query}
             onChange={setQuery}
@@ -255,11 +256,11 @@ export function NewChatPopover({
             </Button>
             <TextField value={botName} onChange={setBotName} isRequired>
               <Label>名称</Label>
-              <Input autoFocus placeholder="Bot 名称（必填）" />
+              <Input variant="secondary" autoFocus placeholder="Bot 名称（必填）" />
             </TextField>
             <TextField value={botDesc} onChange={setBotDesc}>
               <Label>描述（可选）</Label>
-              <Input placeholder="简短介绍" />
+              <Input variant="secondary" placeholder="简短介绍" />
             </TextField>
             <label className="flex flex-col gap-1.5 text-sm text-muted">
               人设 / System Prompt（可选）
@@ -332,7 +333,7 @@ export function NewChatPopover({
             </Button>
             <TextField value={groupName} onChange={setGroupName} isRequired>
               <Label>名称</Label>
-              <Input autoFocus placeholder="群聊名称" />
+              <Input variant="secondary" autoFocus placeholder="群聊名称" />
             </TextField>
             <div className="text-xs text-muted">选择成员（助手）</div>
             <div className="flex max-h-70 min-h-30 flex-1 flex-col gap-0.5 overflow-y-auto">
