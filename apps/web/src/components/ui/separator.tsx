@@ -1,23 +1,22 @@
 import * as React from "react"
-import { cn } from "cn"
-import { Separator as SeparatorPrimitive } from "radix-ui"
+import { Separator as HeroSeparator } from "@heroui/react"
 
+/** HeroUI Separator；保留 orientation / className 接口（decorative 由 HeroUI 处理语义）。 */
 function Separator({
   className,
   orientation = "horizontal",
-  decorative = true,
+  decorative: _decorative,
   ...props
-}: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
+}: { className?: string; orientation?: "horizontal" | "vertical"; decorative?: boolean } & Omit<
+  React.HTMLAttributes<HTMLElement>,
+  "children"
+>) {
   return (
-    <SeparatorPrimitive.Root
+    <HeroSeparator
       data-slot="separator"
-      decorative={decorative}
       orientation={orientation}
-      className={cn(
-        "shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
-        className
-      )}
-      {...props}
+      className={className}
+      {...(props as Record<string, unknown>)}
     />
   )
 }

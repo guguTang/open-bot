@@ -1,6 +1,6 @@
 import { ChevronLeft } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { Agent, Channel } from "../api";
 import { addChannelMember, removeChannelMember } from "../api";
 import { AgentAvatar } from "./AgentAvatar";

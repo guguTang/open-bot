@@ -17,7 +17,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { diagramFilename } from "../lib/mermaidFence";
 import { peekDiagram, renderDiagram, type DiagramRenderResult, type DiagramTheme } from "../lib/mermaidRender";
 import { downloadPng, downloadSvg } from "../lib/diagramExport";

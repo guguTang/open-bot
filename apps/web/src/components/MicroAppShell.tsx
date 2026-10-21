@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, Ellipsis, Loader2, Pin, PinOff, Trash2, Upload, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   fetchMicroAppRuntime,
   microAppHasSurface,

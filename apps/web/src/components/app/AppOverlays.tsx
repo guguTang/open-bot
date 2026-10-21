@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { Agent, Channel } from "../../api";
 import { FeedbackModal } from "../FeedbackModal";
 import { TrainPanel } from "../TrainPanel";

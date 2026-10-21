@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ThumbsDown } from "lucide-react";
 import type { Agent, BotLesson, LessonStatus } from "../api";
 import { deleteLesson, listAgentLessons, updateLesson } from "../api";
 import { Button } from "@/components/ui/button";
@@ -177,7 +178,7 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
 
   const emptyText =
     tab === "pending"
-      ? "还没有待确认的经验。给 Bot 回复点「反馈」或 👎 后写原因，会出现在这里。"
+      ? "还没有待确认的经验。给 Bot 回复点「反馈」或踩一下后写原因，会出现在这里。"
       : tab === "active"
         ? "还没有已生效的经验。"
         : "还没有已忽略的经验。";
@@ -203,7 +204,7 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
               确认、编辑或停用从这个助手的反馈里生成的经验。
             </DialogDescription>
           </DialogHeader>
-          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onClose}>
+          <Button type="button" variant="ghost" className="shrink-0" onClick={onClose}>
             返回
           </Button>
         </div>
@@ -265,8 +266,15 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                 </DialogFooter>
               </form>
             ) : filtered.length === 0 ? (
-              <p className="py-6 text-center text-sm text-pretty text-muted-foreground">
-                {busy ? "加载中…" : emptyText}
+              <p className="py-6 text-center text-sm text-pretty text-muted">
+                {busy ? (
+                  "加载中…"
+                ) : (
+                  <span className="inline-flex items-start gap-2 text-left">
+                    {tab === "pending" ? <ThumbsDown className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden /> : null}
+                    <span>{emptyText}</span>
+                  </span>
+                )}
               </p>
             ) : (
               <ScrollArea className="h-[min(52vh,28rem)] max-[767px]:h-[min(70dvh,36rem)]">
@@ -281,21 +289,20 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                         </CardHeader>
                         {meta ? (
                           <CardContent>
-                            <p className="text-xs text-muted-foreground">{meta}</p>
+                            <p className="text-xs text-muted">{meta}</p>
                           </CardContent>
                         ) : null}
                         <CardFooter className="flex-wrap gap-2">
                           {tab === "pending" ? (
                             <>
-                              <Button type="button" size="sm" disabled={busy} onClick={() => void confirmActive(lesson)}>
+                              <Button type="button" disabled={busy} onClick={() => void confirmActive(lesson)}>
                                 确认生效
                               </Button>
-                              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => openEdit(lesson)}>
+                              <Button type="button" variant="outline" disabled={busy} onClick={() => openEdit(lesson)}>
                                 编辑
                               </Button>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="outline"
                                 disabled={busy}
                                 onClick={() => void patchStatus(lesson.id, "ignored")}
@@ -306,12 +313,11 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                           ) : null}
                           {tab === "active" ? (
                             <>
-                              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => openEdit(lesson)}>
+                              <Button type="button" variant="outline" disabled={busy} onClick={() => openEdit(lesson)}>
                                 编辑
                               </Button>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="outline"
                                 disabled={busy}
                                 onClick={() => void patchStatus(lesson.id, "ignored")}
@@ -320,7 +326,6 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                               </Button>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="destructive"
                                 disabled={busy}
                                 onClick={() => void remove(lesson.id)}
@@ -333,7 +338,6 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                             <>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="outline"
                                 disabled={busy}
                                 onClick={() => void patchStatus(lesson.id, "pending")}
@@ -342,7 +346,6 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                               </Button>
                               <Button
                                 type="button"
-                                size="sm"
                                 variant="destructive"
                                 disabled={busy}
                                 onClick={() => void remove(lesson.id)}

@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { copyText } from "../../lib/diagramExport";
 
 /** Clipboard helper with the shared toast UX used by all diagram cards. */

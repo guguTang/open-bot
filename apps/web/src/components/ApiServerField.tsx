@@ -7,14 +7,7 @@ import {
   setApiBase,
   type ApiHealthProbeResult,
 } from "../api";
-import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Button, Input, Label, TextField } from "@heroui/react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -32,6 +25,7 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
   const [draft, setDraft] = useState(() => getApiBase());
   const [busy, setBusy] = useState(false);
   const [probe, setProbe] = useState<ApiHealthProbeResult | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(variant === "settings");
 
   const runProbe = useCallback(async (url: string) => {
     setBusy(true);
@@ -64,27 +58,38 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
       ? "与电脑同一局域网，或填 ngrok 等 https 隧道。改地址后先「检测连接」，通过再保存；切换后保留本机登录态，连不上请退出重登。"
       : "填写电脑上的 API 地址以配对（局域网如 http://192.168.x.x:18080，或 ngrok https 隧道）。先检测连接，通过后再登录。";
 
+  if (variant === "login" && !advancedOpen) {
+    return (
+      <div className={cn("mt-2 flex flex-col gap-1")}>
+        <button
+          type="button"
+          className="self-start border-0 bg-transparent p-0 text-xs text-muted underline-offset-2 hover:underline"
+          onClick={() => setAdvancedOpen(true)}
+        >
+          高级 · 服务器地址（当前 {getApiBase()}）
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <FieldGroup
-      className={cn(
-        "gap-2",
-        variant === "login" && "mt-3 border-t border-border pt-3",
-      )}
-    >
-      <Field>
-        <FieldLabel htmlFor="api-server-url">服务器地址</FieldLabel>
+    <div className={cn("flex flex-col gap-2", variant === "login" && "mt-2")}>
+      <TextField
+        name="api-server-url"
+        value={draft}
+        onChange={(v) => {
+          setDraft(v);
+          setProbe(null);
+        }}
+        isDisabled={busy}
+      >
+        <Label>服务器地址</Label>
         <Input
-          id="api-server-url"
+          variant="secondary"
           type="url"
           inputMode="url"
           autoComplete="url"
           placeholder={DEFAULT_API_BASE}
-          value={draft}
-          disabled={busy}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setProbe(null);
-          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -92,34 +97,37 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
             }
           }}
         />
-        <FieldDescription>{help}</FieldDescription>
-      </Field>
+      </TextField>
+      <p className="m-0 text-xs leading-snug text-muted">{help}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void runProbe(draft)}>
+        <Button type="button" variant="ghost" isDisabled={busy} onPress={() => void runProbe(draft)}>
           {busy ? "检测中…" : "检测连接"}
         </Button>
-        <Button type="button" disabled={busy} onClick={() => void apply()}>
+        <Button type="button" variant="secondary" isDisabled={busy} onPress={() => void apply()}>
           {variant === "settings" ? "保存并使用" : "使用此服务器"}
         </Button>
-        {draft.trim().replace(/\/$/, "") !== DEFAULT_API_BASE ? (
-          <Button type="button" variant="ghost" disabled={busy} onClick={resetDefault}>
+        {draft.trim().replace(/\/$/, "") !== DEFAULT_API_BASE.replace(/\/$/, "") ? (
+          <Button type="button" variant="ghost" isDisabled={busy} onPress={resetDefault}>
             恢复默认
           </Button>
         ) : null}
       </div>
       {probe ? (
-        <p
-          className={cn(
-            "m-0 text-sm leading-snug",
-            probe.ok ? "text-green-700 dark:text-green-400" : "text-destructive",
-          )}
-          role="status"
-        >
+        <p className={cn("m-0 text-sm leading-snug", probe.ok ? "text-success" : "text-danger")} role="status">
           {formatApiHealthProbe(probe)}
         </p>
       ) : (
-        <FieldDescription>当前：{getApiBase()}</FieldDescription>
+        <p className="m-0 text-xs text-muted">当前：{getApiBase()}</p>
       )}
-    </FieldGroup>
+      {variant === "login" ? (
+        <button
+          type="button"
+          className="self-start border-0 bg-transparent p-0 text-xs text-muted underline-offset-2 hover:underline"
+          onClick={() => setAdvancedOpen(false)}
+        >
+          收起
+        </button>
+      ) : null}
+    </div>
   );
 }

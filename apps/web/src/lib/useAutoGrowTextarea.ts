@@ -2,7 +2,7 @@ import { type RefObject, useCallback, useLayoutEffect } from "react";
 
 /**
  * 让 textarea 随内容自动增高（从 1 行起），超过 CSS max-height 后内部滚动。
- * 上限由样式决定（.composer textarea 的 max-height，来自 --ob-composer-max-h token），
+ * 上限由样式决定（.composer textarea 的 max-height，来自 --app-composer-max-h），
  * 这里只读 computed max-height，便于不同壳（Tauri / Capacitor）各自调整。
  * 外层 .composer-wrap 的 ResizeObserver（useChatChromeOverlay）会同步消息流底部留白并保持贴底。
  */
