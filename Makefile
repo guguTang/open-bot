@@ -4,7 +4,8 @@
 	dev-mobile-rn dev-mobile-rn-clear check-mobile-rn \
 	sandbox-image sandbox-image-desktop \
 	stop-api stop-runtime stop-web stop-worker stop-dev \
-	e2e-install e2e e2e-web e2e-admin backfill-embeddings dream-user
+	e2e-install e2e e2e-web e2e-admin backfill-embeddings dream-user \
+	install-js
 
 API_ADDR ?= :18080
 AGENT_RUNTIME_URL ?= http://127.0.0.1:8001
@@ -26,6 +27,16 @@ endif
 # Single compose entry: deploy/compose.yaml (profiles: casdoor, langfuse)
 # core: postgres, redis, minio, markitdown (document parse, host :8010)
 COMPOSE ?= docker compose -f deploy/compose.yaml --project-directory deploy
+
+# JS monorepo install with HeroUI Pro CDN auth (see .env.heroui.local / docs/本地启动.md)
+# Loads gitignored .env then .env.heroui.local so HEROUI_AUTH_TOKEN is available to postinstall.
+install-js:
+	set -a && [ -f .env ] && . ./.env; [ -f .env.heroui.local ] && . ./.env.heroui.local; set +a && \
+	  if [ -z "$$HEROUI_AUTH_TOKEN" ]; then \
+	    echo "WARN: HEROUI_AUTH_TOKEN unset — @heroui-pro/react postinstall may skip CDN artifacts."; \
+	    echo "      Create .env.heroui.local (see .env.example) or: pnpm dlx heroui-pro@latest login"; \
+	  fi && \
+	  pnpm install
 
 compose-up:
 	$(COMPOSE) up -d
