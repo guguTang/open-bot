@@ -293,7 +293,7 @@ function AppSidebarInner() {
               ? { id: `agent:${item.agent.id}`, kind: "agent" as const, agent: item.agent }
               : { id: `channel:${item.channel.id}`, kind: "channel" as const, channel: item.channel },
           )}
-          className="min-h-0 flex-1 border-0 bg-transparent shadow-none"
+          className="conv-list min-h-0 flex-1 border-0 bg-transparent shadow-none"
         >
           {(row) => {
             if (row.kind === "agent") {
