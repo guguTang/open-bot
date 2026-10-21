@@ -35,7 +35,7 @@ export function HostMachineSelect({
 }: Props) {
   return (
     <>
-      <NativeSelect fullWidth className={cn(sheetForm && "text-base")}>
+      <NativeSelect fullWidth variant="secondary" className={cn(sheetForm && "text-base")}>
         <Label>{label}</Label>
         <NativeSelect.Trigger
           id={id}

@@ -142,7 +142,7 @@ function AppSidebarInner() {
               onClick={() => void sessionActions().openSettings("general")}
             >
               <span
-                className="grid size-9 place-items-center rounded-full bg-[#e5e7eb] text-xs font-semibold text-[#374151]"
+                className="grid size-9 place-items-center rounded-full bg-default text-xs font-semibold text-foreground"
                 aria-hidden
               >
                 {accountInitials(user?.username || "")}
@@ -198,7 +198,7 @@ function AppSidebarInner() {
                 />
               ) : (
                 <span
-                  className="grid size-20 place-items-center rounded-full bg-[#111827] text-[22px] font-bold text-white"
+                  className="grid size-20 place-items-center rounded-full bg-accent text-[22px] font-bold text-accent-foreground"
                   aria-hidden
                 >
                   {accountInitials(user?.username || "open bot")}
@@ -260,6 +260,7 @@ function AppSidebarInner() {
           aria-label="会话列表"
           variant="secondary"
           selectionMode="single"
+          selectionBehavior="replace"
           selectedKeys={
             conversation?.channel_id
               ? new Set([`channel:${conversation.channel_id}`])
@@ -321,7 +322,6 @@ function AppSidebarInner() {
                       status={presenceByAgent[a.id] || "idle"}
                       searchingHint={searchHints.listAgentSearching(a.id)}
                       online={isBotOnline(a.id)}
-                      onClick={() => sessionActions().openAvatarSettings(a)}
                     />
                     <div className="min-w-0 flex-1">
                       <ListView.Title className={cn(sheetForm && "text-[15px]")}>
@@ -364,7 +364,7 @@ function AppSidebarInner() {
                       <Button
                         isIconOnly
                         size="sm"
-                        variant="ghost" className="text-danger"
+                        variant="danger-soft"
                         aria-label="删除助手"
                         isDisabled={agentBusy}
                         onPress={() => void sessionActions().removeAgent(a)}
@@ -423,7 +423,7 @@ function AppSidebarInner() {
                     <Button
                       isIconOnly
                       size="sm"
-                      variant="ghost" className="text-danger"
+                      variant="danger-soft"
                       aria-label="删除群聊"
                       isDisabled={channelBusy}
                       onPress={() => void sessionActions().removeChannel(ch)}

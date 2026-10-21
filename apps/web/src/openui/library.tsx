@@ -2,10 +2,14 @@
  * OpenUI 组件库的 web 渲染器（web / Tauri 桌面 / Capacitor 移动壳共用）。
  * 契约见 ./spec.ts；RN 端同名组件在 apps/mobile-rn/src/openui/library.tsx。
  */
+import { createContext, useContext } from "react";
 import { FormNameContext, useFormName, useIsStreaming, useStateField, useTriggerAction } from "@openuidev/react-lang";
-import { Button, Card, Input, Label, Table, TextField } from "@heroui/react";
+import { Button, Card, Input, Label, ScrollShadow, Table, TextField } from "@heroui/react";
 import { NativeSelect } from "@heroui-pro/react";
 import { createOpenBotLibrary, type OpenBotRenderers } from "./spec";
+
+/** Peer Buttons flatten hierarchy — all secondary (taste: sibling items uniform). */
+const OuiPeerButtonsContext = createContext(false);
 
 const renderers: OpenBotRenderers = {
   Card: ({ props, renderNode }) => (
@@ -26,11 +30,11 @@ const renderers: OpenBotRenderers = {
     const trigger = useTriggerAction();
     const streaming = useIsStreaming();
     const formName = useFormName();
-    const primary = props.variant === "primary";
+    const peer = useContext(OuiPeerButtonsContext);
+    const primary = !peer && props.variant === "primary";
     return (
       <Button
-        size="sm"
-        variant={primary ? "primary" : "outline"}
+        variant={primary ? "primary" : "secondary"}
         className={`oui-btn${primary ? " oui-btn-primary" : ""}`}
         isDisabled={streaming}
         onPress={() => void trigger(props.label, formName, props.action as never)}
@@ -39,32 +43,38 @@ const renderers: OpenBotRenderers = {
       </Button>
     );
   },
-  Buttons: ({ props, renderNode }) => <div className="oui-buttons">{renderNode(props.buttons)}</div>,
+  Buttons: ({ props, renderNode }) => (
+    <OuiPeerButtonsContext.Provider value={true}>
+      <div className="oui-buttons">{renderNode(props.buttons)}</div>
+    </OuiPeerButtonsContext.Provider>
+  ),
   Table: ({ props }) => (
-    <Table variant="secondary" className="oui-table-wrap">
-      <Table.ScrollContainer>
-        <Table.Content aria-label="数据表" className="oui-table">
-          <Table.Header>
-            {props.headers.map((h, i) => (
-              <Table.Column key={i} isRowHeader={i === 0}>
-                {h}
-              </Table.Column>
-            ))}
-          </Table.Header>
-          <Table.Body>
-            {props.rows.map((row, r) => (
-              <Table.Row key={r}>
-                {row.map((c, i) => (
-                  <Table.Cell key={i} className="tabular-nums">
-                    {c}
-                  </Table.Cell>
-                ))}
-              </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Content>
-      </Table.ScrollContainer>
-    </Table>
+    <ScrollShadow orientation="horizontal" className="oui-table-scroll max-w-full" size={40}>
+      <Table variant="secondary" className="oui-table-wrap">
+        <Table.ScrollContainer>
+          <Table.Content aria-label="数据表" className="oui-table">
+            <Table.Header>
+              {props.headers.map((h, i) => (
+                <Table.Column key={i} isRowHeader={i === 0}>
+                  {h}
+                </Table.Column>
+              ))}
+            </Table.Header>
+            <Table.Body>
+              {props.rows.map((row, r) => (
+                <Table.Row key={r}>
+                  {row.map((c, i) => (
+                    <Table.Cell key={i} className="tabular-nums">
+                      {c}
+                    </Table.Cell>
+                  ))}
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
+    </ScrollShadow>
   ),
   List: ({ props }) =>
     props.ordered ? (
@@ -114,7 +124,7 @@ const renderers: OpenBotRenderers = {
     const field = useStateField<string>(props.name);
     const streaming = useIsStreaming();
     return (
-      <NativeSelect fullWidth className="oui-input">
+      <NativeSelect fullWidth variant="secondary" className="oui-input">
         <Label>{props.label}</Label>
         <NativeSelect.Trigger
           name={props.name}

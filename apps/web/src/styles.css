@@ -45,9 +45,9 @@
   --assistant-fg: var(--foreground);
   --inline-code-bg: var(--surface-tertiary);
   --inline-code-fg: var(--foreground);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.08);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
   --sidebar-w: 280px;
   --radius-sm: calc(var(--radius) * 1.5);
   --radius-md: calc(var(--radius) * 2);
@@ -209,7 +209,7 @@ body,
   padding: 0;
 }
 .bot-avatar-color-opt.active {
-  border-color: #fff;
+  border-color: var(--surface);
   box-shadow: 0 0 0 2px var(--accent);
 }
 
@@ -621,7 +621,7 @@ body,
   margin: 0.7em 0;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fafafa;
+  background: var(--surface-secondary);
   overflow: hidden;
 }
 
@@ -871,7 +871,7 @@ body,
   gap: 6px;
   padding: 3px 8px;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--background) 14%, transparent);
   font-size: 11px;
   max-width: 100%;
 }
@@ -884,7 +884,7 @@ body,
   border-radius: 6px;
   object-fit: cover;
   flex-shrink: 0;
-  background: rgba(0, 0, 0, 0.12);
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 .msg-attach-name {
   overflow: hidden;
@@ -937,7 +937,7 @@ body,
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: color-mix(in srgb, var(--foreground) 35%, transparent);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -1081,7 +1081,7 @@ button.ghost {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.llm-pill.warn { color: #b45309; background: #fef3c7; }
+.llm-pill.warn { color: var(--warning, #b45309); background: color-mix(in srgb, var(--warning, #b45309) 16%, transparent); }
 .modal-wide { width: min(640px, 100%); max-height: 90vh; overflow: auto; overscroll-behavior: contain; }
 .modal-head {
   display: flex;
@@ -1124,17 +1124,17 @@ button.ghost {
 }
 /* Product rule A: phone presence row — secondary grey, not danger */
 .tag.machine-login-only {
-  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: var(--muted);
   font-weight: 500;
 }
 .tag.machine-online {
-  background: rgba(16, 185, 129, 0.14);
-  color: #047857;
+  background: color-mix(in srgb, var(--success, #10b981) 14%, transparent);
+  color: var(--success, #047857);
   font-weight: 550;
 }
 .tag.machine-offline {
-  background: rgba(107, 114, 128, 0.12);
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: var(--muted);
   font-weight: 500;
 }
@@ -1146,7 +1146,7 @@ button.ghost {
 
 [data-theme="dark"] .tag.machine-host-ready {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--accent) 70%, var(--foreground));
 }
 
 .llm-form {
@@ -1286,7 +1286,7 @@ button.ghost {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #ececee;
+  background: var(--surface-secondary);
   color: var(--muted);
   display: grid;
   place-items: center;
@@ -1354,7 +1354,7 @@ button.ghost {
 }
 
 .settings-dialog .settings-pill:hover {
-  background: #e7e8eb;
+  background: var(--surface-tertiary);
 }
 
 .settings-row {
@@ -1593,7 +1593,7 @@ button.ghost {
 .messages,
 .modal-wide {
   scrollbar-width: thin;
-  scrollbar-color: #c4c9d1 transparent;
+  scrollbar-color: var(--separator) transparent;
 }
 .sidebar-scroll::-webkit-scrollbar,
 .messages::-webkit-scrollbar,
@@ -1604,7 +1604,7 @@ button.ghost {
 .sidebar-scroll::-webkit-scrollbar-thumb,
 .messages::-webkit-scrollbar-thumb,
 .modal-wide::-webkit-scrollbar-thumb {
-  background: #c4c9d1;
+  background: var(--separator);
   border-radius: 999px;
 }
 
@@ -1671,7 +1671,7 @@ button.ghost {
   margin: 10px 16px 0;
   padding: 8px 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   color: var(--foreground);
   font-size: 13px;
@@ -1712,7 +1712,7 @@ button.ghost {
   gap: 8px;
   flex-shrink: 0;
 }
-.artifact-card:hover { border-color: #94a3b8; }
+.artifact-card:hover { border-color: var(--border); }
 .artifact-kind {
   font-size: 11px;
   text-transform: uppercase;
@@ -1738,7 +1738,7 @@ button.ghost {
 .artifact-download-error {
   width: 100%;
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--danger);
 }
 .tool-chip {
   border-radius: 999px;
@@ -1754,8 +1754,8 @@ button.ghost {
   max-height: 160px;
   overflow: auto;
   font-size: 11px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--foreground);
+  color: var(--background);
   padding: 8px;
   border-radius: 8px;
 }
@@ -1784,7 +1784,7 @@ button.ghost {
   background: var(--bg-elevated);
   border-radius: 16px;
   padding: 14px 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--shadow-sm);
   gap: 0;
 }
 .host-confirm-kicker {
@@ -2005,9 +2005,9 @@ button.ghost {
   right: 0;
   bottom: calc(100% + 8px);
   background: var(--surface);
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--shadow-lg);
   padding: 6px;
   z-index: 20;
   max-height: 240px;
@@ -2028,7 +2028,7 @@ button.ghost {
 }
 .mention-option:hover,
 .mention-option.active {
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .mention-option-name {
   font-weight: 600;
@@ -2146,7 +2146,7 @@ button.ghost {
   height: 18px;
   border-radius: 50%;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-sm);
   transition: transform 0.15s ease;
 }
 
@@ -2293,7 +2293,7 @@ button.ghost {
   max-width: 100%;
   text-align: left;
   border: none;
-  border-left: 2px solid #6b7280;
+  border-left: 2px solid var(--muted);
   border-radius: 1px;
   background: transparent;
   padding: 4px 0 4px 8px;
@@ -2317,7 +2317,7 @@ button.ghost {
   color: rgba(255, 255, 255, 0.72);
 }
 .msg-highlight {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
   border-radius: 12px;
 }
@@ -2372,7 +2372,7 @@ button.ghost {
 .composer-quote-divider {
   height: 1px;
   margin: 0 16px;
-  background: rgba(0, 0, 0, 0.06);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 
@@ -3007,7 +3007,7 @@ dialog.action-sheet-root:not([open]) {
   cursor: pointer;
 }
 .msg-hover-btn:hover {
-  background: rgba(0, 0, 0, 0.05) !important;
+  background: color-mix(in srgb, var(--foreground) 5%, transparent) !important;
   color: var(--foreground);
 }
 .msg-hover-btn svg {
@@ -3024,7 +3024,7 @@ dialog.action-sheet-root:not([open]) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-md);
   padding: 4px;
   z-index: 8;
 }
@@ -3288,7 +3288,7 @@ html.capacitor-native {
   align-items: stretch;
   justify-content: stretch;
   padding: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: color-mix(in srgb, var(--foreground) 35%, transparent);
 }
 
 .settings-dialog-shell {
@@ -3764,13 +3764,13 @@ html.touch-ui .composer-quote-clear {
   box-sizing: border-box;
   background: transparent;
   /* Measured chrome already includes safe-area; fallbacks cover first paint. */
-  padding-top: calc(var(--chat-top-overlay, calc(max(16px, calc(var(--safe-top, 0px) + 12px)) + var(--chat-top-chrome, 48px))) + 8px);
+  padding-top: calc(var(--chat-top-overlay, calc(max(16px, calc(var(--safe-top, 0px) + 12px)) + var(--chat-top-chrome, 48px))) + 16px);
   padding-bottom: calc(var(--chat-composer-overlay, calc(max(12px, var(--safe-bottom, 0px)) + var(--chat-composer-chrome, 72px))) + 12px);
   padding-left: 16px;
   padding-right: 16px;
 }
 
-/* Minimal floating top chrome: transparent header, frost only on controls. */
+/* Minimal floating top chrome: soft wash so messages under controls stay legible. */
 .app.shell-narrow.mobile-chat .main > .topbar {
   position: absolute;
   top: 0;
@@ -3788,9 +3788,9 @@ html.touch-ui .composer-quote-clear {
   padding-left: 64px;
   padding-right: 12px;
   border-bottom: none;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background: color-mix(in srgb, var(--chat-immersive-bg, var(--background)) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
   pointer-events: none; /* scroll reaches messages through gaps */
 }
 .app.shell-narrow.mobile-chat .main > .topbar > * {
@@ -3810,7 +3810,7 @@ html.touch-ui .composer-quote-clear {
   background: color-mix(in srgb, var(--chat-immersive-bg) 62%, transparent);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .app.shell-narrow.mobile-chat .main > .topbar .topbar-back {
   background: rgba(255, 255, 255, 0.12);
@@ -3824,7 +3824,7 @@ html.touch-ui .composer-quote-clear {
   align-self: center;
   background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
   border-color: transparent;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-sm);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   overflow: hidden;
@@ -4457,7 +4457,7 @@ html.touch-ui .composer-quote-clear {
   align-items: stretch;
   justify-content: stretch;
   padding: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: color-mix(in srgb, var(--foreground) 35%, transparent);
 }
 
 .bot-avatar-modal-shell {
@@ -5294,14 +5294,16 @@ html.touch-ui .composer-quote-clear {
 .oui-root { margin: 0.7em 0; }
 .oui-card-body { display: flex; flex-direction: column; gap: 8px; }
 .oui-text-caption { font-size: 12px; color: var(--muted); }
-.oui-table { font-size: 13px; }
+.oui-table-wrap { max-width: 100%; }
+.oui-table-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.oui-table { font-size: 13px; min-width: max-content; }
 .oui-table td, .oui-table th { word-break: normal; overflow-wrap: normal; }
 .oui-table th { white-space: nowrap; }
-.oui-table { min-width: max-content; }
 .oui-table td { min-width: 4.5em; max-width: 16em; white-space: normal; }
+.oui-table .tabular-nums { font-variant-numeric: tabular-nums; }
 .oui-text { margin: 0; line-height: 1.5; }
 .oui-text-heading { font-weight: 600; font-size: 15px; }
-.oui-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.oui-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 @media (pointer: coarse) { .oui-btn { min-height: var(--app-touch-min); } }
 .oui-list { margin: 0; padding-left: 1.3em; }
 .oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
@@ -5367,14 +5369,38 @@ html.touch-ui .composer-quote-clear {
   border-radius: calc(var(--radius) * 2);
 }
 .chat-message--user .bubble-user,
-.chat-row-user .bubble-user {
+.chat-row-user .bubble-user,
+.chat-message--user .chat-message__bubble.bubble-user {
   background: var(--accent);
+  color: var(--accent-foreground);
+}
+/* Pro ChatMessage Content sets color:var(--foreground) — force accent-fg so dark user bubbles stay readable */
+.chat-message--user .bubble-user .chat-message__content,
+.chat-row-user .bubble-user .chat-message__content,
+.chat-message--user .bubble-user .bubble-text,
+.chat-row-user .bubble-user .bubble-text,
+.chat-message--user .bubble-user [data-slot="chat-message-content"],
+.chat-row-user .bubble-user [data-slot="chat-message-content"] {
   color: var(--accent-foreground);
 }
 .chat-message--assistant .bubble-assistant,
 .chat-row-assistant .bubble-assistant {
   background: var(--surface-secondary);
   color: var(--foreground);
+}
+/* Nested surfaces: OpenUI Card owns elevation; transparent the assistant chrome around it */
+.chat-message--assistant .bubble-assistant:has(.oui-card),
+.chat-row-assistant .bubble-assistant:has(.oui-card) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* Dev-only OpenUI Inspect/Debug portals to body — hide while composer is up so it never covers send */
+body:has(.composer-wrap) [aria-label="OpenUI Inspect"],
+body:has(.composer-wrap) [aria-label="OpenUI Debug"] {
+  display: none !important;
 }
 
 

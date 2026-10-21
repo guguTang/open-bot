@@ -13,11 +13,12 @@ export const SIDEBAR_SCROLL = "sidebar-scroll";
 
 export function sidebarAsideClass(opts: { sheetForm: boolean; hideOnMobileChat: boolean }) {
   return cn(
-    "sidebar flex min-h-0 flex-col overflow-hidden overscroll-none bg-[var(--bg-elevated)]",
+    // Taste: sidebar matches page background; subtle dividing edge only — no elevated card.
+    "sidebar flex min-h-0 flex-col overflow-hidden overscroll-none bg-background",
     opts.hideOnMobileChat && "hidden",
     opts.sheetForm
-      ? "m-0 h-full max-h-full gap-0 rounded-none p-0 shadow-none"
-      : "my-2.5 ml-2.5 mr-0 h-[calc(100%-20px)] max-h-[calc(100%-20px)] gap-2.5 rounded-2xl p-2.5 shadow-[var(--shadow-md)]",
+      ? "m-0 h-full max-h-full gap-0 rounded-none border-0 p-0 shadow-none"
+      : "m-0 h-full max-h-full gap-2.5 rounded-none border-r border-separator p-2.5 shadow-none",
   );
 }
 
