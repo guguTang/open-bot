@@ -1,56 +1,25 @@
-@import "tailwindcss/theme" layer(theme);
-@import "tailwindcss/utilities" layer(utilities);
-/* 共享设计 token（design/tokens.json 生成），与 RN 端一致 */
-@import "./styles/tokens.css";
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "@heroui-pro/react/css";
+/* 主题：HeroUI Uber 预设（亮/暗），web 端唯一的颜色来源 */
+@import "./styles/uber-theme.css";
 
-/* Map open-bot tokens → Tailwind utilities used by shadcn components (border-input, text-muted-foreground, …). */
+/* 旧 shadcn 工具类名（text-muted-foreground、border-input …）映射到 HeroUI 语义 token。
+   与 HeroUI 同名的 background/foreground/border/accent/muted 由 HeroUI 自己提供，这里不再覆盖。 */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted-bg);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent-ui);
-  --color-accent-foreground: var(--accent-ui-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-}
-
-/* shadcn / Radix extras (do not override existing open-bot --border/--muted/etc.) */
-@layer base {
-  :root {
-    --background: var(--bg);
-    --foreground: var(--text);
-    --card: var(--bg-elevated);
-    --card-foreground: var(--text);
-    --popover: var(--bg-elevated);
-    --popover-foreground: var(--text);
-    /* shadcn primary follows baseColor:neutral — not brand --accent blue */
-    --primary: var(--text);
-    --primary-foreground: #ffffff;
-    --secondary: var(--bg-soft);
-    --secondary-foreground: var(--text);
-    --muted-bg: var(--bg-soft);
-    --muted-foreground: var(--muted);
-    /* shadcn accent = hover/focus surface (not brand --accent) */
-    --accent-ui: var(--bg-hover);
-    --accent-ui-foreground: var(--text);
-    --destructive: var(--danger);
-    --destructive-foreground: #ffffff;
-    --input: var(--border);
-    --ring: var(--ob-color-ring);
-    --radius: var(--radius-md);
-  }
+  --color-card: var(--surface);
+  --color-card-foreground: var(--surface-foreground);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--overlay-foreground);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+  --color-secondary: var(--default);
+  --color-secondary-foreground: var(--default-foreground);
+  --color-muted-foreground: var(--muted);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
+  --color-input: var(--field-border, var(--border));
+  --color-ring: var(--focus);
 }
 
 :root {
@@ -63,32 +32,33 @@
   --chat-immersive-bg: var(--bg-elevated, #ffffff);
   --chat-top-chrome: 48px; /* floating row (~44) + tight pad; safe offset is separate (+12) */
   --chat-composer-chrome: 72px;
-  --bg: var(--ob-color-background);
-  --bg-elevated: var(--ob-color-surface);
-  --bg-soft: var(--ob-color-surface-soft);
-  --bg-hover: var(--ob-color-surface-hover);
-  --border: var(--ob-color-border);
-  --border-strong: var(--ob-color-border-strong);
-  --text: var(--ob-color-foreground);
-  --muted: var(--ob-color-muted-foreground);
-  --accent: var(--ob-color-primary);
-  --accent-2: var(--ob-color-primary-2);
-  --user-bg: #1a1a1b;
-  --user-fg: #ffffff;
-  --assistant-bg: #e4e7ec;
-  --assistant-fg: #1a1a1b;
-  --danger: var(--ob-color-danger);
-  --inline-code-bg: #fde8e8;
-  --inline-code-fg: #c4314b;
+  --bg: var(--background);
+  --bg-elevated: var(--surface);
+  --bg-soft: var(--surface-secondary);
+  --bg-hover: var(--default);
+  --border-strong: color-mix(in oklab, var(--border) 70%, var(--foreground) 12%);
+  --text: var(--foreground);
+  --accent-2: var(--accent);
+  --user-bg: var(--accent);
+  --user-fg: var(--accent-foreground);
+  --assistant-bg: var(--surface-secondary);
+  --assistant-fg: var(--foreground);
+  --inline-code-bg: var(--surface-tertiary);
+  --inline-code-fg: var(--foreground);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.08);
   --sidebar-w: 280px;
-  --radius-sm: var(--ob-radius-sm);
-  --radius-md: var(--ob-radius-md);
-  --radius-lg: var(--ob-radius-lg);
-  --radius-pill: var(--ob-radius-pill);
-  font-family: var(--ob-font-sans);
+  --radius-sm: calc(var(--radius) * 1.5);
+  --radius-md: calc(var(--radius) * 2);
+  --radius-lg: calc(var(--radius) * 3);
+  --radius-pill: 999px;
+  /* 应用级尺寸/动效常量（原 --ob-*，不再包含颜色） */
+  --app-touch-min: 44px;
+  --app-composer-max-h: min(40dvh, 280px);
+  --app-motion-fast: 150ms;
+  --app-easing: cubic-bezier(0.2, 0, 0, 1);
+  font-family: var(--font-sans);
   line-height: 1.5;
 }
 
@@ -967,7 +937,7 @@ body,
   padding: 8px 4px;
   outline: none;
   /* 自动增高上限：约 40% 视口，封顶 280px（design token），超出后内部滚动 */
-  max-height: var(--ob-composer-max-h, 160px);
+  max-height: var(--app-composer-max-h, 160px);
   min-height: 24px;
   overflow-y: hidden;
   overscroll-behavior: contain;
@@ -5454,15 +5424,15 @@ html.touch-ui .composer-quote-clear {
 .oui-card-body { display: flex; flex-direction: column; gap: 8px; }
 .oui-text { margin: 0; line-height: 1.5; }
 .oui-text-heading { font-weight: 600; font-size: 15px; }
-.oui-text-caption { font-size: 12px; color: var(--muted-foreground); }
+.oui-text-caption { font-size: 12px; color: var(--muted); }
 .oui-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .oui-btn { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
 .oui-btn:hover:not(:disabled) { background: var(--bg-hover, #eceef1); }
 .oui-btn:disabled { opacity: 0.5; cursor: default; }
-.oui-btn { min-height: 36px; transition: background-color var(--ob-motion-fast) var(--ob-easing), opacity var(--ob-motion-fast) var(--ob-easing); }
-@media (pointer: coarse) { .oui-btn { min-height: var(--ob-touch-min); } }
-.oui-btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
-.oui-btn-primary:hover:not(:disabled) { background: var(--primary); opacity: 0.9; }
+.oui-btn { min-height: 36px; transition: background-color var(--app-motion-fast) var(--app-easing), opacity var(--app-motion-fast) var(--app-easing); }
+@media (pointer: coarse) { .oui-btn { min-height: var(--app-touch-min); } }
+.oui-btn-primary { background: var(--accent); color: var(--accent-foreground); border-color: transparent; }
+.oui-btn-primary:hover:not(:disabled) { background: var(--accent); opacity: 0.9; }
 .oui-table-wrap { overflow-x: auto; }
 .oui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left;; vertical-align: top; overflow-wrap: normal; word-break: normal; }
@@ -5470,7 +5440,7 @@ html.touch-ui .composer-quote-clear {
 .oui-table th { background: var(--bg-soft, #f5f5f7); font-weight: 600; }
 .oui-list { margin: 0; padding-left: 1.3em; }
 .oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
-.oui-field-label { color: var(--muted-foreground); }
+.oui-field-label { color: var(--muted); }
 .oui-field-value { font-weight: 500; text-align: right; }
 .oui-form { display: flex; flex-direction: column; gap: 10px; }
 .oui-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -5480,7 +5450,7 @@ html.touch-ui .composer-quote-clear {
    :where() 零优先级：只给没有自定义焦点样式的控件补上可见焦点环，
    组件里已有的 :focus-visible 规则照常优先。 */
 :where(a, button, [role="button"], [role="tab"], [role="menuitem"], summary, select, input, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
-  outline: 2px solid var(--ob-color-ring);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -5503,8 +5473,8 @@ html.touch-ui .composer-quote-clear {
 @media (pointer: coarse) {
   .composer-attach,
   .composer-send {
-    width: var(--ob-touch-min);
-    height: var(--ob-touch-min);
+    width: var(--app-touch-min);
+    height: var(--app-touch-min);
     flex-shrink: 0;
   }
   .composer-chip-remove {

@@ -4,7 +4,7 @@
  * Interaction chrome from `./diagram`.
  */
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { diagramFilename } from "../lib/mermaidFence";
 import { downloadHtml } from "../lib/diagramExport";
 import {

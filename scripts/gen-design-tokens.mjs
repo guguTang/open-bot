@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 从 design/tokens.json 生成 web 与 RN 共享的设计 token。
+// 从 design/tokens.json 生成 RN 的设计 token（web 端已迁移到 HeroUI Pro + Uber 主题）。
 //   node scripts/gen-design-tokens.mjs          写入生成文件
 //   node scripts/gen-design-tokens.mjs --check  只校验（CI/测试用），有漂移时退出码 1
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -10,36 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const t = JSON.parse(readFileSync(join(root, "design/tokens.json"), "utf8"));
 const HEADER = "由 scripts/gen-design-tokens.mjs 从 design/tokens.json 生成，请勿手改";
 
-const colorVars = (scheme, indent) =>
-  Object.entries(t.color[scheme]).map(([k, v]) => `${indent}--ob-color-${k}: ${v};`).join("\n");
 
-const webCss = `/* ${HEADER} */
-:root {
-${colorVars("light", "  ")}
-${Object.entries(t.radius).map(([k, v]) => `  --ob-radius-${k}: ${v}px;`).join("\n")}
-${Object.entries(t.space).map(([k, v]) => `  --ob-space-${k}: ${v}px;`).join("\n")}
-  --ob-motion-fast: ${t.motion.fast}ms;
-  --ob-motion-base: ${t.motion.base}ms;
-  --ob-motion-slow: ${t.motion.slow}ms;
-  --ob-easing: ${t.motion.easing};
-  --ob-touch-min: ${t.touchTarget.min}px;
-  --ob-composer-max-h: min(${t.composer.maxViewportRatio * 100}dvh, ${t.composer.maxHeight}px);
-  --ob-font-sans: ${t.font.sans};
-}
-
-/* 暗色 token 只在显式 data-theme="dark" 时生效，不自动跟随系统，避免未适配的页面变色。 */
-[data-theme="dark"] {
-${colorVars("dark", "  ")}
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --ob-motion-fast: 0ms;
-    --ob-motion-base: 0ms;
-    --ob-motion-slow: 0ms;
-  }
-}
-`;
 
 // RN：heroui-native 主题变量映射（只覆盖品牌色与焦点色；danger/success 等沿用库内已校验对比度的默认值），写进 global.css 的标记区块。
 const heroMap = (scheme, indent) => {
@@ -82,7 +53,7 @@ export function hitSlopFor(size: number) {
 `;
 
 const outputs = [];
-outputs.push([join(root, "apps/web/src/styles/tokens.css"), webCss]);
+// web 端已改用 HeroUI Uber 主题（apps/web/src/styles/uber-theme.css），不再生成 web token。
 outputs.push([join(root, "apps/mobile-rn/src/theme/tokens.ts"), rnTs]);
 
 const rnCssPath = join(root, "apps/mobile-rn/src/global.css");

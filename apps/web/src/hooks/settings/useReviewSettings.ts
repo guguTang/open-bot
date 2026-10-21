@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { listToolAllowlist, revokeToolAllowlistEntry } from "../../api";
 import {
   listToolAllowEntries,

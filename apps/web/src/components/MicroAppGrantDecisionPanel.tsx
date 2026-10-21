@@ -128,7 +128,7 @@ export function MicroAppGrantDecisionPanel({
           <div className="flex flex-col gap-2">
             <button
               type="button"
-              className="host-confirm-allow-once primary inline-flex h-9 items-center justify-center rounded-md bg-[var(--primary)] px-3 text-sm text-white"
+              className="host-confirm-allow-once primary inline-flex h-9 items-center justify-center rounded-md bg-[var(--accent)] px-3 text-sm text-white"
               autoFocus
               onClick={() => decide("allow_once")}
             >

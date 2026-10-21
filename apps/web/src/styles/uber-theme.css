@@ -1,0 +1,94 @@
+/* HeroUI「Uber」主题（黑白自适应，0.25rem 圆角，Inter）。
+   来源：heroui-inc/heroui apps/docs/src/styles/theme-presets.css 中的 uber 预设（HeroUI Theme Builder 同款），
+   已包含 #6400 / #6556 的 accent-foreground 与暗色白色 accent 修正。
+   放在 @heroui/styles 与 @heroui-pro/react/css 之后、不分层，覆盖默认主题变量。 */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+    --background: oklch(97.02% 0.005 0);
+    --border: oklch(90% 0.005 0);
+    --default: oklch(94% 0.005 0);
+    --default-foreground: oklch(21.03% 0.0059 0);
+    --field-background: oklch(100% 0.0025 0);
+    --field-border: oklch(90% 0.005 0);
+    --field-foreground: oklch(21.03% 0.005 0);
+    --field-placeholder: oklch(55.17% 0.01 0);
+    --foreground: oklch(21.03% 0.005 0);
+    --link: oklch(21.03% 0.005 0);
+    --muted: oklch(55.17% 0.01 0);
+    --overlay: oklch(100% 0.0015 0);
+    --overlay-foreground: oklch(21.03% 0.005 0);
+    --scrollbar: oklch(87.1% 0.005 0);
+    --segment: oklch(100% 0.005 0);
+    --segment-foreground: oklch(21.03% 0.005 0);
+    --separator: oklch(92% 0.005 0);
+    --surface: oklch(100% 0.0025 0);
+    --surface-foreground: oklch(21.03% 0.005 0);
+    --surface-secondary: oklch(95.24% 0.0075 0);
+    --surface-secondary-foreground: oklch(21.03% 0.005 0);
+    --surface-tertiary: oklch(93.73% 0.0075 0);
+    --surface-tertiary-foreground: oklch(21.03% 0.005 0);
+    --accent: oklch(0% 0 0);
+    --accent-foreground: oklch(99.11% 0 0);
+    --focus: oklch(0% 0 0);
+    --success: oklch(0.6277 0.1604 153.06);
+    --success-foreground: oklch(99.11% 0 0);
+    --warning: oklch(0.8446 0.1525 80.6);
+    --warning-foreground: oklch(15% 0.0457 80.6);
+    --danger: oklch(0.573 0.2249 21.97);
+    --danger-foreground: oklch(99.11% 0 0);
+    --radius: 0.25rem;
+    --field-radius: 0.25rem;
+    --chart-1: oklch(from var(--accent) calc(l - 0.24) c h);
+    --chart-2: oklch(from var(--accent) calc(l - 0.12) c h);
+    --chart-3: var(--accent);
+    --chart-4: oklch(from var(--accent) calc(l + 0.12) c h);
+    --chart-5: oklch(from var(--accent) calc(l + 0.24) c h);
+  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+}
+
+:root.dark,
+:root[data-theme="dark"],
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+    --background: oklch(12% 0.005 0);
+    --border: oklch(28% 0.005 0);
+    --default: oklch(27.4% 0.005 0);
+    --default-foreground: oklch(99.11% 0 0);
+    --field-background: oklch(21.03% 0.01 0);
+    --field-border: oklch(28% 0.005 0);
+    --field-foreground: oklch(99.11% 0.005 0);
+    --field-placeholder: oklch(70.5% 0.01 0);
+    --foreground: oklch(99.11% 0.005 0);
+    --link: oklch(99.11% 0.005 0);
+    --muted: oklch(70.5% 0.01 0);
+    --overlay: oklch(21.03% 0.01 0);
+    --overlay-foreground: oklch(99.11% 0.005 0);
+    --scrollbar: oklch(70.5% 0.005 0);
+    --segment: oklch(39.64% 0.005 0);
+    --segment-foreground: oklch(99.11% 0.005 0);
+    --separator: oklch(25% 0.005 0);
+    --surface: oklch(21.03% 0.01 0);
+    --surface-foreground: oklch(99.11% 0.005 0);
+    --surface-secondary: oklch(25.7% 0.0075 0);
+    --surface-secondary-foreground: oklch(99.11% 0.005 0);
+    --surface-tertiary: oklch(27.21% 0.0075 0);
+    --surface-tertiary-foreground: oklch(99.11% 0.005 0);
+    --accent: oklch(98.48% 0 0);
+    --accent-foreground: oklch(15% 0 0);
+    --focus: oklch(98.48% 0 0);
+    --success: oklch(0.6514 0.1321 156.22);
+    --success-foreground: oklch(15% 0.0396 156.22);
+    --warning: oklch(0.8803 0.1348 86.06);
+    --warning-foreground: oklch(15% 0.0404 86.06);
+    --danger: oklch(0.7044 0.1872 23.19);
+    --danger-foreground: oklch(15% 0.05 23.19);
+    --radius: 0.25rem;
+    --field-radius: 0.25rem;
+    --chart-1: oklch(from var(--accent) calc(l - 0.24) c h);
+    --chart-2: oklch(from var(--accent) calc(l - 0.12) c h);
+    --chart-3: var(--accent);
+    --chart-4: oklch(from var(--accent) calc(l + 0.12) c h);
+    --chart-5: oklch(from var(--accent) calc(l + 0.24) c h);
+}
