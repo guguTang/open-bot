@@ -1,3 +1,11 @@
+/**
+ * Sidebar chrome helpers.
+ *
+ * Pro Sidebar (Provider / Rail / Mobile sheet) is NOT wrapping the app shell:
+ * AppAuthenticatedShell drives Tauri/Capacitor via `.app.mobile-*` + `.shell-narrow`
+ * and safe-area CSS. A full Sidebar.Provider would fight that layout. Conversation
+ * rows use @heroui-pro/react ListView inside this aside instead.
+ */
 import { cn } from "@/lib/utils";
 
 /** Scrollport class — paired with global scrollbar rules in styles.css */

@@ -1,4 +1,5 @@
 import { ChevronRight, X } from "lucide-react";
+import { Button, Card } from "@heroui/react";
 import type { Agent } from "../api";
 import { AgentAvatar } from "./AgentAvatar";
 
@@ -59,13 +60,13 @@ export function MobileSettingsHub({
     <div className="settings-hub settings-hub-v2">
       <div className="settings-hub-top">
         <h2 className="settings-hub-title">设置</h2>
-        <button type="button" className="settings-hub-close" aria-label="关闭" onClick={onClose}>
+        <Button isIconOnly size="sm" variant="ghost" className="settings-hub-close" aria-label="关闭" onPress={onClose}>
           <X size={16} strokeWidth={2} aria-hidden />
-        </button>
+        </Button>
       </div>
 
       <div className="settings-hub-scroll">
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row settings-hub-row-account" onClick={() => onNavigate("account")}>
             <span className="settings-hub-avatar" aria-hidden>
               {accountInitials}
@@ -84,9 +85,9 @@ export function MobileSettingsHub({
             <span className="settings-hub-row-value">{apiBaseLabel || "默认"}</span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("mcp")}>
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">插件</span>
@@ -94,10 +95,10 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
         <div className="settings-hub-section-label">Bot</div>
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("bot")}>
             {focusBot ? (
               <AgentAvatar
@@ -149,10 +150,10 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
         <div className="settings-hub-section-label">通用</div>
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("llm")}>
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">模型</span>
@@ -203,13 +204,13 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
-        <section className="settings-hub-card">
-          <button type="button" className="settings-hub-row settings-hub-row-logout" onClick={onLogout}>
+        <Card variant="secondary" className="settings-hub-card shadow-none">
+          <button type="button" className="settings-hub-row settings-hub-row-logout text-danger" onClick={onLogout}>
             退出登录
           </button>
-        </section>
+        </Card>
       </div>
     </div>
   );

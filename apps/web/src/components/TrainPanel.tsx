@@ -265,7 +265,7 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                 </DialogFooter>
               </form>
             ) : filtered.length === 0 ? (
-              <p className="py-6 text-center text-sm text-pretty text-muted-foreground">
+              <p className="py-6 text-center text-sm text-pretty text-muted">
                 {busy ? "加载中…" : emptyText}
               </p>
             ) : (
@@ -281,7 +281,7 @@ function TrainPanelBody({ agent, onClose }: BodyProps) {
                         </CardHeader>
                         {meta ? (
                           <CardContent>
-                            <p className="text-xs text-muted-foreground">{meta}</p>
+                            <p className="text-xs text-muted">{meta}</p>
                           </CardContent>
                         ) : null}
                         <CardFooter className="flex-wrap gap-2">

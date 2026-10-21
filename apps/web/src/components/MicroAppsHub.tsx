@@ -221,7 +221,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
                 <section
                   className={cn(
                     "settings-card-padded micro-apps-hub-form-card",
-                    sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                    sheetForm ? "settings-hub-card shadow-none" : "settings-card micro-apps-hub-desktop-card shadow-none",
                   )}
                 >
                   <MicroAppRoutineCreateForm
@@ -286,7 +286,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
                   <>
                     <section
                       className={cn(
-                        sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                        sheetForm ? "settings-hub-card shadow-none" : "settings-card micro-apps-hub-desktop-card shadow-none",
                       )}
                     >
                       {apps.map((app) => (
@@ -327,7 +327,7 @@ export function MicroAppsHub({ open, onClose }: Props) {
 
                     <section
                       className={cn(
-                        sheetForm ? "settings-hub-card" : "settings-card micro-apps-hub-desktop-card",
+                        sheetForm ? "settings-hub-card shadow-none" : "settings-card micro-apps-hub-desktop-card shadow-none",
                       )}
                     >
                       <button
