@@ -5317,10 +5317,14 @@ html.touch-ui .composer-quote-clear {
 /* ── 可访问性基线（design/tokens.json）────────────────────────────────
    :where() 零优先级：只给没有自定义焦点样式的控件补上可见焦点环，
    组件里已有的 :focus-visible 规则照常优先。 */
-:where(a, button, [role="button"], [role="tab"], [role="menuitem"], summary, select, input, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+:where(a, button, [role="button"], [role="tab"], [role="menuitem"], summary, select):focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+/* Text fields + collection rows own their focus treatment (HeroUI field ring / inset row ring);
+   pointer focus never shows an outline. */
+:where(input, textarea, [role="row"], [role="option"], [role="gridcell"]):focus-visible { outline: none; }
+:focus:not(:focus-visible) { outline: none; }
 
 :where(button, [role="button"], [role="tab"], summary, label[for]):not(:disabled) {
   cursor: pointer;
@@ -5446,7 +5450,8 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   background: linear-gradient(to left, var(--row-bg) 70%, transparent);
 }
 .conv-list .list-view__item:hover [data-slot="list-view-description"],
-.conv-list .list-view__item:focus-within [data-slot="list-view-description"],
+.conv-list .list-view__item:has(:focus-visible) [data-slot="list-view-description"],
+.conv-list .list-view__item[data-focus-visible="true"] [data-slot="list-view-description"],
 .touch-ui .conv-list [data-slot="list-view-description"] {
   padding-right: 6rem;
 }
@@ -5460,13 +5465,18 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
 
 /* ---- OpenUI table: narrow containers get a card list; wide keeps table with edge fade ---- */
 .oui-table-block { container-type: inline-size; width: 100%; }
-.oui-table-cards { display: none; flex-direction: column; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
-.oui-table-card { background: var(--surface); border-radius: calc(var(--radius) * 1.5); padding: 0.625rem 0.75rem; }
+.oui-table-cards { display: none; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+.oui-table-card { padding: 0.5rem 0; }
+.oui-table-card + .oui-table-card { border-top: 1px solid var(--separator); }
 .oui-table-card-title { font-weight: 600; font-size: 13px; margin-bottom: 0.25rem; }
 .oui-table-card dl { display: grid; grid-template-columns: auto 1fr; gap: 0.125rem 0.75rem; margin: 0; font-size: 12.5px; }
 .oui-table-card dt { color: var(--muted); }
 .oui-table-card dd { margin: 0; font-variant-numeric: tabular-nums; }
-@container (max-width: 520px) {
+@media (max-width: 640px) {
+  .oui-table-block .oui-table-scroll { display: none; }
+  .oui-table-block .oui-table-cards { display: flex; }
+}
+@container (max-width: 360px) {
   .oui-table-block .oui-table-scroll { display: none; }
   .oui-table-block .oui-table-cards { display: flex; }
 }
@@ -5476,3 +5486,29 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
 .conv-list .list-view__item[data-focus-visible="true"] {
   box-shadow: inset 0 0 0 2px var(--focus, var(--accent));
 }
+
+/* L5: row actions only on hover / keyboard focus — not on the selected row's persistent focus */
+@media (hover: hover) {
+  .conv-list .list-view__item:not(:hover):not([data-focus-visible="true"]):not(:has(:focus-visible)) [data-slot="list-view-item-action"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* M4: desktop floating chat header must not sit on top of the first bubble */
+.app:not(.shell-narrow) .messages { padding-top: calc(var(--topbar-h, 56px) + 16px); }
+
+/* L6: empty LLM list is a muted line, not a bordered box */
+.llm-list:has(> .settings-empty) { border: 0; background: none; box-shadow: none; padding: 0; }
+.llm-list > .settings-empty { padding: 4px 0; text-align: start; border: 0; background: none; }
+
+/* L7: avatar preview toggles breathe and scroll instead of wrapping tight */
+.bot-avatar-status-toggles {
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.bot-avatar-status-toggles > * { flex-shrink: 0; }
