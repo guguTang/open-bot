@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Card } from "@heroui/react";
 import { cn } from "@/lib/utils";
 
 /** Outer wrapper for every Settings tab body. */
@@ -47,7 +48,12 @@ export function SettingsCard({
   padded?: boolean;
 }) {
   return (
-    <div className={cn("settings-card", padded && "settings-card-padded", className)}>{children}</div>
+    <Card
+      variant="secondary"
+      className={cn("settings-card shadow-none", padded && "settings-card-padded", className)}
+    >
+      <Card.Content className="p-0">{children}</Card.Content>
+    </Card>
   );
 }
 
