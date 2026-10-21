@@ -63,6 +63,15 @@ def build_client(settings: DecisionSettings | None):
                 model or LAYA_DEFAULT_MODEL,
             )
         return LayaLocalClient(model or LAYA_DEFAULT_MODEL)
+    if provider == "custom":
+        # Any System One–compatible HTTP endpoint; no invented host/model.
+        # Incomplete config fails clearly in SystemOneHTTPClient.decide.
+        return SystemOneHTTPClient(
+            "custom",
+            base_url,
+            api_key,
+            model,
+        )
     return _disabled
 
 

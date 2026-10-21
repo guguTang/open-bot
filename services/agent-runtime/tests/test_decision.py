@@ -1,4 +1,4 @@
-"""Decision adapter: disabled by default; Jev / Laya / Unsloth share one result shape."""
+"""Decision adapter: disabled by default; Jev / Laya / Unsloth / custom share one result shape."""
 
 from __future__ import annotations
 
@@ -183,3 +183,59 @@ def test_unsloth_sends_bearer_when_key_set() -> None:
     client.decide("x", {"ok": {"type": "noul", "instructions": "yes?"}})
     assert captured["auth"] == "Bearer sk-unsloth-test"
 
+
+
+def test_custom_posts_systemone_without_defaults() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["auth"] = request.headers.get("authorization")
+        return httpx.Response(
+            200,
+            json={
+                "model": "my-model",
+                "answers": {"ok": {"type": "noul", "noul": 0.7}},
+            },
+        )
+
+    client = build_client(
+        DecisionSettings(
+            provider="custom",
+            base_url="http://127.0.0.1:9999/",
+            api_key="",
+            model="my-model",
+        )
+    )
+    assert isinstance(client, SystemOneHTTPClient)
+    assert client.provider == "custom"
+    assert client.base_url == "http://127.0.0.1:9999"
+    assert client.model == "my-model"
+    client._transport = httpx.MockTransport(handler)
+    result = client.decide("hello", {"ok": {"type": "noul", "instructions": "non-empty?"}})
+    assert result.provider == "custom"
+    assert result.model == "my-model"
+    assert captured["url"] == "http://127.0.0.1:9999/v1/systemone"
+    assert captured["auth"] is None
+
+
+def test_custom_incomplete_fails_clearly() -> None:
+    client = build_client(DecisionSettings(provider="custom", base_url="", model=""))
+    assert isinstance(client, SystemOneHTTPClient)
+    assert client.enabled is True
+    try:
+        client.decide("x", {"ok": {"type": "noul", "instructions": "yes?"}})
+    except DecisionError as exc:
+        assert "base_url" in str(exc)
+    else:
+        raise AssertionError("expected DecisionError for missing base_url")
+
+    client2 = build_client(
+        DecisionSettings(provider="custom", base_url="http://127.0.0.1:1", model="")
+    )
+    try:
+        client2.decide("x", {"ok": {"type": "noul", "instructions": "yes?"}})
+    except DecisionError as exc:
+        assert "model" in str(exc)
+    else:
+        raise AssertionError("expected DecisionError for missing model")

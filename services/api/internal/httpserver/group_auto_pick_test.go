@@ -251,7 +251,7 @@ func TestParseAutoPickModeMigration(t *testing.T) {
 func TestAutoPickDecisionChoiceMapsToCoder(t *testing.T) {
 	members, agents := testGroupAgents()
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			pick, _ := questions["pick"].(map[string]any)
 			crit, _ := pick["criteria"].(map[string]string)
@@ -334,16 +334,16 @@ func TestAutoPickDecisionErrorsFailOpenHeuristic(t *testing.T) {
 			t.Fatal("should not call")
 			return nil, nil
 		}}},
-		{"timeout_err", &autoPickDecisionDeps{Provider: "unsloth", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+		{"timeout_err", &autoPickDecisionDeps{Provider: "laya", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return nil, context.DeadlineExceeded
 		}}},
-		{"empty_answers", &autoPickDecisionDeps{Provider: "unsloth", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+		{"empty_answers", &autoPickDecisionDeps{Provider: "laya", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{}, nil
 		}}},
-		{"bad_choice_key", &autoPickDecisionDeps{Provider: "unsloth", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+		{"bad_choice_key", &autoPickDecisionDeps{Provider: "laya", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{"pick": map[string]any{"choice": "coder", "confidence": 0.9}}, nil
 		}}},
-		{"low_conf", &autoPickDecisionDeps{Provider: "unsloth", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+		{"low_conf", &autoPickDecisionDeps{Provider: "laya", Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{"pick": map[string]any{"choice": "m1", "confidence": 0.2}}, nil
 		}}},
 	}
@@ -525,7 +525,7 @@ func TestAllHandsRoastZaiZuoDeGeWei(t *testing.T) {
 
 	var sawAllHandsPrompt bool
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			pick := questions["pick"].(map[string]any)
 			instr := fmt.Sprint(pick["instructions"])
@@ -567,7 +567,7 @@ func TestAllHandsRoastZaiZuoDeGeWei(t *testing.T) {
 	// (no structural expand to roster). Low conf → ordinary heuristic fail-open
 	// (not phrase-gated all_hands).
 	depsUnder := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			// Mirror Langfuse 53cd5422 output.
 			return map[string]any{
@@ -613,7 +613,7 @@ func TestRunAutoPickAllHandsDecisionCallsDecide(t *testing.T) {
 	var sawAllCriterion bool
 	var sawAllHandsHint bool
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			decideCalled = true
 			pick, _ := questions["pick"].(map[string]any)
@@ -674,7 +674,7 @@ func TestRunAutoPickAllHandsDecisionFailOpenHeuristic(t *testing.T) {
 	// Langfuse cf23: SystemOne finished choice=all in ~7.3s but 8s client timeout → lead-only.
 	members, agents := testGroupAgents()
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return nil, context.DeadlineExceeded
 		},
@@ -741,7 +741,7 @@ func TestAllHandsIntroLowConfStillLeadFallback(t *testing.T) {
 	members = []string{"writer", "coder"}
 	agents = []*db.Agent{agents[2], agents[1]} // writer, coder from testGroupAgents order lead/coder/writer
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -857,7 +857,7 @@ func TestMapDecisionChoiceTwoOfThreeFromProbs(t *testing.T) {
 func TestAutoPickDecisionTwoOfThreeViaCount(t *testing.T) {
 	members, agents := testGroupAgents()
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			if _, ok := questions[autoPickDecisionCountKey]; !ok {
 				t.Fatal("payload must ask count")
@@ -963,7 +963,7 @@ func TestIsWhoCanIntent(t *testing.T) {
 }
 
 func TestMapDecisionWhoCanRemapsAllToCapableMulti(t *testing.T) {
-	// Production Unsloth response for 「谁会查资料」: choice=all, low confidence field,
+	// Production Laya/Unsloth-desktop response for 「谁会查资料」: choice=all, low confidence field,
 	// count≈0.25→2, mass on all + two researchers (m0/m2); coder m1 low.
 	keyToID := map[string]string{"m0": "22", "m1": "33", "m2": "44"}
 	ids, conf, allSel, ok := mapDecisionChoiceToAgentIDs(map[string]any{
@@ -1039,7 +1039,7 @@ func TestAutoPickDecisionWhoCanCodeInflatedAllFailsNotEveryone(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			pick := questions["pick"].(map[string]any)
 			if !strings.Contains(fmt.Sprint(pick["instructions"]), "谁会写代码") {
@@ -1085,7 +1085,7 @@ func TestAutoPickDecisionWhoCanBothResearchers(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1140,7 +1140,7 @@ func TestAutoPickDecisionWhoCanResearchViaModelNotChannelOrder(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1187,7 +1187,7 @@ func TestAutoPickDecisionWhoCanUsesCriteriaRolesNotSynopsis(t *testing.T) {
 	synopsis := "我是44，主要负责查资料、阅读和整理总结，尽量把结论与来源依据说清楚。 | 你们谁能帮我查下资料"
 	var sawState string
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			sawState = fmt.Sprint(state)
 			pick := questions["pick"].(map[string]any)
@@ -1235,7 +1235,7 @@ func TestAutoPickDecisionWhoCanSingleCoderNotAllHands(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1274,7 +1274,7 @@ func TestAutoPickDecisionAllHandsPromptNeedlesNoStructuralExpand(t *testing.T) {
 	}
 	var sawAllHandsPrompt bool
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			pick := questions["pick"].(map[string]any)
 			instr := fmt.Sprint(pick["instructions"])
@@ -1322,7 +1322,7 @@ func TestAutoPickDecisionAllHandsPromptNeedlesNoStructuralExpand(t *testing.T) {
 	}
 	// Contrast: who-can with single capable must NOT expand to all.
 	deps2 := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1359,7 +1359,7 @@ func TestAutoPickDecisionAllHandsStillCallsDecide(t *testing.T) {
 	}
 	called := false
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			called = true
 			pick := questions["pick"].(map[string]any)
@@ -1488,7 +1488,7 @@ func TestAutoPickDecisionSpecialtyResearchMismatchGeLing(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1542,7 +1542,7 @@ func TestSpecialtyCodingNoSecondWaveDocBot(t *testing.T) {
 	}
 	phrase := "写个js的代码，格式化日期为hh:mm:ss。输入是时间戳"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			// Exact Langfuse 5808f45a shape.
 			return map[string]any{
@@ -1883,7 +1883,7 @@ func TestAutoPickDecisionNoCountExpandUnderpick(t *testing.T) {
 	}
 	// Weak probs[all] + inflated noul + coding primary → keep coder (FOLLOW-UP shape).
 	depsWeak := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1908,7 +1908,7 @@ func TestAutoPickDecisionNoCountExpandUnderpick(t *testing.T) {
 
 	// Strong probs[all] + full-roster count on intro underpick → still keep m0 (no expand).
 	depsStrong := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -1946,7 +1946,7 @@ func TestReproLangfuseA023HTMLCanvasNoCountExpand(t *testing.T) {
 	ut := "给我写个html，选择不同的情绪。通过canvas画出不同的动物表情"
 	syn := "User: 大家好 | User: 给我写个html，选择不同的情绪。通过canvas画出不同的动物表情 | Last answered by: 代码 — 负责写代码与排障：改项目、查 bug、联调。小步…, 文章 — 负责写东西与改稿：邮件、文档、文案。尊重用户语气…"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.9967"},
@@ -1990,7 +1990,7 @@ func TestAutoPickDecisionTrustsSpecialtyChoice(t *testing.T) {
 		{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			st := fmt.Sprint(state)
 			if !strings.Contains(st, "Member capability profiles") {
@@ -2035,7 +2035,7 @@ func TestAutoPickDecisionFailOpenKeepsSynopsisSpecialty(t *testing.T) {
 		{ID: "44", Name: "44", Description: "负责查资料与总结：搜索、阅读、整理要点。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return nil, fmt.Errorf("timeout")
 		},

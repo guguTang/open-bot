@@ -1,4 +1,4 @@
-"""HTTP System One client shared by hosted Jev, remote Laya, and Unsloth."""
+"""HTTP System One client shared by hosted Jev, remote Laya, Unsloth, and custom."""
 
 from __future__ import annotations
 

@@ -75,6 +75,10 @@ func (s *Server) handleAdminTestDecision(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "决策层已关闭"})
 		return
 	}
+	if provider == "microsoft" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Microsoft-Decision-1 请使用 /v1/admin/org/decision/microsoft/test"})
+		return
+	}
 	apiKey := strings.TrimSpace(body.APIKey)
 	if apiKey == "" {
 		apiKey = settings.DecisionAPIKey
@@ -127,7 +131,7 @@ func (s *Server) handleAdminTestDecision(w http.ResponseWriter, r *http.Request)
 }
 
 // decisionRuntimePayload is nil when the org has the decision layer off.
-// The runtime then keeps the disabled client and does not call Jev, Laya, or Unsloth.
+// The runtime then keeps the disabled client and does not call Jev/Laya/custom.
 func (s *Server) decisionRuntimePayload(userID string) map[string]any {
 	userID = strings.TrimSpace(userID)
 	if userID == "" || s.db == nil {
@@ -141,15 +145,16 @@ func (s *Server) decisionRuntimePayload(userID string) map[string]any {
 	if err != nil {
 		return nil
 	}
-	provider := db.NormalizeDecisionProvider(settings.DecisionProvider)
-	if provider == "off" {
+	provider, baseURL, model := db.ApplyDecisionDefaults(settings.DecisionProvider, settings.DecisionBaseURL, settings.DecisionModel)
+	// microsoft is Go-native only; do not hand it to agent-runtime System One factory.
+	if !db.IsRuntimeSystemOneProvider(provider) {
 		return nil
 	}
 	return map[string]any{
 		"provider": provider,
-		"base_url": settings.DecisionBaseURL,
+		"base_url": baseURL,
 		"api_key":  settings.DecisionAPIKey,
-		"model":    settings.DecisionModel,
+		"model":    model,
 	}
 }
 

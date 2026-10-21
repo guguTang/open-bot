@@ -25,7 +25,7 @@ const AUTO_PICK_OPTIONS = [
   {
     value: "decision",
     label: "决策模型",
-    title: "用组织「决策模型」页配置的 Jev / Laya / Unsloth 选人；失败则回落智能匹配",
+    title: "用组织「决策模型」页配置的 Jev / Laya / Microsoft 选人；失败则回落智能匹配",
   },
 ] as const;
 
@@ -87,7 +87,7 @@ export default function FlagsPage() {
         <Paragraph type="secondary">
           组织级开关（唯一生效来源）。群 Auto 选人模式由本页控制，客户端无需配置群级{" "}
           <Text code>auto_pick</Text>；频道里若仍有历史字段会被忽略。
-          「决策模型」模式需在侧栏「决策模型」页配置 Jev / Laya / Unsloth（默认关闭）。
+          「决策模型」模式需在侧栏「决策模型」页配置 Jev / Laya / Microsoft / 自定义（默认关闭；任意 System One 兼容端点或 Unsloth 桌面可选「自定义」并填 base_url + model）。
         </Paragraph>
         <ProForm
           form={form}

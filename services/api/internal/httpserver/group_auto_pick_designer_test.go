@@ -36,7 +36,7 @@ func TestSpecialtyMismatchChoiceAllRematchDesigner(t *testing.T) {
 	writer, coder, designer, members, agents := designerTrio()
 	ut := "画一个登录页线框，侧重点击态"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			// Live Laya shape: choice=all + low conf; specialty rematch must recover designer.
 			return map[string]any{
@@ -66,7 +66,7 @@ func TestWhoCanDesignCensus(t *testing.T) {
 	writer, _, designer, members, agents := designerTrio()
 	ut := "谁会做 UI/UE 设计"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.99"},
@@ -88,7 +88,7 @@ func TestWhoCanDesignCensus(t *testing.T) {
 func TestSpecialtyDesignVsCoding(t *testing.T) {
 	writer, coder, designer, members, agents := designerTrio()
 	depsDesign := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.1"},
@@ -106,7 +106,7 @@ func TestSpecialtyDesignVsCoding(t *testing.T) {
 	}
 
 	depsCode := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.1"},
