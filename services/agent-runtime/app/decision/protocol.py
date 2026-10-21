@@ -40,7 +40,7 @@ class DecisionResult(BaseModel):
 
 def normalize_provider(provider: str | None) -> str:
     value = (provider or "").strip().lower()
-    if value in {"jev", "laya", "unsloth"}:
+    if value in {"jev", "laya", "unsloth", "custom"}:
         return value
     return "off"
 

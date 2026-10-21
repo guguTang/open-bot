@@ -30,7 +30,7 @@ K 默认 **1**（org 级约定；专长上限 3）。`count` noul / 多路高概
 |---|---|---|
 | **`off`** | 全员自决 | 全员候选（现状：各 bot 可 PASS） |
 | **`heuristic`** | 智能匹配 | A 档：关键词 / 角色匹配选 ≤K 人；**默认** |
-| **`decision`** | 决策模型 | B 档：组织决策模型（Jev / Laya / Unsloth SystemOne）choice 选人 |
+| **`decision`** | 决策模型 | B 档：组织决策模型（Jev / Laya / Microsoft SystemOne）choice 选人 |
 
 **默认：`heuristic`。** 缺省 / omit / 非法 → `heuristic`。
 
@@ -77,7 +77,7 @@ resolveGroupSendTargets / planSendTargets
 - **映射**：`choice=all` → 频道顺序展开全部 `agent_id`（**who-can 例外**：按 mN 概率 + `count` 取有能力子集，不展开全员）；否则仅接受 `mN`；按 probability 降序、≥ θ（who-can 用相对阈值）取 top-N；`count` noul→1..N 定人数；无 count / who-can 时可由多路高概率推断多人（不必 `all`）
 - **有效 K**：专长用 `auto_pick_k`（软默认，上限 3）；`count` / 多路高概率可将有效 K 抬到 `min(成员数, 8)`（例如 2 of 3）；**无**短语抬 K
 - **置信度**：`max(confidence, probs[choice])`；who-can 从 `all` 重映射时再考虑 `probs[all]` / 所选 mN 合计，避免低 `confidence` 字段误 fail-open；再否则 0.55
-- **调用路径**：API `planSendTargets` → runtime `POST /v1/decision/decide` → factory（Jev / Laya / Unsloth SystemOne）
+- **调用路径**：API `planSendTargets` → runtime `POST /v1/decision/decide` → factory（Jev / Laya / custom SystemOne；或 Go 直连 Microsoft-Decision-1）
 - **超时**：约 20s（Laya 常见 5–12s；8s 曾与 cf23 7.3s 完成竞态 → client timeout → lead-only）
 
 **Fail-open 规则（硬）：**
@@ -183,7 +183,7 @@ resolveGroupSendTargets / planSendTargets
 | `settings.auto_pick_k` | channel | number | 可选；0→默认 1；上限 3；无客户端必配 |
 | `settings.show_reply_candidates` | channel | bool | 调试「本轮将由谁回答」；默认 false |
 | PATCH body | `/v1/channels/{id}` | 同上字段 | 仍接受；mode 写入不影响 EffectiveAutoPickMode |
-| 决策提供方 | org decision_* | jev / laya / unsloth / off | Admin → 决策模型；decision 模式依赖此项 |
+| 决策提供方 | org decision_* | off / jev / laya / microsoft / custom（互斥单选） | Admin → 决策模型；decision 模式依赖此项；microsoft 为 Go 直连 Decision-1，失败回退启发式（不串到其他提供方）。**custom** 为任意 System One 兼容 HTTP（须填 base_url + model，无默认主机）。Unsloth 桌面本地 API：选 **自定义**（或 Laya）+ base_url=`http://localhost:8888`，model=`laya`（历史 `unsloth` 会归一为 laya + 上述默认） |
 
 ### 给产品
 
@@ -214,10 +214,10 @@ resolveGroupSendTargets / planSendTargets
 11. 有未完成后台任务时发追问（无人 `@` + decision 模式）→ **不**调 SystemOne；日志 `auto_pick=open_task`；入队 agent = 原 task 的 bot。
 12. 普通用户消息（无后台任务）→ 仍走 §3 三策略 Decide/heuristic。
 
-## 10. 本地验证（Unsloth / Jev）
+## 10. 本地验证（Laya / 自定义 / Unsloth 桌面 / Jev）
 
-1. Admin → **决策模型**：选 Unsloth（默认 `http://localhost:8888`，模型 `laya`）或 Jev（需 API key）；点「检测模型」。  
+1. Admin → **决策模型**：选 **自定义**（Unsloth 桌面：base_url=`http://localhost:8888`，模型 `laya`）或 Laya / Jev（Jev 需 API key）；点「检测模型」。  
 2. Admin → **功能开关**：群 Auto 选人 = **决策模型**（无需改 channel）。  
 3. 群聊发无人 `@` 的专长问题（如「帮我写个函数」），看 API 日志：`auto_pick=decision ids=[…] conf=…`。  
-4. 关掉决策层或停 Unsloth，再发同样消息 → 应见 `decision->heuristic` 且仍有专长匹配（非空回合）。  
+4. 关掉决策层或停 Unsloth 桌面服务，再发同样消息 → 应见 `decision->heuristic` 且仍有专长匹配（非空回合）。  
 5. 单测：`go test ./internal/httpserver/ -run AutoPick` 与 `./internal/db/ -run EffectiveAutoPick`（mocked decide，不连外网）。

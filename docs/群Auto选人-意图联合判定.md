@@ -13,7 +13,7 @@
 |---|---|
 | Observation | `c5c3d672118c5d06` · `open-bot.decision` · GENERATION |
 | Trace | `0cdcdd00dfed9e940078a653b6e8e83c` |
-| Provider / model | unsloth / `laya`（metadata `laya-multilingual`） |
+| Provider / model | legacy `unsloth` / `laya`（metadata `laya-multilingual`；现等价于 Admin 选 **自定义** 或 Laya + `http://localhost:8888`） |
 | Latency | ~3.5s |
 | Session / conversation | `3851dce7-cabc-478c-bfa7-02cfbb0b0af4` |
 | 期望 | **仅 coding bot（m1 代码）** |

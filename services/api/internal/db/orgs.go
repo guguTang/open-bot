@@ -41,6 +41,17 @@ type OrgSettings struct {
 	DecisionModel          string    `json:"decision_model"`
 	DocParseTimeoutSeconds *int      `json:"doc_parse_timeout_seconds,omitempty"`
 	UpdatedAt              time.Time `json:"updated_at"`
+
+	// Microsoft-Decision-1 (systemone via OpenRouter / Azure Foundry), called
+	// directly from the Go API. Independent of the runtime decision_* provider.
+	MSDecisionEnabled             bool     `json:"ms_decision_enabled"`
+	MSDecisionProvider            string   `json:"ms_decision_provider"`
+	MSDecisionBaseURL             string   `json:"ms_decision_base_url"`
+	MSDecisionAPIKey              string   `json:"-"`
+	MSDecisionModel               string   `json:"ms_decision_model"`
+	MSDecisionAuthMode            string   `json:"ms_decision_auth_mode"`
+	MSDecisionConfidenceThreshold *float64 `json:"ms_decision_confidence_threshold,omitempty"`
+	MSDecisionTimeoutMS           *int     `json:"ms_decision_timeout_ms,omitempty"`
 }
 
 type OrgSettingsPublic struct {
@@ -93,13 +104,46 @@ func (s *OrgSettings) Public() OrgSettingsPublic {
 
 func (s *OrgSettings) DecisionPublic() DecisionSettingsPublic {
 	hint, set := apiKeyHint(s.DecisionAPIKey)
+	provider, baseURL, model := ApplyDecisionDefaults(s.DecisionProvider, s.DecisionBaseURL, s.DecisionModel)
 	return DecisionSettingsPublic{
-		Provider:   NormalizeDecisionProvider(s.DecisionProvider),
-		BaseURL:    s.DecisionBaseURL,
-		Model:      s.DecisionModel,
+		Provider:   provider,
+		BaseURL:    baseURL,
+		Model:      model,
 		APIKeySet:  set,
 		APIKeyHint: hint,
 		UpdatedAt:  FormatTime(s.UpdatedAt),
+	}
+}
+
+// MSDecisionSettingsPublic is the admin view of Microsoft-Decision-1 settings (no key).
+type MSDecisionSettingsPublic struct {
+	Enabled             bool     `json:"enabled"`
+	Provider            string   `json:"provider"`
+	BaseURL             string   `json:"base_url"`
+	Model               string   `json:"model"`
+	AuthMode            string   `json:"auth_mode"`
+	ConfidenceThreshold *float64 `json:"confidence_threshold"`
+	TimeoutMS           *int     `json:"timeout_ms"`
+	APIKeySet           bool     `json:"api_key_set"`
+	APIKeyHint          string   `json:"api_key_hint,omitempty"`
+	UpdatedAt           string   `json:"updated_at"`
+}
+
+func (s *OrgSettings) MSDecisionPublic() MSDecisionSettingsPublic {
+	hint, set := apiKeyHint(s.MSDecisionAPIKey)
+	// Enabled tracks the exclusive decision_provider choice (not a parallel toggle).
+	enabled := IsMicrosoftDecisionProvider(s.DecisionProvider)
+	return MSDecisionSettingsPublic{
+		Enabled:             enabled,
+		Provider:            s.MSDecisionProvider,
+		BaseURL:             s.MSDecisionBaseURL,
+		Model:               s.MSDecisionModel,
+		AuthMode:            s.MSDecisionAuthMode,
+		ConfidenceThreshold: s.MSDecisionConfidenceThreshold,
+		TimeoutMS:           s.MSDecisionTimeoutMS,
+		APIKeySet:           set,
+		APIKeyHint:          hint,
+		UpdatedAt:           FormatTime(s.UpdatedAt),
 	}
 }
 
@@ -141,36 +185,68 @@ type OrgUsage struct {
 	AgentCount        int    `json:"agent_count"`
 }
 
+// NormalizeDecisionProvider returns the sole active decision backend.
+// Values are mutually exclusive one-of-N: off | jev | laya | microsoft | custom.
+// Legacy "unsloth" is migrated to "laya" (Unsloth desktop can also use custom + HTTP).
+// "microsoft" is Microsoft-Decision-1 (Go-native); jev/laya/custom are agent-runtime System One.
 func NormalizeDecisionProvider(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "jev", "laya", "unsloth":
+	case "jev", "laya", "microsoft", "custom":
 		return strings.ToLower(strings.TrimSpace(provider))
+	case "unsloth":
+		// Legacy: Unsloth desktop local Decision API is now selected as Laya + base_url.
+		return "laya"
 	default:
 		return "off"
 	}
 }
 
+// IsRuntimeSystemOneProvider is true for jev/laya/custom (agent-runtime factory).
+func IsRuntimeSystemOneProvider(provider string) bool {
+	switch NormalizeDecisionProvider(provider) {
+	case "jev", "laya", "custom":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsMicrosoftDecisionProvider is true when the org chose Microsoft-Decision-1 exclusively.
+func IsMicrosoftDecisionProvider(provider string) bool {
+	return NormalizeDecisionProvider(provider) == "microsoft"
+}
+
 // ApplyDecisionDefaults fills vendor defaults only for an enabled provider.
 // An empty base URL on Laya means in-process weights, so it stays empty.
-// Unsloth defaults to the local Decision API (localhost:8888) with model laya.
+// Legacy provider "unsloth" is migrated to "laya"; empty base/model get the former
+// Unsloth defaults (http://localhost:8888, model laya) so existing orgs keep working.
+// "custom" keeps user-supplied base_url/model as-is (no invented host/model).
 func ApplyDecisionDefaults(provider, baseURL, model string) (string, string, string) {
+	raw := strings.ToLower(strings.TrimSpace(provider))
+	legacyUnsloth := raw == "unsloth"
 	provider = NormalizeDecisionProvider(provider)
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	model = strings.TrimSpace(model)
+	// microsoft uses ms_decision_* columns; custom requires admin-supplied System One endpoint.
+	// Do not invent defaults for either.
+	if provider == "microsoft" || provider == "off" || provider == "custom" {
+		return provider, baseURL, model
+	}
+	if legacyUnsloth {
+		if baseURL == "" {
+			baseURL = "http://localhost:8888"
+		}
+		if model == "" {
+			model = "laya"
+		}
+		return provider, baseURL, model
+	}
 	if provider == "jev" {
 		if baseURL == "" {
 			baseURL = "https://api.typesafe.ai"
 		}
 		if model == "" {
 			model = "jev-latest"
-		}
-	}
-	if provider == "unsloth" {
-		if baseURL == "" {
-			baseURL = "http://localhost:8888"
-		}
-		if model == "" {
-			model = "laya"
 		}
 	}
 	if provider == "laya" && model == "" {
@@ -234,6 +310,14 @@ ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_api_key TEXT NOT NULL
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS decision_model TEXT NOT NULL DEFAULT '';
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS llm_max_tool_rounds INT;
 ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS doc_parse_timeout_seconds INT;
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_provider TEXT NOT NULL DEFAULT 'openrouter';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_base_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_api_key TEXT NOT NULL DEFAULT '';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_model TEXT NOT NULL DEFAULT '';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_auth_mode TEXT NOT NULL DEFAULT 'api_key';
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_confidence_threshold DOUBLE PRECISION;
+ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS ms_decision_timeout_ms INT;
 
 CREATE TABLE IF NOT EXISTS org_invites (
   id TEXT PRIMARY KEY,
@@ -373,18 +457,24 @@ func (d *DB) GetOrgSettings(orgID string) (*OrgSettings, error) {
 SELECT org_id, llm_name, llm_base_url, llm_api_key, llm_model, llm_enable_tools,
        llm_context_window, llm_max_tool_rounds, feature_flags_json, updated_at,
        decision_provider, decision_base_url, decision_api_key, decision_model,
-       doc_parse_timeout_seconds
+       doc_parse_timeout_seconds,
+       ms_decision_enabled, ms_decision_provider, ms_decision_base_url, ms_decision_api_key,
+       ms_decision_model, ms_decision_auth_mode, ms_decision_confidence_threshold, ms_decision_timeout_ms
 FROM org_settings WHERE org_id = $1
 `, orgID)
 	var s OrgSettings
 	var cw sql.NullInt64
 	var mtr sql.NullInt64
 	var dpts sql.NullInt64
+	var msThr sql.NullFloat64
+	var msTimeout sql.NullInt64
 	if err := row.Scan(
 		&s.OrgID, &s.LLMName, &s.LLMBaseURL, &s.LLMAPIKey, &s.LLMModel, &s.LLMEnableTools,
 		&cw, &mtr, &s.FeatureFlagsJSON, &s.UpdatedAt,
 		&s.DecisionProvider, &s.DecisionBaseURL, &s.DecisionAPIKey, &s.DecisionModel,
 		&dpts,
+		&s.MSDecisionEnabled, &s.MSDecisionProvider, &s.MSDecisionBaseURL, &s.MSDecisionAPIKey,
+		&s.MSDecisionModel, &s.MSDecisionAuthMode, &msThr, &msTimeout,
 	); err != nil {
 		return nil, err
 	}
@@ -399,6 +489,14 @@ FROM org_settings WHERE org_id = $1
 	if dpts.Valid && dpts.Int64 > 0 {
 		v := int(dpts.Int64)
 		s.DocParseTimeoutSeconds = &v
+	}
+	if msThr.Valid {
+		v := msThr.Float64
+		s.MSDecisionConfidenceThreshold = &v
+	}
+	if msTimeout.Valid && msTimeout.Int64 > 0 {
+		v := int(msTimeout.Int64)
+		s.MSDecisionTimeoutMS = &v
 	}
 	return &s, nil
 }
@@ -452,12 +550,67 @@ func (d *DB) UpsertOrgDecision(orgID, provider, baseURL, apiKey, model string, k
 	if keepAPIKey || apiKey == "" {
 		key = cur.DecisionAPIKey
 	}
+	msEnabled := provider == "microsoft"
 	_, err = d.SQL.Exec(`
 UPDATE org_settings SET
   decision_provider = $2, decision_base_url = $3, decision_api_key = $4,
-  decision_model = $5, updated_at = $6
+  decision_model = $5, ms_decision_enabled = $6, updated_at = $7
 WHERE org_id = $1
-`, orgID, provider, baseURL, key, model, Now())
+`, orgID, provider, baseURL, key, model, msEnabled, Now())
+	if err != nil {
+		return nil, err
+	}
+	return d.GetOrgSettings(orgID)
+}
+
+// MSDecisionUpdate is a validated/normalized Microsoft-Decision-1 settings write.
+// Empty APIKey keeps the stored key; ClearAPIKey wipes it.
+type MSDecisionUpdate struct {
+	Enabled             bool
+	Provider            string
+	BaseURL             string
+	APIKey              string
+	ClearAPIKey         bool
+	Model               string
+	AuthMode            string
+	ConfidenceThreshold *float64 // nil → no extra threshold
+	TimeoutMS           *int     // nil → client default
+}
+
+func (d *DB) UpsertOrgMSDecision(orgID string, upd MSDecisionUpdate) (*OrgSettings, error) {
+	cur, err := d.GetOrgSettings(orgID)
+	if err != nil {
+		return nil, err
+	}
+	key := strings.TrimSpace(upd.APIKey)
+	if key == "" && !upd.ClearAPIKey {
+		key = cur.MSDecisionAPIKey
+	}
+	var thr any
+	if upd.ConfidenceThreshold != nil {
+		thr = *upd.ConfidenceThreshold
+	}
+	var tmo any
+	if upd.TimeoutMS != nil && *upd.TimeoutMS > 0 {
+		tmo = *upd.TimeoutMS
+	}
+	// Mutually exclusive with System One: enabling MS selects provider=microsoft;
+	// disabling MS while microsoft was selected falls back to off (not jev/laya).
+	decisionProvider := NormalizeDecisionProvider(cur.DecisionProvider)
+	if upd.Enabled {
+		decisionProvider = "microsoft"
+	} else if decisionProvider == "microsoft" {
+		decisionProvider = "off"
+	}
+	_, err = d.SQL.Exec(`
+UPDATE org_settings SET
+  decision_provider = $2,
+  ms_decision_enabled = $3, ms_decision_provider = $4, ms_decision_base_url = $5,
+  ms_decision_api_key = $6, ms_decision_model = $7, ms_decision_auth_mode = $8,
+  ms_decision_confidence_threshold = $9, ms_decision_timeout_ms = $10, updated_at = $11
+WHERE org_id = $1
+`, orgID, decisionProvider, upd.Enabled, strings.TrimSpace(upd.Provider), strings.TrimSpace(upd.BaseURL), key,
+		strings.TrimSpace(upd.Model), strings.TrimSpace(upd.AuthMode), thr, tmo, Now())
 	if err != nil {
 		return nil, err
 	}

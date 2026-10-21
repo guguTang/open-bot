@@ -23,7 +23,7 @@ func TestAutoPickDecisionWhoCanWriteCodeOnlyCoder(t *testing.T) {
 	}
 	synopsis := "我（44）和 22 都能帮你查资料、阅读并整理总结。你把主题和想要的深度告诉我就行。 | 谁会写代码"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{
@@ -86,7 +86,7 @@ func TestAutoPickDecisionWhoCanCodingRejectsWriter(t *testing.T) {
 		{ID: coder, Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。远程 SSH 先 load_skill host-ssh。"},
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			// Production 17:38 shape: primary writer, weak mass on coder, conf above floor.
 			return map[string]any{
@@ -168,7 +168,7 @@ func TestSpecialtyMismatchHTMLCanvasWrongM0WithXianGei(t *testing.T) {
 	}
 	ut := "给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。先给骨架即可，别太长。"
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.99"},
@@ -212,7 +212,7 @@ func TestSpecialtyMismatchFollowUpUsesJoinedIntent(t *testing.T) {
 		t.Fatalf("joined intent probe must hit coding synonym, got %q", probe)
 	}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.99"},

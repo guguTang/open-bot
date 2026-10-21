@@ -15,7 +15,7 @@ func TestReproLangfuseCF23DaJiaHao(t *testing.T) {
 	coder := &db.Agent{ID: "cb6df594-f972-4a7c-8efd-daeb6dcb7ece", Name: "代码", SystemPrompt: "负责写代码与排障"}
 	members := []string{writer.ID, coder.ID}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"count": map[string]any{"type": "noul", "noul": "0.9924"},
@@ -52,7 +52,7 @@ func TestReproLangfuseCF23DecideTimeoutFailOpenAll(t *testing.T) {
 	coder := &db.Agent{ID: "cb6df594-f972-4a7c-8efd-daeb6dcb7ece", Name: "代码", SystemPrompt: "负责写代码与排障"}
 	members := []string{writer.ID, coder.ID}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return nil, context.DeadlineExceeded
 		},
@@ -76,7 +76,7 @@ func TestReproUnderpickFullRosterCountExpand(t *testing.T) {
 	coder := &db.Agent{ID: "coder", Name: "代码", Description: "负责写代码与排障"}
 	members := []string{"writer", "coder"}
 	deps := &autoPickDecisionDeps{
-		Provider: "unsloth",
+		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
 				"pick": map[string]any{

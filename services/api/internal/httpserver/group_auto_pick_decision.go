@@ -24,15 +24,18 @@ const (
 	autoPickAllHandsMaxK     = 8       // multi/all-hands ceiling; soft specialty K stays ≤ autoPickMaxK
 )
 
-// autoPickDecisionDeps wires org SystemOne settings + an injectable decide call.
+// autoPickDecisionDeps wires the single selected decision backend + injectable decide.
+// Provider is one of off|jev|laya|microsoft|custom (mutually exclusive).
 // Nil Decide or provider off → caller fail-opens to heuristic.
 type autoPickDecisionDeps struct {
 	Provider string
 	BaseURL  string
 	APIKey   string
 	Model    string
+	// Microsoft is true when Provider==microsoft and the Go-native client is bound.
+	Microsoft bool
 	// Decide posts state+questions and returns the answers map (DecisionResult.answers).
-	// Tests inject a mock; production uses Server.callRuntimeDecision.
+	// Tests inject a mock; production uses Microsoft client or Server.callRuntimeDecision.
 	Decide func(ctx context.Context, state any, questions map[string]any) (map[string]any, error)
 }
 
@@ -384,7 +387,6 @@ func currentUserIntentSummary(userText, synopsis string) string {
 	return summary
 }
 
-
 // specialtyProbeText is the haystack for specialty synonym / capable-profile safety.
 // Short FOLLOW-UP asks ("修改下…") have no coding needles themselves; intent join v1
 // already binds prior specialty into Current user intent ("继续完善「…html/canvas…」：…").
@@ -402,7 +404,6 @@ func specialtyProbeText(userText, synopsis string) string {
 	}
 	return raw
 }
-
 
 // currentUserIntentJoin returns the intent body and join mode: follow_up|new|soft|none.
 func currentUserIntentJoin(userText, synopsis string) (summary, mode string) {
@@ -1167,8 +1168,21 @@ func (s *Server) decisionDepsForUser(uid, conversationID string) *autoPickDecisi
 		APIKey:   settings.DecisionAPIKey,
 		Model:    settings.DecisionModel,
 	}
-	deps.Decide = func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
-		return s.callRuntimeDecision(ctx, deps.Provider, deps.BaseURL, deps.APIKey, deps.Model, state, questions, uid, conversationID)
+	// Exactly one backend: microsoft (Go-native) XOR runtime System One (jev/laya/custom).
+	if provider == "microsoft" {
+		ms := s.msDecisionBindingFromSettings(settings)
+		if ms == nil {
+			// Selected but incomplete (no key/endpoint) → Decide nil → heuristic fail-open.
+			return deps
+		}
+		deps.Microsoft = true
+		deps.Decide = microsoftAutoPickDecide(ms)
+		return deps
+	}
+	if db.IsRuntimeSystemOneProvider(provider) {
+		deps.Decide = func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+			return s.callRuntimeDecision(ctx, deps.Provider, deps.BaseURL, deps.APIKey, deps.Model, state, questions, uid, conversationID)
+		}
 	}
 	return deps
 }

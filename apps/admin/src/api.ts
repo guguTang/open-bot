@@ -562,6 +562,71 @@ export async function adminTestDecision(body: {
   return res.json();
 }
 
+export type MSDecisionProvider = "openrouter" | "azure_foundry";
+
+export type MSDecisionSettings = {
+  enabled: boolean;
+  provider: MSDecisionProvider;
+  base_url: string;
+  model: string;
+  auth_mode: "api_key" | "bearer";
+  confidence_threshold: number | null;
+  timeout_ms: number | null;
+  api_key_set: boolean;
+  api_key_hint?: string;
+  updated_at?: string;
+};
+
+export type MSDecisionBody = {
+  enabled: boolean;
+  provider: MSDecisionProvider;
+  base_url: string;
+  model: string;
+  auth_mode: "api_key" | "bearer";
+  api_key?: string;
+  clear_api_key?: boolean;
+  confidence_threshold: number | null;
+  timeout_ms: number | null;
+};
+
+export type MSDecisionTestResult = {
+  ok: boolean;
+  provider: string;
+  endpoint: string;
+  model: string;
+  response_model?: string;
+  upstream_provider?: string;
+  latency_ms: number;
+  answers?: Record<string, { type?: string; noul?: number; choice?: string; confidence?: number }>;
+  usage?: { input_tokens: number; output_tokens: number; cost: number; cost_estimated?: boolean };
+};
+
+export async function adminGetMSDecision(): Promise<MSDecisionSettings> {
+  const res = await fetch(`${API_BASE}/v1/admin/org/decision/microsoft`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminPutMSDecision(body: MSDecisionBody): Promise<MSDecisionSettings> {
+  const res = await fetch(`${API_BASE}/v1/admin/org/decision/microsoft`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminTestMSDecision(body: MSDecisionBody): Promise<MSDecisionTestResult> {
+  const res = await fetch(`${API_BASE}/v1/admin/org/decision/microsoft/test`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
 export async function adminGetUsage(days = 30, orgId?: string): Promise<OrgUsage> {
   const q = new URLSearchParams({ days: String(days) });
   if (orgId) q.set("org_id", orgId);
