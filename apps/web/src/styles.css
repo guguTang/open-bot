@@ -5344,3 +5344,43 @@ html.touch-ui .composer-quote-clear {
     min-height: 32px;
   }
 }
+
+
+/* heroui-pro settings polish */
+.settings-dialog.modal,
+.modal.settings-dialog {
+  border-radius: calc(var(--radius) * 3);
+  border: 1px solid var(--border);
+  background: var(--background);
+  box-shadow: var(--shadow-lg, 0 16px 48px rgba(0,0,0,.12));
+  max-width: min(960px, calc(100vw - 2rem));
+  width: min(960px, calc(100vw - 2rem));
+  max-height: min(860px, calc(100vh - 2rem));
+}
+.settings-dialog .settings-nav {
+  background: var(--background);
+  border-right: 1px solid var(--separator);
+}
+.settings-dialog .settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+}
+.chat-message--user .bubble-user,
+.chat-row-user .bubble-user {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.chat-message--assistant .bubble-assistant,
+.chat-row-assistant .bubble-assistant {
+  background: var(--surface-secondary);
+  color: var(--foreground);
+}
+
+
+/* modal__backdrop pointer-events guard */
+.modal__backdrop[data-exiting="true"],
+.modal__backdrop[aria-hidden="true"],
+.modal__backdrop[data-open="false"] {
+  pointer-events: none !important;
+}
