@@ -49,6 +49,7 @@ const renderers: OpenBotRenderers = {
     </OuiPeerButtonsContext.Provider>
   ),
   Table: ({ props }) => (
+    <div className="oui-table-block">
     <ScrollShadow orientation="horizontal" className="oui-table-scroll max-w-full" size={40}>
       <Table variant="secondary" className="oui-table-wrap">
         <Table.ScrollContainer>
@@ -75,6 +76,23 @@ const renderers: OpenBotRenderers = {
         </Table.ScrollContainer>
       </Table>
     </ScrollShadow>
+    {/* Narrow containers: stacked card list instead of a sideways-scrolling table */}
+    <ul className="oui-table-cards" aria-label="数据表">
+      {props.rows.map((row, r) => (
+        <li key={r} className="oui-table-card">
+          <div className="oui-table-card-title">{row[0]}</div>
+          <dl>
+            {row.slice(1).map((c, i) => (
+              <div key={i} style={{ display: "contents" }}>
+                <dt>{props.headers[i + 1]}</dt>
+                <dd>{c}</dd>
+              </div>
+            ))}
+          </dl>
+        </li>
+      ))}
+    </ul>
+    </div>
   ),
   List: ({ props }) =>
     props.ordered ? (
