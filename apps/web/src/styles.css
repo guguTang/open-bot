@@ -29,7 +29,7 @@
   --sab: 0px;
   --safe-top: max(env(safe-area-inset-top, 0px), var(--sat, 0px));
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--sab, 0px));
-  --chat-immersive-bg: var(--bg-elevated, #ffffff);
+  --chat-immersive-bg: var(--bg-elevated);
   --chat-top-chrome: 48px; /* floating row (~44) + tight pad; safe offset is separate (+12) */
   --chat-composer-chrome: 72px;
   --bg: var(--background);
@@ -131,14 +131,14 @@ body,
   padding: 4px 10px;
   font-size: 11px;
   cursor: pointer;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   line-height: 1.2;
   min-height: 28px;
 }
 .bot-avatar-status-opt.active {
-  border-color: var(--accent, #6ea8fe);
-  color: var(--fg, #111);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #6ea8fe) 40%, transparent);
+  border-color: var(--accent);
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .bot-avatar-shape-label {
@@ -146,11 +146,11 @@ body,
   font-size: 10px;
   line-height: 1.2;
   margin-top: 4px;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   text-align: center;
 }
 .bot-avatar-shape-opt.active .bot-avatar-shape-label {
-  color: var(--fg, #111);
+  color: var(--foreground);
 }
 
 .bot-avatar-modal { max-width: 420px; }
@@ -192,8 +192,8 @@ body,
   overflow: visible;
 }
 .bot-avatar-shape-opt.active {
-  border-color: var(--accent, #6ea8fe);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #6ea8fe) 40%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .bot-avatar-color-grid {
   display: grid;
@@ -210,7 +210,7 @@ body,
 }
 .bot-avatar-color-opt.active {
   border-color: #fff;
-  box-shadow: 0 0 0 2px var(--accent, #6ea8fe);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .bot-machine-select {
@@ -218,13 +218,13 @@ body,
   padding: 8px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated, #fff);
+  background: var(--bg-elevated);
   color: inherit;
   font: inherit;
 }
 .bot-machine-select:focus {
   outline: none;
-  border-color: var(--accent, #457b9d);
+  border-color: var(--accent);
 }
 /* ---- Main ---- */
 .main {
@@ -433,14 +433,14 @@ body,
 }
 .msg-sources-item.msg-sources-flash,
 .msg-sources-item:target {
-  background: color-mix(in srgb, var(--accent, #3b82f6) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   border-radius: 4px;
-  outline: 1px solid color-mix(in srgb, var(--accent, #3b82f6) 35%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .msg-sources-num {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   font-weight: 500;
 }
 .msg-sources-link {
@@ -448,7 +448,7 @@ body,
   align-items: baseline;
   gap: 4px;
   max-width: 100%;
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   text-decoration: none;
   word-break: break-all;
   cursor: pointer;
@@ -460,7 +460,7 @@ body,
   min-width: 0;
 }
 .md-cite {
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   font-size: 0.85em;
   font-weight: 600;
   text-decoration: none;
@@ -606,7 +606,7 @@ body,
   padding: 6px 10px;
   text-align: left;
 }
-.md-body th { background: #fff; }
+.md-body th { background: var(--surface); }
 
 .md-inline-code {
   font-family: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
@@ -631,7 +631,7 @@ body,
   align-items: center;
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
-  background: #f3f4f6;
+  background: var(--surface-secondary);
   font-size: 11px;
   color: var(--muted);
 }
@@ -646,7 +646,7 @@ body,
   border-radius: 6px;
 }
 .md-copy:hover {
-  background: #e5e7eb;
+  background: var(--default);
   color: var(--text);
 }
 
@@ -756,7 +756,7 @@ body,
 }
 .scroll-bottom-btn:hover {
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
 }
 
 .composer {
@@ -1057,8 +1057,8 @@ button.primary {
   border: none;
   border-radius: 12px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
   font-weight: 700;
   cursor: pointer;
   min-width: max-content;
@@ -1125,7 +1125,7 @@ button.ghost {
 /* Product rule A: phone presence row — secondary grey, not danger */
 .tag.machine-login-only {
   background: rgba(107, 114, 128, 0.12);
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   font-weight: 500;
 }
 .tag.machine-online {
@@ -1135,18 +1135,15 @@ button.ghost {
 }
 .tag.machine-offline {
   background: rgba(107, 114, 128, 0.12);
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   font-weight: 500;
 }
 .tag.machine-host-ready {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   font-weight: 550;
 }
-[data-theme="dark"] .tag.machine-online {
-  background: rgba(16, 185, 129, 0.22);
-  color: #6ee7b7;
-}
+
 [data-theme="dark"] .tag.machine-host-ready {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: #93c5fd;
@@ -1269,13 +1266,13 @@ button.ghost {
   margin: 0 0 8px 2px;
   font-size: 13px;
   font-weight: 500;
-  color: #9ca3af;
+  color: var(--muted);
 }
 
 .settings-card {
-  border: 1px solid #eceef1;
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .settings-account {
@@ -1290,7 +1287,7 @@ button.ghost {
   height: 44px;
   border-radius: 50%;
   background: #ececee;
-  color: #6b7280;
+  color: var(--muted);
   display: grid;
   place-items: center;
   font-size: 13px;
@@ -1313,7 +1310,7 @@ button.ghost {
   align-items: center;
   gap: 6px;
   margin-top: 2px;
-  color: #6b7280;
+  color: var(--muted);
   font-size: 13px;
   min-width: 0;
 }
@@ -1329,7 +1326,7 @@ button.ghost {
   padding: 2px;
   border: none;
   background: transparent;
-  color: #9ca3af;
+  color: var(--muted);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1337,14 +1334,14 @@ button.ghost {
 }
 
 .settings-dialog .settings-icon-btn:hover {
-  color: #374151;
+  color: var(--foreground);
 }
 
 .settings-dialog .settings-pill {
   margin: 0;
   border: none;
-  background: #f3f4f6;
-  color: #1a1a1b;
+  background: var(--surface-secondary);
+  color: var(--foreground);
   border-radius: 999px;
   padding: 7px 14px;
   font-size: 13px;
@@ -1380,7 +1377,7 @@ button.ghost {
   margin: 2px 0 4px;
   font-size: 13px;
   line-height: 1.55;
-  color: #9ca3af;
+  color: var(--muted);
 }
 
 .settings-section-head {
@@ -1416,8 +1413,8 @@ button.ghost {
 
 .settings-section-actions button.primary {
   border: none;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
   font-weight: 650;
 }
 
@@ -1433,7 +1430,7 @@ button.ghost {
   padding: 22px 18px;
   font-size: 13px;
   line-height: 1.5;
-  color: #9ca3af;
+  color: var(--muted);
   text-align: center;
 }
 
@@ -1446,7 +1443,7 @@ button.ghost {
 .settings-card > .llm-list > .llm-item {
   border: none;
   border-radius: 0;
-  border-bottom: 1px solid #eceef1;
+  border-bottom: 1px solid var(--border);
   background: transparent;
   padding: 14px 18px;
   align-items: flex-start;
@@ -1498,7 +1495,7 @@ button.ghost {
 .settings-dialog .settings-card textarea {
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   padding: 10px 12px;
   outline: none;
@@ -1575,7 +1572,7 @@ button.ghost {
 .agent-prompt {
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   padding: 10px 12px;
   outline: none;
@@ -1651,7 +1648,7 @@ button.ghost {
   min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .preview-status,
@@ -1674,9 +1671,9 @@ button.ghost {
   margin: 10px 16px 0;
   padding: 8px 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent, #5b8def) 12%, #fff);
-  border: 1px solid color-mix(in srgb, var(--accent, #5b8def) 28%, var(--border));
-  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--foreground);
   font-size: 13px;
 }
 
@@ -1699,8 +1696,8 @@ button.ghost {
   align-items: flex-start;
   gap: 2px;
   text-align: left;
-  border: 1px solid var(--border, #e5e7eb);
-  background: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
   border-radius: 10px;
   padding: 8px 10px;
   max-width: 100%;
@@ -1719,7 +1716,7 @@ button.ghost {
 .artifact-kind {
   font-size: 11px;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--muted);
 }
 .artifact-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1745,11 +1742,11 @@ button.ghost {
 }
 .tool-chip {
   border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   padding: 4px 10px;
   font-size: 12px;
-  color: #475569;
+  color: var(--muted);
   cursor: pointer;
 }
 .tool-json-collapsed {
@@ -1768,7 +1765,7 @@ button.ghost {
   gap: 8px;
   margin-top: 12px;
 }
-.muted { color: #64748b; font-size: 13px; }
+.muted { color: var(--muted); font-size: 13px; }
 
 /* Host confirm is a vertical card. Do NOT inherit .approval-gate-card's
    horizontal flex (space-between) — that crushed titles/paths into 1-char columns. */
@@ -1807,13 +1804,13 @@ button.ghost {
   margin-top: 6px;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
 }
 .host-confirm-risk-hint {
-  color: var(--danger, #dc2626);
+  color: var(--danger);
   font-weight: 500;
 }
 
@@ -1838,7 +1835,7 @@ button.ghost {
   line-height: 1.45;
   padding: 8px 10px;
   border-radius: 10px;
-  background: var(--bg-soft, #f4f5f7);
+  background: var(--bg-soft);
   color: var(--text);
 }
 
@@ -1865,16 +1862,16 @@ button.ghost {
 }
 .host-confirm-actions button.danger-outline,
 .host-confirm-deny.danger-outline {
-  border: 1px solid var(--danger, #dc2626) !important;
-  color: var(--danger, #dc2626) !important;
+  border: 1px solid var(--danger) !important;
+  color: var(--danger) !important;
   background: transparent !important;
   font-weight: 600;
 }
 .host-confirm-actions .host-confirm-allow-once.primary {
   order: 3;
   border: none;
-  background: var(--accent, #2563eb);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
   font-weight: 650;
   min-height: 44px;
   padding: 10px 16px;
@@ -1888,7 +1885,7 @@ button.ghost {
 .host-confirm-allow.danger {
   border: none;
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-foreground);
   font-weight: 650;
 }
 .host-confirm-settled {
@@ -1961,7 +1958,7 @@ button.ghost {
   gap: 12px;
   min-height: 52px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-bottom: 1px solid var(--border);
 }
 .review-allow-row:last-child {
   border-bottom: none;
@@ -2007,7 +2004,7 @@ button.ghost {
   left: 0;
   right: 0;
   bottom: calc(100% + 8px);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
@@ -2040,7 +2037,7 @@ button.ghost {
 .mention-option-id {
   margin-left: auto;
   font-size: 12px;
-  color: #64748b;
+  color: var(--muted);
 }
 .mention-option-empty {
   cursor: default;
@@ -2098,7 +2095,7 @@ button.ghost {
   margin-top: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: #9ca3af;
+  color: var(--muted);
 }
 
 .bot-settings-select {
@@ -2135,7 +2132,7 @@ button.ghost {
   width: 42px;
   height: 24px;
   border-radius: 999px;
-  background: #d1d5db;
+  background: var(--default);
   transition: background 0.15s ease;
   position: relative;
 }
@@ -2148,7 +2145,7 @@ button.ghost {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   transition: transform 0.15s ease;
 }
@@ -2283,11 +2280,11 @@ button.ghost {
 }
 .msg-action-btn:hover {
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
 }
 .msg-action-thread {
   color: var(--accent);
-  border-color: #bfdbfe;
+  border-color: var(--border);
 }
 /* Light in-bubble quote: 2px bar + one-line text (design v1 §3). */
 .msg-reply-quote {
@@ -2365,7 +2362,7 @@ button.ghost {
   flex: 1;
   min-width: 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2377,12 +2374,8 @@ button.ghost {
   margin: 0 16px;
   background: rgba(0, 0, 0, 0.06);
 }
-[data-theme="dark"] .composer-quote-divider {
-  background: rgba(255, 255, 255, 0.08);
-}
-[data-theme="dark"] .composer-quote-text {
-  color: #9ca3af;
-}
+
+
 /* Quote × hit ≥44 under touch-ui and layout-narrow (desktop fine/wide keeps 28). */
 .touch-ui .composer-quote-clear,
 html.touch-ui .composer-quote-clear {
@@ -2502,8 +2495,8 @@ dialog.thread-panel:not([open]) {
   color: inherit;
 }
 .msg-reaction-chip.me {
-  border-color: color-mix(in srgb, var(--accent, #6ea8fe) 55%, var(--border));
-  background: color-mix(in srgb, var(--accent, #6ea8fe) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .msg-reaction-chip:disabled {
   cursor: default;
@@ -2541,7 +2534,7 @@ dialog.thread-panel:not([open]) {
   padding: 6px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: var(--panel, var(--bg-elevated, #1a1b1e));
+  background: var(--surface);
   box-shadow: var(--shadow-sm, 0 4px 16px rgba(0,0,0,.25));
   z-index: 20;
 }
@@ -2559,7 +2552,7 @@ dialog.thread-panel:not([open]) {
   cursor: pointer;
 }
 .msg-reaction-pick:hover {
-  background: color-mix(in srgb, var(--accent, #6ea8fe) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 /* Handoff projection card (P1) */
@@ -2573,7 +2566,7 @@ dialog.thread-panel:not([open]) {
   padding: 10px 14px;
   border-radius: 14px;
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--assistant-bg, #1e1f22) 88%, transparent);
+  background: color-mix(in srgb, var(--assistant-bg) 88%, transparent);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -2635,7 +2628,7 @@ dialog.thread-panel:not([open]) {
   margin-top: 8px;
   border: none;
   background: transparent;
-  color: var(--accent, #6ea8fe);
+  color: var(--accent);
   font-size: 12px;
   padding: 0;
   cursor: pointer;
@@ -2657,29 +2650,29 @@ dialog.thread-panel:not([open]) {
 .feedback-label {
   font-size: 12px;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--muted);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 .feedback-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .feedback-chip {
-  border: 1px solid var(--border, #e2e5ea);
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 999px;
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
 }
 .feedback-chip.active {
-  border-color: #457b9d;
+  border-color: var(--border);
   background: #e8f1f8;
-  color: #1d3557;
+  color: var(--foreground);
 }
 .feedback-note {
   width: 100%;
   resize: vertical;
-  border: 1px solid var(--border, #e2e5ea);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
   font: inherit;
@@ -2822,7 +2815,7 @@ dialog.action-sheet-root:not([open]) {
 }
 .action-sheet {
   position: relative;
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px 16px 0 0;
   padding: 8px 12px max(8px, var(--safe-bottom, 0px));
   box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
@@ -2834,7 +2827,7 @@ dialog.action-sheet-root:not([open]) {
   width: 36px;
   height: 4px;
   border-radius: 999px;
-  background: #d1d5db;
+  background: var(--default);
   margin: 4px auto 12px;
 }
 .action-sheet-title {
@@ -2851,9 +2844,9 @@ dialog.action-sheet-root:not([open]) {
 }
 .action-sheet-primary-btn {
   min-height: 48px;
-  border: 1px solid var(--border, #e2e5ea);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: #f8fafc;
+  background: var(--surface-secondary);
   font-size: 15px;
   display: flex;
   flex-direction: column;
@@ -2865,7 +2858,7 @@ dialog.action-sheet-root:not([open]) {
 .action-sheet-primary-ico { font-size: 20px; line-height: 1; }
 .action-sheet-sep {
   height: 1px;
-  background: var(--border, #e2e5ea);
+  background: var(--border);
   margin: 4px 0 8px;
 }
 .action-sheet-row {
@@ -2880,8 +2873,8 @@ dialog.action-sheet-root:not([open]) {
   border-radius: 10px;
 }
 .action-sheet-row:hover,
-.action-sheet-row:active { background: var(--bg-hover, #eceef1); }
-.action-sheet-cancel { color: #6b7280; margin-top: 4px; }
+.action-sheet-row:active { background: var(--bg-hover); }
+.action-sheet-cancel { color: var(--muted); margin-top: 4px; }
 .action-sheet-row-danger { color: #dc2626; font-weight: 600; }
 .action-sheet-emoji-grid {
   display: grid;
@@ -2893,9 +2886,9 @@ dialog.action-sheet-root:not([open]) {
   min-height: 48px;
   min-width: 48px;
   font-size: 28px;
-  border: 1px solid var(--border, #e2e5ea);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -2923,10 +2916,10 @@ dialog.action-sheet-root:not([open]) {
   .feedback-actions {
     position: sticky;
     bottom: 0;
-    background: #fff;
+    background: var(--surface);
     padding: 10px 0 calc(6px + var(--safe-bottom, 0px));
     margin-top: auto;
-    border-top: 1px solid var(--border, #e2e5ea);
+    border-top: 1px solid var(--border);
   }
   .feedback-chip,
   .feedback-actions .primary,
@@ -2941,17 +2934,17 @@ dialog.action-sheet-root:not([open]) {
 
 .msg-hover-btn svg { display: block; }
 .msg-hover-btns {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.06);
 }
 .msg-hover-btn {
-  color: #6b7280;
+  color: var(--muted);
 }
 .msg-hover-btn:hover {
-  color: #111827;
-  background: #f3f4f6;
+  color: var(--foreground);
+  background: var(--surface-secondary);
 }
 .action-sheet-row-icon {
   display: flex !important;
@@ -2963,7 +2956,7 @@ dialog.action-sheet-root:not([open]) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #374151;
+  color: var(--foreground);
 }
 
 /* === hover bar reference align === */
@@ -3007,7 +3000,7 @@ dialog.action-sheet-root:not([open]) {
   border: none;
   background: transparent !important;
   border-radius: 6px;
-  color: #6b7280;
+  color: var(--muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3015,7 +3008,7 @@ dialog.action-sheet-root:not([open]) {
 }
 .msg-hover-btn:hover {
   background: rgba(0, 0, 0, 0.05) !important;
-  color: #374151;
+  color: var(--foreground);
 }
 .msg-hover-btn svg {
   display: block;
@@ -3028,8 +3021,8 @@ dialog.action-sheet-root:not([open]) {
   right: auto;
   transform: translateX(calc(-100% + 14px));
   min-width: 168px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   padding: 4px;
@@ -3059,18 +3052,18 @@ dialog.action-sheet-root:not([open]) {
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  color: #1f2937;
+  color: var(--foreground);
 }
 .msg-more-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-secondary);
 }
 .msg-more-item svg {
   flex-shrink: 0;
-  color: #6b7280;
+  color: var(--muted);
 }
 .msg-more-sep {
   height: 1px;
-  background: #e5e7eb;
+  background: var(--default);
   margin: 4px 2px;
 }
 
@@ -3210,10 +3203,10 @@ html.capacitor-native {
 /* ---- Mobile shell C (Grok-align): touch-ui OR layout-narrow via .shell-narrow ---- */
 
 .app.shell-narrow.mobile-list {
-  background: var(--bg-elevated, #fff);
+  background: var(--bg-elevated);
 }
 .app.shell-narrow.mobile-chat {
-  background: var(--bg-elevated, #fff);
+  background: var(--bg-elevated);
 }
 
 /* C-1 create action sheet row leading icon */
@@ -3264,8 +3257,8 @@ html.capacitor-native {
 .confirm-sheet-btn {
   min-height: 48px;
   border-radius: 12px;
-  border: 1px solid var(--border, #e5e7eb);
-  background: var(--bg-soft, #f3f4f6);
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -3277,13 +3270,13 @@ html.capacitor-native {
 
 .confirm-sheet-btn-confirm {
   border-color: transparent;
-  background: #111827;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .confirm-sheet-btn-confirm.is-danger {
-  background: #dc2626;
-  color: #fff;
+  background: var(--danger);
+  color: var(--danger-foreground);
 }
 
 .confirm-sheet-btn:active {
@@ -3308,7 +3301,7 @@ html.capacitor-native {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f2f2f7;
+  background: var(--surface-secondary);
   border: none;
   box-shadow: none;
 }
@@ -3322,9 +3315,7 @@ html.capacitor-native {
   display: none;
 }
 
-[data-theme="dark"] .settings-dialog-shell {
-  background: #1c1c1e;
-}
+
 
 .settings-nav-hidden {
   display: none !important;
@@ -3341,14 +3332,12 @@ html.capacitor-native {
 .settings-dialog-shell .settings-card {
   border-radius: 14px;
   border: none;
-  background: #fff;
+  background: var(--surface);
   box-shadow: none;
   overflow: hidden;
 }
 
-[data-theme="dark"] .settings-dialog-shell .settings-card {
-  background: #2c2c2e;
-}
+
 
 .settings-dialog-shell .settings-section {
   margin-top: 12px;
@@ -3356,7 +3345,7 @@ html.capacitor-native {
 
 .settings-dialog-shell .settings-section-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   padding-left: 4px;
 }
 
@@ -3382,12 +3371,10 @@ html.capacitor-native {
   gap: 4px;
   /* Match chat ← top: max(16, safe+12), horizontal 12 */
   padding: max(16px, calc(var(--safe-top, 0px) + 12px)) 12px 8px;
-  background: #f2f2f7;
+  background: var(--surface-secondary);
 }
 
-[data-theme="dark"] .settings-shell-subhead {
-  background: #1c1c1e;
-}
+
 
 .settings-shell-subhead h2 {
   margin: 0;
@@ -3408,7 +3395,7 @@ html.capacitor-native {
   min-width: 44px;
   min-height: 44px;
   border: none;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   border-radius: 50%;
   font-size: 20px;
   cursor: pointer;
@@ -3420,7 +3407,7 @@ html.capacitor-native {
 }
 
 .settings-shell-back:active {
-  background: var(--bg-hover, #eceef1);
+  background: var(--bg-hover);
 }
 .settings-shell-back svg {
   opacity: 0.85;
@@ -3434,12 +3421,10 @@ html.capacitor-native {
   max-height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: #f2f2f7; /* #7: settings gray; list/chat stay white (#5) */
+  background: var(--surface-secondary); /* #7: settings gray; list/chat stay white (#5) */
 }
 
-[data-theme="dark"] .settings-hub {
-  background: #1c1c1e;
-}
+
 
 .settings-hub-top {
   flex-shrink: 0;
@@ -3467,7 +3452,7 @@ html.capacitor-native {
   min-height: 44px;
   border: none;
   border-radius: 50%;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -3496,20 +3481,18 @@ html.capacitor-native {
 
 .settings-hub-section-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   padding: 4px 4px 0;
   margin-top: 4px;
 }
 
 .settings-hub-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px; /* #7: 14–16 */
   overflow: hidden;
 }
 
-[data-theme="dark"] .settings-hub-card {
-  background: #2c2c2e;
-}
+
 
 .settings-hub-row {
   width: 100%;
@@ -3555,7 +3538,7 @@ html.capacitor-native {
 [data-theme="dark"] .settings-hub-row,
 [data-theme="dark"] .modal.settings-dialog .settings-hub-row,
 [data-theme="dark"] .modal.settings-dialog-shell .settings-hub-row {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: var(--separator);
 }
 
 .settings-hub-card > .settings-hub-row:last-child,
@@ -3587,7 +3570,7 @@ html.capacitor-native {
 .settings-hub-row-sub {
   font-size: 12.5px;
   line-height: 1.35;
-  color: #6b7280;
+  color: var(--muted);
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -3599,7 +3582,7 @@ html.capacitor-native {
 
 .settings-hub-row-value {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--muted);
   flex-shrink: 0;
   max-width: 40%;
   overflow: hidden;
@@ -3616,8 +3599,8 @@ html.capacitor-native {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #e5e7eb;
-  color: #374151;
+  background: var(--default);
+  color: var(--foreground);
   font-size: 13px;
   font-weight: 650;
   display: grid;
@@ -3643,9 +3626,7 @@ html.capacitor-native {
   font-weight: 600;
   min-height: 52px;
 }
-[data-theme="dark"] .settings-hub-row.settings-hub-row-logout {
-  color: #f87171;
-}
+
 
 /* ---- Mobile safe-area hotfixes (§7 · status bar / home indicator) ---- */
 
@@ -3664,7 +3645,7 @@ html.capacitor-native {
   gap: 0;
   justify-content: center;
   border-radius: 50%;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   box-sizing: border-box;
   left: 12px;
 }
@@ -3684,7 +3665,7 @@ html.capacitor-native {
   display: grid;
   place-items: center;
   border: none;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   border-radius: 50%;
   cursor: pointer;
   color: var(--text);
@@ -3764,11 +3745,9 @@ html.touch-ui .composer-quote-clear {
   height: 100%;
   max-height: 100%;
   overflow: hidden;
-  background: var(--chat-immersive-bg, var(--bg-elevated, #fff));
+  background: var(--chat-immersive-bg);
 }
-[data-theme="dark"] {
-  --chat-immersive-bg: #111113;
-}
+
 
 /* Full-bleed message scroller — content can pass under translucent chrome */
 .app.shell-narrow.mobile-chat .main > .messages {
@@ -3828,7 +3807,7 @@ html.touch-ui .composer-quote-clear {
 .app.shell-narrow.mobile-chat .main > .topbar .topbar-back {
   top: max(16px, calc(var(--safe-top, 0px) + 12px));
   transform: none;
-  background: color-mix(in srgb, var(--chat-immersive-bg, #fff) 62%, transparent);
+  background: color-mix(in srgb, var(--chat-immersive-bg) 62%, transparent);
   backdrop-filter: blur(12px) saturate(1.15);
   -webkit-backdrop-filter: blur(12px) saturate(1.15);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -3843,7 +3822,7 @@ html.touch-ui .composer-quote-clear {
 .app.shell-narrow.mobile-chat .main > .topbar .agent-pill {
   max-width: min(220px, calc(100vw - 120px));
   align-self: center;
-  background: color-mix(in srgb, var(--bg-elevated, #fff) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
   border-color: transparent;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(12px) saturate(1.15);
@@ -3918,12 +3897,7 @@ html.touch-ui .composer-quote-clear {
 }
 
 /* Dark: round back/close soft fill */
-[data-theme="dark"] .settings-shell-back,
-[data-theme="dark"] .settings-dialog-shell .settings-shell-subhead .settings-close,
-[data-theme="dark"] .settings-hub-close,
-[data-theme="dark"] .shell-narrow .topbar-back {
-  background: rgba(255, 255, 255, 0.1);
-}
+
 
 
 /* ---- #7 Settings hub v2 deepen ---- */
@@ -3957,7 +3931,7 @@ html.touch-ui .composer-quote-clear {
 }
 .settings-hub-v2 .settings-hub-section-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   padding: 0 4px;
   margin-top: 0;
 }
@@ -3988,7 +3962,7 @@ html.touch-ui .composer-quote-clear {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   color: var(--text);
   display: grid;
   place-items: center;
@@ -4005,27 +3979,19 @@ html.touch-ui .composer-quote-clear {
 .modal.settings-dialog-shell .settings-shell-subhead .settings-close:active,
 .bot-avatar-modal-shell .settings-shell-back:active,
 .bot-avatar-modal-shell .settings-close:active {
-  background: var(--bg-hover, #eceef1);
+  background: var(--bg-hover);
 }
 
-[data-theme="dark"] .modal.settings-dialog .settings-hub-close,
-[data-theme="dark"] .modal.settings-dialog .settings-shell-back,
-[data-theme="dark"] .modal.settings-dialog-shell .settings-shell-subhead .settings-close,
-[data-theme="dark"] .bot-avatar-modal-shell .settings-shell-back,
-[data-theme="dark"] .bot-avatar-modal-shell .settings-close {
-  background: rgba(255, 255, 255, 0.1);
-}
+
 
 /* Subhead grid already 44 | 1fr | 44; same top inset as chat ← */
 .settings-dialog-shell .settings-shell-subhead,
 .bot-avatar-modal-shell .settings-shell-subhead {
   padding: max(16px, calc(var(--safe-top, 0px) + 12px)) 12px 8px;
-  background: #f2f2f7;
+  background: var(--surface-secondary);
 }
 
-[data-theme="dark"] .bot-avatar-modal-shell .settings-shell-subhead {
-  background: #1c1c1e;
-}
+
 
 /* --- Shell page fill: scroll body + room for sticky CTA --- */
 .settings-dialog-shell > .settings-hub {
@@ -4085,23 +4051,21 @@ html.touch-ui .composer-quote-clear {
   border-radius: 16px;
   border: none;
   overflow: visible; /* allow sticky CTA */
-  background: #fff;
+  background: var(--surface);
 }
 
-[data-theme="dark"] .settings-dialog-shell .settings-card {
-  background: #2c2c2e;
-}
+
 
 .settings-dialog-shell .settings-section-label,
 .settings-dialog-shell .settings-section-head .settings-section-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   padding-left: 4px;
 }
 
 .settings-dialog-shell .settings-hint {
   font-size: 13px;
-  color: #8e8e93;
+  color: var(--muted);
   margin: 4px 4px 8px;
   line-height: 1.5;
 }
@@ -4126,7 +4090,7 @@ html.touch-ui .composer-quote-clear {
   flex-direction: column;
   gap: 6px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -4165,8 +4129,8 @@ html.touch-ui .composer-quote-clear {
 .settings-dialog-shell .bot-machine-name-edit input {
   min-height: 44px;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   color: var(--text);
   padding: 10px 12px;
   font-size: 16px; /* avoid iOS zoom */
@@ -4209,15 +4173,15 @@ html.touch-ui .composer-quote-clear {
   padding: 12px 16px max(16px, var(--safe-bottom, 0px));
   position: static;
   z-index: auto;
-  background: #f2f2f7;
+  background: var(--surface-secondary);
   border-top: 0.5px solid rgba(60, 60, 67, 0.12);
   box-sizing: border-box;
   border-radius: 0 0 16px 16px;
 }
 
 [data-theme="dark"] .settings-dialog-shell .llm-form > .llm-actions {
-  background: #1c1c1e;
-  border-top-color: rgba(255, 255, 255, 0.1);
+  background: var(--surface);
+  border-top-color: var(--separator);
 }
 
 .settings-dialog-shell .settings-card > .llm-form > .llm-actions {
@@ -4236,8 +4200,8 @@ html.touch-ui .composer-quote-clear {
   font-size: 16px;
   font-weight: 650;
   margin: 0;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -4245,9 +4209,9 @@ html.touch-ui .composer-quote-clear {
   width: 100%;
   min-height: 44px;
   margin: 0;
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   color: var(--text);
   font-size: 15px;
   font-weight: 500;
@@ -4257,13 +4221,10 @@ html.touch-ui .composer-quote-clear {
 }
 
 .settings-dialog-shell .llm-form > .llm-actions > button:not(.primary):active {
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
 }
 
-[data-theme="dark"] .settings-dialog-shell .llm-form > .llm-actions > button:not(.primary) {
-  background: #2c2c2e;
-  border-color: rgba(255, 255, 255, 0.12);
-}
+
 
 /* List-row actions stay compact horizontal (设默认 / 编辑 / 删除) */
 .settings-dialog-shell .llm-item .llm-actions,
@@ -4393,7 +4354,7 @@ html.touch-ui .composer-quote-clear {
   line-height: 1.2;
   padding: 2px 6px;
   border-radius: 999px;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   color: var(--muted);
   vertical-align: middle;
 }
@@ -4459,8 +4420,8 @@ html.touch-ui .composer-quote-clear {
   width: 100%;
   min-height: 48px;
   border: none;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
   font-weight: 650;
 }
 
@@ -4510,14 +4471,12 @@ html.touch-ui .composer-quote-clear {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f2f2f7;
+  background: var(--surface-secondary);
   border: none;
   box-shadow: none;
 }
 
-[data-theme="dark"] .bot-avatar-modal-shell {
-  background: #1c1c1e;
-}
+
 
 .bot-avatar-modal-shell .bot-avatar-form {
   flex: 1 1 auto;
@@ -4540,7 +4499,7 @@ html.touch-ui .composer-quote-clear {
 }
 
 .bot-avatar-modal-shell .bot-avatar-shell-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px;
   padding: 16px;
   display: flex;
@@ -4548,13 +4507,11 @@ html.touch-ui .composer-quote-clear {
   gap: 12px;
 }
 
-[data-theme="dark"] .bot-avatar-modal-shell .bot-avatar-shell-card {
-  background: #2c2c2e;
-}
+
 
 .bot-avatar-modal-shell .bot-avatar-label {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   margin-top: 0;
 }
 
@@ -4573,7 +4530,7 @@ html.touch-ui .composer-quote-clear {
   gap: 8px;
   margin: 0;
   padding: 12px 16px max(12px, var(--safe-bottom, 0px));
-  background: #f2f2f7;
+  background: var(--surface-secondary);
   border-top: 0.5px solid rgba(60, 60, 67, 0.12);
   position: sticky;
   bottom: 0;
@@ -4581,8 +4538,8 @@ html.touch-ui .composer-quote-clear {
 }
 
 [data-theme="dark"] .bot-avatar-modal-shell .bot-avatar-form-footer {
-  background: #1c1c1e;
-  border-top-color: rgba(255, 255, 255, 0.1);
+  background: var(--surface);
+  border-top-color: var(--separator);
 }
 
 .bot-avatar-modal-shell .bot-avatar-form-footer > button.primary {
@@ -4602,7 +4559,7 @@ html.touch-ui .composer-quote-clear {
   margin: 0;
   border: none;
   background: transparent;
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   font-size: 15px;
   border-radius: 12px;
   padding: 8px 12px;
@@ -4646,9 +4603,7 @@ html.touch-ui .composer-quote-clear {
   background: #F2F2F7;
 }
 
-[data-theme="dark"] .group-channel-modal-shell {
-  background: #1C1C1E;
-}
+
 
 .group-channel-modal-head {
   display: grid;
@@ -4686,14 +4641,14 @@ html.touch-ui .composer-quote-clear {
   height: 44px;
   border-radius: 50%;
   border: none;
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
-  color: var(--text, #111827);
+  color: var(--text);
   margin: 0;
   padding: 0;
 }
@@ -4712,20 +4667,18 @@ html.touch-ui .composer-quote-clear {
 }
 
 .group-channel-section {
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px;
   padding: 14px 14px 10px;
 }
 
-[data-theme="dark"] .group-channel-section {
-  background: #2C2C2E;
-}
+
 
 .group-channel-section-title {
   margin: 0 0 10px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--muted, #6b7280);
+  color: var(--muted);
 }
 
 .group-members-section-head {
@@ -4776,7 +4729,7 @@ html.touch-ui .composer-quote-clear {
 
 .group-members-remove {
   flex-shrink: 0;
-  color: var(--danger, #dc2626);
+  color: var(--danger);
   min-height: 36px;
   padding: 6px 10px;
   font-size: 13px;
@@ -4828,7 +4781,7 @@ html.touch-ui .composer-quote-clear {
 }
 
 .agent-pill-channel:focus-visible {
-  outline: 2px solid var(--accent, #2563eb);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -4848,7 +4801,7 @@ html.touch-ui .composer-quote-clear {
   min-width: 44px;
   min-height: 44px;
   border-radius: 12px;
-  background: #e5e7eb;
+  background: var(--default);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -4856,15 +4809,13 @@ html.touch-ui .composer-quote-clear {
   line-height: 1;
   box-sizing: border-box;
 }
-[data-theme="dark"] .micro-apps-hub-icon {
-  background: rgba(255, 255, 255, 0.1);
-}
+
 
 .micro-apps-hub-kind {
   margin-left: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--muted);
 }
 
 .micro-apps-hub-badge {
@@ -4896,13 +4847,13 @@ html.touch-ui .composer-quote-clear {
   max-width: 280px;
   font-size: 13px;
   line-height: 1.5;
-  color: #9ca3af;
+  color: var(--muted);
 }
 .micro-apps-hub-empty-action {
   margin-top: 8px;
   border: none;
   background: transparent;
-  color: var(--accent, #2563eb);
+  color: var(--accent);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -4924,7 +4875,7 @@ html.touch-ui .composer-quote-clear {
 
 .micro-apps-hub-details {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
   padding: 0 4px;
 }
 .micro-apps-hub-details > summary {
@@ -4948,7 +4899,7 @@ html.touch-ui .composer-quote-clear {
   align-items: flex-start;
   gap: 8px;
   font-size: 12.5px;
-  color: #6b7280;
+  color: var(--muted);
   cursor: pointer;
 }
 
@@ -4979,14 +4930,12 @@ html.touch-ui .composer-quote-clear {
   flex-shrink: 0;
   margin: 0 16px 12px;
   padding: 12px 14px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--muted);
 }
-[data-theme="dark"] .micro-app-shell-panel {
-  background: #2c2c2e;
-}
+
 .micro-app-shell-panel > summary {
   cursor: pointer;
   list-style: none;
@@ -5001,13 +4950,11 @@ html.touch-ui .composer-quote-clear {
   flex: 1 1 auto;
   min-height: 0;
   margin: 0 16px max(16px, var(--safe-bottom, 0px));
-  background: #fff;
+  background: var(--surface);
   border-radius: 16px;
   overflow: hidden;
 }
-[data-theme="dark"] .micro-app-shell-stage {
-  background: #2c2c2e;
-}
+
 
 .micro-app-shell-frame {
   display: block;
@@ -5015,7 +4962,7 @@ html.touch-ui .composer-quote-clear {
   height: 100%;
   min-height: 280px;
   border: 0;
-  background: #fff;
+  background: var(--surface);
 }
 
 .micro-app-shell-placeholder {
@@ -5051,12 +4998,12 @@ html.touch-ui .composer-quote-clear {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-elevated, #fff);
+  background: var(--bg-elevated);
 }
 
 [data-theme="dark"] .micro-apps-hub--desktop,
 [data-theme="dark"] .micro-app-shell--desktop {
-  background: var(--bg-elevated, #1c1c1e);
+  background: var(--bg-elevated);
 }
 
 .micro-apps-hub-desktop-head {
@@ -5120,7 +5067,7 @@ html.touch-ui .composer-quote-clear {
 .micro-apps-hub--desktop .settings-close:hover,
 .micro-app-shell--desktop .settings-close:hover {
   color: var(--text);
-  background: var(--bg-soft, #f3f4f6);
+  background: var(--bg-soft);
 }
 
 .micro-apps-hub-desktop-scroll {
@@ -5137,15 +5084,12 @@ html.touch-ui .composer-quote-clear {
 
 .micro-apps-hub-desktop-card {
   border-radius: 12px !important;
-  border: 1px solid #eceef1;
-  background: #fff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   overflow: hidden;
 }
 
-[data-theme="dark"] .micro-apps-hub-desktop-card {
-  background: #2c2c2e;
-  border-color: rgba(255, 255, 255, 0.08);
-}
+
 
 .micro-apps-hub--desktop .micro-apps-hub-desktop-row.settings-hub-row,
 .micro-apps-hub--desktop .settings-hub-row.micro-apps-hub-desktop-row {
@@ -5189,7 +5133,7 @@ html.touch-ui .composer-quote-clear {
 .micro-app-shell--desktop .micro-app-shell-panel {
   margin: 0 16px 10px;
   border-radius: 12px;
-  border: 1px solid #eceef1;
+  border: 1px solid var(--border);
 }
 
 /* Stage fills remaining shell — no card-in-card border/margin that squeezes the tool */
@@ -5199,9 +5143,7 @@ html.touch-ui .composer-quote-clear {
   border: none;
 }
 
-[data-theme="dark"] .micro-app-shell--desktop .micro-app-shell-panel {
-  border-color: rgba(255, 255, 255, 0.08);
-}
+
 
 /* === micro-app shell content-fit (iframe postMessage resize) ===
    Hub list keeps fixed settings-dialog ~860×680.
@@ -5353,6 +5295,10 @@ html.touch-ui .composer-quote-clear {
 .oui-card-body { display: flex; flex-direction: column; gap: 8px; }
 .oui-text-caption { font-size: 12px; color: var(--muted); }
 .oui-table { font-size: 13px; }
+.oui-table td, .oui-table th { word-break: normal; overflow-wrap: normal; }
+.oui-table th { white-space: nowrap; }
+.oui-table { min-width: max-content; }
+.oui-table td { min-width: 4.5em; max-width: 16em; white-space: normal; }
 .oui-text { margin: 0; line-height: 1.5; }
 .oui-text-heading { font-weight: 600; font-size: 15px; }
 .oui-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
