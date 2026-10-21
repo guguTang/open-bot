@@ -68,7 +68,7 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
     <FieldGroup
       className={cn(
         "gap-2",
-        variant === "login" && "mt-3 border-t border-border pt-3",
+        variant === "login" && "mt-2",
       )}
     >
       <Field>
@@ -95,10 +95,10 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
         <FieldDescription>{help}</FieldDescription>
       </Field>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void runProbe(draft)}>
+        <Button type="button" variant={variant === "login" ? "ghost" : "outline"} size={variant === "login" ? "sm" : undefined} disabled={busy} onClick={() => void runProbe(draft)}>
           {busy ? "检测中…" : "检测连接"}
         </Button>
-        <Button type="button" disabled={busy} onClick={() => void apply()}>
+        <Button type="button" variant={variant === "login" ? "secondary" : "default"} size={variant === "login" ? "sm" : undefined} disabled={busy} onClick={() => void apply()}>
           {variant === "settings" ? "保存并使用" : "使用此服务器"}
         </Button>
         {draft.trim().replace(/\/$/, "") !== DEFAULT_API_BASE ? (
@@ -111,7 +111,7 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
         <p
           className={cn(
             "m-0 text-sm leading-snug",
-            probe.ok ? "text-green-700 dark:text-green-400" : "text-destructive",
+            probe.ok ? "text-success" : "text-danger",
           )}
           role="status"
         >

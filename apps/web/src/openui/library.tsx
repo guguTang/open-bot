@@ -3,14 +3,20 @@
  * 契约见 ./spec.ts；RN 端同名组件在 apps/mobile-rn/src/openui/library.tsx。
  */
 import { FormNameContext, useFormName, useIsStreaming, useStateField, useTriggerAction } from "@openuidev/react-lang";
+import { Button, Card, Input, Label, Table, TextField } from "@heroui/react";
+import { NativeSelect } from "@heroui-pro/react";
 import { createOpenBotLibrary, type OpenBotRenderers } from "./spec";
 
 const renderers: OpenBotRenderers = {
   Card: ({ props, renderNode }) => (
-    <section className="oui-card">
-      {props.title ? <div className="oui-card-title">{props.title}</div> : null}
-      <div className="oui-card-body">{renderNode(props.children)}</div>
-    </section>
+    <Card variant="secondary" className="oui-card">
+      {props.title ? (
+        <Card.Header>
+          <Card.Title className="oui-card-title">{props.title}</Card.Title>
+        </Card.Header>
+      ) : null}
+      <Card.Content className="oui-card-body">{renderNode(props.children)}</Card.Content>
+    </Card>
   ),
   Text: ({ props }) => {
     const v = props.variant ?? "body";
@@ -20,39 +26,45 @@ const renderers: OpenBotRenderers = {
     const trigger = useTriggerAction();
     const streaming = useIsStreaming();
     const formName = useFormName();
+    const primary = props.variant === "primary";
     return (
-      <button
-        type="button"
-        className={`oui-btn${props.variant === "primary" ? " oui-btn-primary" : ""}`}
-        disabled={streaming}
-        onClick={() => void trigger(props.label, formName, props.action as never)}
+      <Button
+        size="sm"
+        variant={primary ? "primary" : "outline"}
+        className={`oui-btn${primary ? " oui-btn-primary" : ""}`}
+        isDisabled={streaming}
+        onPress={() => void trigger(props.label, formName, props.action as never)}
       >
         {props.label}
-      </button>
+      </Button>
     );
   },
   Buttons: ({ props, renderNode }) => <div className="oui-buttons">{renderNode(props.buttons)}</div>,
   Table: ({ props }) => (
-    <div className="oui-table-wrap">
-      <table className="oui-table">
-        <thead>
-          <tr>
+    <Table variant="secondary" className="oui-table-wrap">
+      <Table.ScrollContainer>
+        <Table.Content aria-label="数据表" className="oui-table">
+          <Table.Header>
             {props.headers.map((h, i) => (
-              <th key={i}>{h}</th>
+              <Table.Column key={i} isRowHeader={i === 0}>
+                {h}
+              </Table.Column>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {props.rows.map((row, r) => (
-            <tr key={r}>
-              {row.map((c, i) => (
-                <td key={i}>{c}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </Table.Header>
+          <Table.Body>
+            {props.rows.map((row, r) => (
+              <Table.Row key={r}>
+                {row.map((c, i) => (
+                  <Table.Cell key={i} className="tabular-nums">
+                    {c}
+                  </Table.Cell>
+                ))}
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
   ),
   List: ({ props }) =>
     props.ordered ? (
@@ -70,8 +82,8 @@ const renderers: OpenBotRenderers = {
     ),
   Field: ({ props }) => (
     <div className="oui-field">
-      <span className="oui-field-label">{props.label}</span>
-      <span className="oui-field-value">{props.value}</span>
+      <span className="oui-field-label text-muted">{props.label}</span>
+      <span className="oui-field-value tabular-nums">{props.value}</span>
     </div>
   ),
   Form: ({ props, renderNode }) => (
@@ -86,40 +98,41 @@ const renderers: OpenBotRenderers = {
     const field = useStateField<string>(props.name);
     const streaming = useIsStreaming();
     return (
-      <label className="oui-input">
-        <span>{props.label}</span>
-        <input
-          name={props.name}
-          placeholder={props.placeholder}
-          value={(field.value as string | undefined) ?? ""}
-          disabled={streaming}
-          onChange={(e) => field.setValue(e.target.value)}
-        />
-      </label>
+      <TextField
+        className="oui-input"
+        name={props.name}
+        value={(field.value as string | undefined) ?? ""}
+        isDisabled={streaming}
+        onChange={(v) => field.setValue(v)}
+      >
+        <Label>{props.label}</Label>
+        <Input variant="secondary" placeholder={props.placeholder} />
+      </TextField>
     );
   },
   Select: function OuiSelect({ props }) {
     const field = useStateField<string>(props.name);
     const streaming = useIsStreaming();
     return (
-      <label className="oui-input">
-        <span>{props.label}</span>
-        <select
+      <NativeSelect fullWidth className="oui-input">
+        <Label>{props.label}</Label>
+        <NativeSelect.Trigger
           name={props.name}
           value={(field.value as string | undefined) ?? ""}
           disabled={streaming}
           onChange={(e) => field.setValue(e.target.value)}
         >
-          <option value="" disabled>
+          <NativeSelect.Option value="" disabled>
             请选择
-          </option>
+          </NativeSelect.Option>
           {props.options.map((o) => (
-            <option key={o} value={o}>
+            <NativeSelect.Option key={o} value={o}>
               {o}
-            </option>
+            </NativeSelect.Option>
           ))}
-        </select>
-      </label>
+          <NativeSelect.Indicator />
+        </NativeSelect.Trigger>
+      </NativeSelect>
     );
   },
 };

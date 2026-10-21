@@ -783,32 +783,11 @@ body,
   display: none;
 }
 
-.composer-attach {
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: var(--bg-soft);
-  color: #4b5563;
-  font-size: 22px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  margin-bottom: 2px;
-}
 
-.composer-attach:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
 
-.composer-attach:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+
+
+
 
 .composer-chips {
   display: flex;
@@ -846,19 +825,9 @@ body,
   flex-shrink: 0;
 }
 
-.composer-chip-remove {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-}
 
-.composer-chip-remove:hover {
-  color: var(--danger);
-}
+
+
 
 .composer-attach-hint {
   flex: 1 1 100%;
@@ -949,38 +918,15 @@ body,
   color: var(--muted);
 }
 
-.composer-send {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  background: var(--user-bg);
-  color: #fff;
-  font-weight: 700;
-  font-size: 18px;
-  cursor: pointer;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  line-height: 1;
-}
 
-.composer-send:hover:not(:disabled) {
-  background: #000;
-}
 
-.composer-send:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
 
-.composer-send.composer-stop {
-  background: #0f172a;
-}
 
-.composer-send.composer-stop:hover {
-  background: #000;
-}
+
+
+
+
+
 
 .composer-stop-icon {
   display: block;
@@ -2424,23 +2370,8 @@ button.ghost {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.composer-quote-clear {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-.composer-quote-clear:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-}
+
+
 .composer-quote-divider {
   height: 1px;
   margin: 0 16px;
@@ -5419,32 +5350,17 @@ html.touch-ui .composer-quote-clear {
 
 /* ---- OpenUI 交互回复（apps/web/src/openui）---- */
 .oui-root { margin: 0.7em 0; }
-.oui-card { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated, #fff); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.oui-card-title { font-weight: 600; font-size: 15px; }
 .oui-card-body { display: flex; flex-direction: column; gap: 8px; }
+.oui-text-caption { font-size: 12px; color: var(--muted); }
+.oui-table { font-size: 13px; }
 .oui-text { margin: 0; line-height: 1.5; }
 .oui-text-heading { font-weight: 600; font-size: 15px; }
-.oui-text-caption { font-size: 12px; color: var(--muted); }
 .oui-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.oui-btn { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: transparent; font: inherit; font-size: 13px; cursor: pointer; }
-.oui-btn:hover:not(:disabled) { background: var(--bg-hover, #eceef1); }
-.oui-btn:disabled { opacity: 0.5; cursor: default; }
-.oui-btn { min-height: 36px; transition: background-color var(--app-motion-fast) var(--app-easing), opacity var(--app-motion-fast) var(--app-easing); }
 @media (pointer: coarse) { .oui-btn { min-height: var(--app-touch-min); } }
-.oui-btn-primary { background: var(--accent); color: var(--accent-foreground); border-color: transparent; }
-.oui-btn-primary:hover:not(:disabled) { background: var(--accent); opacity: 0.9; }
-.oui-table-wrap { overflow-x: auto; }
-.oui-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.oui-table th, .oui-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left;; vertical-align: top; overflow-wrap: normal; word-break: normal; }
-.oui-table th { white-space: nowrap; }
-.oui-table th { background: var(--bg-soft, #f5f5f7); font-weight: 600; }
 .oui-list { margin: 0; padding-left: 1.3em; }
 .oui-field { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
-.oui-field-label { color: var(--muted); }
 .oui-field-value { font-weight: 500; text-align: right; }
 .oui-form { display: flex; flex-direction: column; gap: 10px; }
-.oui-input { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.oui-input input, .oui-input select { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: inherit; background: transparent; }
 
 /* ── 可访问性基线（design/tokens.json）────────────────────────────────
    :where() 零优先级：只给没有自定义焦点样式的控件补上可见焦点环，

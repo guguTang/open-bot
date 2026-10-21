@@ -1,4 +1,5 @@
-import { CornerUpLeft, Square, X } from "lucide-react";
+import { ArrowUp, CornerUpLeft, Plus, Square, X } from "lucide-react";
+import { Button, Tooltip } from "@heroui/react";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { useAutoGrowTextarea } from "../lib/useAutoGrowTextarea";
@@ -305,15 +306,17 @@ export function Composer({
             <div key={f.key} className="composer-chip" title={f.file.name}>
               <span className="composer-chip-name">{f.file.name}</span>
               <span className="composer-chip-size">{formatSize(f.file.size)}</span>
-              <button
-                type="button"
+              <Button
+                isIconOnly
+                size="sm"
+                variant="ghost"
                 className="composer-chip-remove"
-                title="移除" aria-label="移除"
-                disabled={sending}
-                onClick={() => removeFile(f.key)}
+                aria-label="移除"
+                isDisabled={sending}
+                onPress={() => removeFile(f.key)}
               >
-                ×
-              </button>
+                <X size={12} strokeWidth={2.5} aria-hidden />
+              </Button>
             </div>
           ))}
           {files.some((f) => f.file.type.startsWith("image/")) ? (
@@ -329,15 +332,16 @@ export function Composer({
           <div className="composer-quote-bar" title={replyTo.text}>
             <CornerUpLeft className="composer-quote-icon" size={16} strokeWidth={2} aria-hidden />
             <span className="composer-quote-text">{replyTo.text}</span>
-            <button
-              type="button"
+            <Button
+              isIconOnly
+              size="sm"
+              variant="ghost"
               className="composer-quote-clear"
-              title="取消回复"
               aria-label="取消回复"
-              onClick={onClearReply}
+              onPress={() => onClearReply?.()}
             >
               <X size={14} strokeWidth={2.2} aria-hidden />
-            </button>
+            </Button>
           </div>
           <div className="composer-quote-divider" aria-hidden />
         </>
@@ -353,15 +357,19 @@ export function Composer({
           aria-hidden
           tabIndex={-1}
         />
-        <button
-          type="button"
-          className="composer-attach"
-          title="添加附件" aria-label="添加附件"
-          disabled={disabled || sending || !onFilesChange}
-          onClick={() => fileRef.current?.click()}
-        >
-          +
-        </button>
+        <Tooltip delay={400}>
+          <Button
+            isIconOnly
+            variant="ghost"
+            className="composer-attach"
+            aria-label="添加附件"
+            isDisabled={disabled || sending || !onFilesChange}
+            onPress={() => fileRef.current?.click()}
+          >
+            <Plus size={18} strokeWidth={2.25} aria-hidden />
+          </Button>
+          <Tooltip.Content>添加附件</Tooltip.Content>
+        </Tooltip>
         <div className="composer-input-wrap">
           {showPicker ? (
             <div
@@ -462,15 +470,12 @@ export function Composer({
           />
         </div>
         {sending ? (
-          <button
-            type="button"
+          <Button
+            isIconOnly
+            variant="secondary"
             className="composer-send composer-stop"
-            title="停止生成"
             aria-label="停止生成"
-            onClick={(ev) => {
-              ev.preventDefault();
-              onStop?.();
-            }}
+            onPress={() => onStop?.()}
           >
             <Square
               className="composer-stop-icon"
@@ -480,11 +485,11 @@ export function Composer({
               strokeWidth={0}
               aria-hidden
             />
-          </button>
+          </Button>
         ) : (
-          <button type="submit" className="composer-send" disabled={!canSend} title="发送" aria-label="发送">
-            ↑
-          </button>
+          <Button type="submit" isIconOnly className="composer-send" isDisabled={!canSend} aria-label="发送">
+            <ArrowUp size={18} strokeWidth={2.5} aria-hidden />
+          </Button>
         )}
       </div>
       </div>
