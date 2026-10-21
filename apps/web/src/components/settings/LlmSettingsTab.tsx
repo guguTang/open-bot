@@ -86,7 +86,6 @@ export function LlmSettingsTab({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   disabled={llmLoading || llmBusy}
                   onClick={() => void onRefresh()}
                 >
@@ -116,17 +115,16 @@ export function LlmSettingsTab({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {!c.is_default ? (
-                      <Button type="button" variant="outline" size="sm" onClick={() => onSetDefault(c.id)}>
+                      <Button type="button" variant="outline" onClick={() => onSetDefault(c.id)}>
                         设默认
                       </Button>
                     ) : null}
-                    <Button type="button" variant="outline" size="sm" onClick={() => onStartEdit(c)}>
+                    <Button type="button" variant="outline" onClick={() => onStartEdit(c)}>
                       编辑
                     </Button>
                     <Button
                       type="button"
                       variant="destructive"
-                      size="sm"
                       onClick={() => onDeleteConnection(c.id)}
                     >
                       删除

@@ -1,5 +1,5 @@
 import { type MouseEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   applyAgentOnboarding,
   approveConversationRun,

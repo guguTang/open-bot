@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Wrench, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   getMicroApp,
   putMicroAppPlacements,

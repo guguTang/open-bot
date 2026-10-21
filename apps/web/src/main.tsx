@@ -1,10 +1,14 @@
+import "./lib/openuiDevtools";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Toaster } from "sonner";
+import { Toast } from "@heroui/react";
 import App from "./App";
 import AuthCallback from "./pages/AuthCallback";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import "./styles.css";
+import { initTheme } from "./lib/theme";
+
+initTheme();
 
 const path = window.location.pathname.replace(/\/$/, "") || "/";
 
@@ -17,18 +21,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ConfirmProvider>
       <Root />
-      <Toaster
-        position="top-center"
-        richColors
-        closeButton
-        theme="light"
-        toastOptions={{
-          classNames: {
-            toast:
-              "border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text)] shadow-[var(--shadow-md)] rounded-[var(--radius-md)]",
-          },
-        }}
-      />
+      <Toast.Provider placement="top" />
     </ConfirmProvider>
   </StrictMode>,
 );

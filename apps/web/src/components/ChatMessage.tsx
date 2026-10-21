@@ -28,6 +28,7 @@ import { MessageActionSheet } from "./MessageActionSheet";
 import { MessageHoverBar } from "./MessageHoverBar";
 import { useIsTouchUi } from "./useIsTouchUi";
 import { MessageSourcesFooter } from "./MessageSourcesFooter";
+import { ChatMessage as HeroChat } from "@heroui-pro/react";
 
 type Props = {
   message: ChatMessageData;
@@ -358,9 +359,9 @@ function ChatMessageInner({
 
   if (isUser) {
     return (
-      <div className={`chat-row chat-row-user${dense ? " chat-row-dense" : ""}`} data-msg-id={message.id} {...touchHandlers}>
+      <HeroChat.User className={`chat-row chat-row-user${dense ? " chat-row-dense" : ""}`} data-msg-id={message.id} {...touchHandlers}>
         <div className="bubble-stack bubble-stack-user has-data-diagram-card:w-full">
-          <div className="bubble bubble-user has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
+          <HeroChat.Bubble className="bubble bubble-user has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
             {quoteEl}
             {(() => {
               const atts = message.attachments || [];
@@ -416,25 +417,26 @@ function ChatMessageInner({
                 </>
               );
             })()}
-            {visible ? <div className="bubble-text">{visible}</div> : null}
-          </div>
+            {visible ? <HeroChat.Content className="bubble-text">{visible}</HeroChat.Content> : null}
+          </HeroChat.Bubble>
           {desktopBar}
         </div>
         {reactionsBar}
         {actions}
         {timeEl}
         {sheet}
-      </div>
+      </HeroChat.User>
     );
   }
 
   return (
-    <div
+    <HeroChat.Assistant
       className={`chat-row chat-row-assistant${isSummary ? " chat-row-summary" : ""}${dense ? " chat-row-dense" : ""}`}
       data-msg-id={message.id}
       {...touchHandlers}
     >
-      <div className="bubble-stack bubble-stack-assistant has-data-diagram-card:w-full">
+      <HeroChat.Avatar alt={speakerFace?.name || speakerLabel || "assistant"} show={false} />
+      <HeroChat.Body className="bubble-stack bubble-stack-assistant has-data-diagram-card:w-full">
         {speakerLabel ? (
           <div className="msg-speaker-name" title={speakerLabel}>
             {speakerFace ? (
@@ -449,7 +451,7 @@ function ChatMessageInner({
             <span className="msg-speaker-text">{speakerLabel}</span>
           </div>
         ) : null}
-        <div className="bubble bubble-assistant has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
+        <HeroChat.Content className="bubble bubble-assistant has-data-diagram-card:w-full has-data-diagram-card:max-w-full">
           {quoteEl}
           {isSummary ? <div className="msg-role">摘要</div> : null}
           <ResultOrientedMessage
@@ -462,14 +464,14 @@ function ChatMessageInner({
           {!message.streaming ? (
             <MessageSourcesFooter sources={message.sources} messageId={message.id} />
           ) : null}
-        </div>
+        </HeroChat.Content>
         {desktopBar}
-      </div>
+      </HeroChat.Body>
       {reactionsBar}
       {actions}
       {timeEl}
       {sheet}
-    </div>
+    </HeroChat.Assistant>
   );
 }
 

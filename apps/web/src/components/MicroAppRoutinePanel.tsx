@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Play } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { listRoutines, runRoutine, updateRoutine, type MicroApp, type Routine } from "../api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

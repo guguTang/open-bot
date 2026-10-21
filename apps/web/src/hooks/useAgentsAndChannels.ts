@@ -8,7 +8,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { CreateBotInput } from "../components/newChatTypes";
 import {
   Agent,

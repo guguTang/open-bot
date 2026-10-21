@@ -69,7 +69,7 @@ export function GeneralSettingsTab({
                 </div>
               ) : null}
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={onLogout}>
+            <Button type="button" variant="destructive" size="sm" onClick={onLogout}>
               退出登录
             </Button>
           </SettingsCard>

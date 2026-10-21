@@ -392,7 +392,7 @@ export function buildMicroAppSrcdoc(
   );
 
   const shellCssTag = `<style data-openbot-micro-shell>${OPENBOT_MICRO_SHELL_CSS}</style>`;
-  const sdkTag = `<script>${OPENBOT_MICRO_SDK}<\/script>`;
+  const sdkTag = `<script>${OPENBOT_MICRO_SDK}<${"/"}script>`;
   const inject = `${shellCssTag}${sdkTag}`;
   if (/<\/head>/i.test(html)) {
     html = html.replace(/<\/head>/i, `${inject}</head>`);

@@ -6,18 +6,19 @@ import { describe, expect, it } from "vitest";
 
 const repo = resolve(__dirname, "../../../..");
 
-describe("shared design tokens", () => {
-  it("web/RN 生成文件与 design/tokens.json 一致", () => {
+describe("design tokens", () => {
+  it("RN 生成文件与 design/tokens.json 一致", () => {
     expect(() =>
       execFileSync(process.execPath, [resolve(repo, "scripts/gen-design-tokens.mjs"), "--check"], { stdio: "pipe" }),
     ).not.toThrow();
   });
 
-  it("web 与 RN 使用同一品牌色", () => {
-    const tokens = JSON.parse(readFileSync(resolve(repo, "design/tokens.json"), "utf8"));
-    const rn = readFileSync(resolve(repo, "apps/mobile-rn/src/global.css"), "utf8");
-    const web = readFileSync(resolve(__dirname, "tokens.css"), "utf8");
-    expect(web).toContain(`--ob-color-primary: ${tokens.color.light.primary};`);
-    expect(rn).toContain(`--accent: ${tokens.color.light.primary};`);
+  it("web 使用 HeroUI Uber 主题且不再引用旧 --ob-* token", () => {
+    const css = readFileSync(resolve(__dirname, "../styles.css"), "utf8");
+    const theme = readFileSync(resolve(__dirname, "uber-theme.css"), "utf8");
+    expect(css).toContain('@import "@heroui/styles";');
+    expect(css).toContain('@import "./styles/uber-theme.css";');
+    expect(css).not.toMatch(/var\(--ob-/);
+    expect(theme).toMatch(/--accent: oklch\(0% 0 0\)/);
   });
 });

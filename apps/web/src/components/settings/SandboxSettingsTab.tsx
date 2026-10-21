@@ -87,28 +87,27 @@ export function SandboxSettingsTab({
                 ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => void onEnsureSandbox()} disabled={sandboxBusy}>
+                <Button type="button" variant="outline" onClick={() => void onEnsureSandbox()} disabled={sandboxBusy}>
                   确保启动
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onOpenDesktop()} disabled={sandboxBusy}>
+                <Button type="button" variant="outline" onClick={() => void onOpenDesktop()} disabled={sandboxBusy}>
                   打开桌面
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onCheckpointSandbox()} disabled={sandboxBusy}>
+                <Button type="button" variant="outline" onClick={() => void onCheckpointSandbox()} disabled={sandboxBusy}>
                   快照
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onStopSandbox()} disabled={sandboxBusy}>
+                <Button type="button" variant="outline" onClick={() => void onStopSandbox()} disabled={sandboxBusy}>
                   停止
                 </Button>
                 <Button
                   type="button"
                   variant="destructive"
-                  size="sm"
                   onClick={() => void onResetSandbox()}
                   disabled={sandboxBusy}
                 >
                   重置
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void onRefreshSandbox()}>
+                <Button type="button" variant="outline" onClick={() => void onRefreshSandbox()}>
                   刷新
                 </Button>
               </div>

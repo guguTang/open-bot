@@ -1,4 +1,5 @@
 import { ChevronRight, X } from "lucide-react";
+import { Button, Card } from "@heroui/react";
 import type { Agent } from "../api";
 import { AgentAvatar } from "./AgentAvatar";
 
@@ -59,34 +60,34 @@ export function MobileSettingsHub({
     <div className="settings-hub settings-hub-v2">
       <div className="settings-hub-top">
         <h2 className="settings-hub-title">设置</h2>
-        <button type="button" className="settings-hub-close" aria-label="关闭" onClick={onClose}>
+        <Button isIconOnly size="sm" variant="ghost" className="settings-hub-close" aria-label="关闭" onPress={onClose}>
           <X size={16} strokeWidth={2} aria-hidden />
-        </button>
+        </Button>
       </div>
 
       <div className="settings-hub-scroll">
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row settings-hub-row-account" onClick={() => onNavigate("account")}>
             <span className="settings-hub-avatar" aria-hidden>
               {accountInitials}
             </span>
-            <span className="settings-hub-row-main">
-              <span className="settings-hub-row-title">{username || "账户"}</span>
-              {email ? <span className="settings-hub-row-sub">{email}</span> : null}
+            <span className="settings-hub-row-main min-w-0">
+              <span className="settings-hub-row-title truncate">{username || "账户"}</span>
+              {email ? <span className="settings-hub-row-sub truncate">{email}</span> : null}
             </span>
             <Chevron />
           </button>
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("server")}>
-            <span className="settings-hub-row-main">
+            <span className="settings-hub-row-main min-w-0">
               <span className="settings-hub-row-title">服务器</span>
-              <span className="settings-hub-row-sub">API 地址 · 局域网 / 隧道配对</span>
+              <span className="settings-hub-row-sub truncate">API 地址</span>
             </span>
-            <span className="settings-hub-row-value">{apiBaseLabel || "默认"}</span>
+            <span className="settings-hub-row-value max-w-[42%] truncate" title={apiBaseLabel || "默认"}>{apiBaseLabel || "默认"}</span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("mcp")}>
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">插件</span>
@@ -94,10 +95,10 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
         <div className="settings-hub-section-label">Bot</div>
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("bot")}>
             {focusBot ? (
               <AgentAvatar
@@ -129,17 +130,15 @@ export function MobileSettingsHub({
               else onNavigate("bot");
             }}
           >
-            <span className="settings-hub-row-main">
+            <span className="settings-hub-row-main min-w-0">
               <span className="settings-hub-row-title">形象与优先电脑</span>
-              <span className="settings-hub-row-sub">头像、形状与本 Bot 优先电脑</span>
+              <span className="settings-hub-row-sub truncate">
+                {preferredMachineLabel
+                  ? `头像 · 优先电脑 ${preferredMachineLabel}`
+                  : "头像、形状与优先电脑"}
+              </span>
             </span>
-            <Chevron />
-          </button>
-          <button type="button" className="settings-hub-row" onClick={() => onNavigate("machines")}>
-            <span className="settings-hub-row-main">
-              <span className="settings-hub-row-title">优先电脑</span>
-            </span>
-            <span className="settings-hub-row-value">{preferredMachineLabel || "未指定"}</span>
+            <span className="settings-hub-row-value max-w-[40%] truncate">{preferredMachineLabel || "未指定"}</span>
             <Chevron />
           </button>
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("review")}>
@@ -149,10 +148,10 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
         <div className="settings-hub-section-label">通用</div>
-        <section className="settings-hub-card">
+        <Card variant="secondary" className="settings-hub-card shadow-none">
           <button type="button" className="settings-hub-row" onClick={() => onNavigate("llm")}>
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">模型</span>
@@ -203,13 +202,13 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-        </section>
+        </Card>
 
-        <section className="settings-hub-card">
-          <button type="button" className="settings-hub-row settings-hub-row-logout" onClick={onLogout}>
+        <Card variant="secondary" className="settings-hub-card shadow-none">
+          <button type="button" className="settings-hub-row settings-hub-row-logout text-danger" onClick={onLogout}>
             退出登录
           </button>
-        </section>
+        </Card>
       </div>
     </div>
   );

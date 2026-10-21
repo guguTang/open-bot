@@ -1,4 +1,5 @@
-import { ChevronDown } from "lucide-react";
+import { ArrowDown } from "lucide-react";
+import { Button } from "@heroui/react";
 import type { RefObject } from "react";
 import { pinStick } from "../../../lib/scrollStick";
 import { resolveActiveAgent, resolveActiveChannel } from "../../../lib/app/workspaceDerived";
@@ -74,9 +75,15 @@ export function ChatComposerDock({ messagesRef }: { messagesRef: RefObject<HTMLD
         </div>
       ) : null}
       {showScrollBottom ? (
-        <button type="button" className="scroll-bottom-btn" title="滚到底部" onClick={() => scrollToBottom(true)}>
-          <ChevronDown size={16} strokeWidth={2.2} aria-hidden />
-        </button>
+        <Button
+          isIconOnly
+          variant="secondary"
+          className="scroll-bottom-btn"
+          aria-label="滚到底部"
+          onPress={() => scrollToBottom(true)}
+        >
+          <ArrowDown size={16} strokeWidth={2.25} aria-hidden />
+        </Button>
       ) : null}
       <MicroAppChatPinBar
         onOpenApp={(app) => {

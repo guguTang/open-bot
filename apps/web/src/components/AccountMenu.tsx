@@ -1,17 +1,9 @@
-import { ChevronsUpDown, Cpu, LogOut, Settings, Wrench } from "lucide-react";
+import { ChevronsUpDown, Cpu, LogOut, Monitor, Moon, Settings, Sun, Wrench } from "lucide-react";
+import { Avatar, Dropdown, Header, Label, Separator } from "@heroui/react";
+import type { Key } from "react-aria-components";
 import type { LLMConnection } from "../api";
 import { accountInitials } from "./app/accountInitials";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { setThemePreference, useThemePreference, type ThemePreference } from "@/lib/theme";
 
 type AccountMenuProps = {
   username: string;
@@ -23,90 +15,81 @@ type AccountMenuProps = {
 };
 
 export function AccountMenu({ username, llm, onOpenSettings, onChangeModel, onOpenMicroApps, onLogout }: AccountMenuProps) {
-  const modelLabel = llm?.model || llm?.name || "未配置模型";
   const initials = accountInitials(username);
+  const theme = useThemePreference();
+
+  const onAction = (key: Key) => {
+    if (key === "model") onChangeModel();
+    else if (key === "apps") onOpenMicroApps?.();
+    else if (key === "settings") onOpenSettings();
+    else if (key === "logout") onLogout();
+  };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent p-2 text-left shadow-none outline-none",
-            "hover:bg-accent hover:text-accent-foreground",
-            "data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
-            "focus-visible:ring-0 focus-visible:outline-none",
-          )}
-          aria-label="账户菜单"
-        >
-          <Avatar className="size-8 rounded-md">
-            <AvatarFallback className="rounded-md bg-muted text-xs font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">{username}</span>
-            <span
-              className={cn(
-                "truncate text-xs text-muted-foreground",
-                !llm && "text-amber-700",
-              )}
-            >
-              {modelLabel}
-            </span>
-          </div>
-          <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-md border-0 shadow-md"
-        side="top"
-        align="start"
-        sideOffset={4}
+    <Dropdown>
+      <Dropdown.Trigger
+        aria-label="账户菜单"
+        className="flex w-full items-center gap-2 rounded-lg p-2 text-left outline-none transition-colors hover:bg-default data-[pressed=true]:bg-default data-[focus-visible=true]:ring-2 data-[focus-visible=true]:ring-focus"
       >
-        <DropdownMenuLabel className="p-0 font-normal">
-          <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-            <Avatar className="size-8 rounded-md">
-              <AvatarFallback className="rounded-md bg-muted text-xs font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{username}</span>
-              <span
-                className={cn(
-                  "truncate text-xs text-muted-foreground",
-                  !llm && "text-amber-700",
-                )}
-              >
-                {modelLabel}
-              </span>
-            </div>
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={onChangeModel}>
-            <Cpu />
-            更改模型
-          </DropdownMenuItem>
+        <Avatar size="sm" className="rounded-md">
+          <Avatar.Fallback className="rounded-md text-xs font-semibold">{initials}</Avatar.Fallback>
+        </Avatar>
+        <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+          <span className="truncate font-medium">{username}</span>
+          {/* Model lives under「更改模型」— avoid duplicating a long model id in the footer. */}
+          {!llm ? <span className="truncate text-xs text-warning">未配置模型</span> : null}
+        </div>
+        <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted" aria-hidden />
+      </Dropdown.Trigger>
+      <Dropdown.Popover placement="top start" className="min-w-60">
+        <Dropdown.Menu aria-label="账户" onAction={onAction}>
+          <Dropdown.Item id="model" textValue="更改模型">
+            <Cpu className="size-4 text-muted" aria-hidden />
+            <Label>更改模型</Label>
+          </Dropdown.Item>
           {onOpenMicroApps ? (
-            <DropdownMenuItem onSelect={onOpenMicroApps}>
-              <Wrench />
-              我的工具
-            </DropdownMenuItem>
+            <Dropdown.Item id="apps" textValue="我的工具">
+              <Wrench className="size-4 text-muted" aria-hidden />
+              <Label>我的工具</Label>
+            </Dropdown.Item>
           ) : null}
-          <DropdownMenuItem onSelect={onOpenSettings}>
-            <Settings />
-            设置
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onLogout}>
-          <LogOut />
-          退出登录
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <Dropdown.Item id="settings" textValue="设置">
+            <Settings className="size-4 text-muted" aria-hidden />
+            <Label>设置</Label>
+          </Dropdown.Item>
+          <Separator />
+          <Dropdown.Section
+            selectionMode="single"
+            selectedKeys={new Set([theme])}
+            onSelectionChange={(keys) => {
+              const k = [...(keys as Set<Key>)][0];
+              if (k) setThemePreference(k as ThemePreference);
+            }}
+          >
+            <Header>外观</Header>
+            <Dropdown.Item id="system" textValue="跟随系统">
+              <Monitor className="size-4 text-muted" aria-hidden />
+              <Label>跟随系统</Label>
+              <Dropdown.ItemIndicator />
+            </Dropdown.Item>
+            <Dropdown.Item id="light" textValue="浅色">
+              <Sun className="size-4 text-muted" aria-hidden />
+              <Label>浅色</Label>
+              <Dropdown.ItemIndicator />
+            </Dropdown.Item>
+            <Dropdown.Item id="dark" textValue="深色">
+              <Moon className="size-4 text-muted" aria-hidden />
+              <Label>深色</Label>
+              <Dropdown.ItemIndicator />
+            </Dropdown.Item>
+          </Dropdown.Section>
+          <Separator />
+          <Dropdown.Item id="logout" textValue="退出登录" variant="danger">
+            <LogOut className="size-4" aria-hidden />
+            <Label>退出登录</Label>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }

@@ -1,3 +1,12 @@
+/**
+ * Message feed scroller.
+ *
+ * Pro ChatConversation auto-scroll + ScrollAnchor assume a normal top→bottom
+ * scrollport. This app uses flex-direction:column-reverse stick-to-bottom
+ * (see styles.css .messages + useChatScrollPin). Replacing the scroller would
+ * break pin behaviour and OpenUI streaming. Keep the reverse scroller; jump-to-
+ * bottom lives in ChatComposerDock (HeroUI Button).
+ */
 import { type RefObject, useMemo } from "react";
 import { agentNameMap } from "../../../lib/app/workspaceDerived";
 import { stickFromReverseScroll } from "../../../lib/scrollStick";
@@ -76,7 +85,7 @@ export function ChatTranscript({ messagesRef }: { messagesRef: RefObject<HTMLDiv
         ref={messagesRef}
         onScroll={onMessagesScroll}
       >
-        <div className="messages-column">
+        <div className="messages-column chat-conversation__content">
           {view.banner ? <ChatTranscriptBanner banner={view.banner} chatProcessing={chatProcessing} /> : null}
           {view.indexed.mainTimeline.map((message) => (
             <TranscriptMessage

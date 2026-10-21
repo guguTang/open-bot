@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { installSafeAreaInsets } from "../lib/safeAreaInsets";
 import {
   EXIT_TOAST_COPY,
