@@ -5239,9 +5239,10 @@ html.touch-ui .composer-quote-clear {
 }
 
 .micro-app-shell--fit .micro-app-shell-body {
-  flex: 0 1 auto;
-  /* Outer shell must NOT scroll — hug content; only stage--scroll may overflow. */
-  overflow: clip;
+  flex: 1 1 auto;
+  /* Hidden, not clip: clip here cuts the stage (and its scrollbar) when the
+     stage is taller than the body. The stage is the scrollport. */
+  overflow: hidden;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -5280,6 +5281,11 @@ html.touch-ui .composer-quote-clear {
 .settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--sized {
   width: 100%;
   max-width: 100%;
+  /* Cap the scrollport under the header even when a fixed height equal to the
+     iframe refuses to flex-shrink. The shell is overflow:clip; if the stage
+     stays as tall as the iframe, that clip hides the bottom and the stage
+     (same size as the iframe) has nothing to scroll. */
+  max-height: calc(min(90vh, 100vh - 32px) - var(--micro-shell-chrome-h, 56px));
   overflow: auto;
   overscroll-behavior: contain;
 }

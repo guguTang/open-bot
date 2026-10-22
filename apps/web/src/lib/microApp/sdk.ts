@@ -93,14 +93,21 @@ export const OPENBOT_MICRO_SDK = `
         h = Math.max(0, maxB - minT);
       }
       var cs = window.getComputedStyle(body);
-      h += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
-      w += (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.marginRight) || 0);
-      w = Math.max(w, childW, body.scrollWidth || 0);
-      h = Math.max(h, childH, body.scrollHeight || 0);
+      // Union starts at the first child, so it misses padding on the start edge.
+      h += (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      h += (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0);
+      w += (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      w += (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.marginRight) || 0);
+      var scrollW = body.scrollWidth || 0;
+      var scrollH = body.scrollHeight || 0;
+      // Keep the stacked union. The tallest child alone is one sibling
+      // (a 390px textarea) and must not replace the rest of the page.
+      // A child larger than the union is overflow inside that child.
+      w = Math.max(w, childW);
+      h = Math.max(h, childH);
+      if (scrollW > w && scrollW <= w + CHILD_SLACK_PX) w = scrollW;
+      if (scrollH > h && scrollH <= h + CHILD_SLACK_PX) h = scrollH;
     }
-    // Prefer intrinsic child when body/scroll is a stretched canvas.
-    if (childW > 0 && childW < w - CHILD_SLACK_PX) w = childW;
-    if (childH > 0 && childH < h - CHILD_SLACK_PX) h = childH;
     // Do NOT max with documentElement.offsetWidth/Height — those track the
     // iframe viewport (blocks shrink) or the temporary expand canvas.
     return { width: w, height: h };
@@ -284,6 +291,28 @@ export const OPENBOT_MICRO_SDK = `
         attributes: true,
         characterData: true,
       });
+    }
+    // UA textarea resize changes used height without mutating attributes, so
+    // MutationObserver never sees it. Watch textarea heights only — a width
+    // change from the host iframe must not schedule another measure.
+    if (typeof ResizeObserver !== "undefined" && document.body) {
+      var areaHeightSum = -1;
+      var areaRO = new ResizeObserver(function () {
+        if (measuring || measurePending) return;
+        if (Date.now() < ignoreROUntil) return;
+        var areas = document.querySelectorAll("textarea");
+        var sum = 0;
+        for (var i = 0; i < areas.length; i++) sum += areas[i].offsetHeight || 0;
+        if (areaHeightSum < 0) {
+          areaHeightSum = sum;
+          return;
+        }
+        if (Math.abs(sum - areaHeightSum) < 2) return;
+        areaHeightSum = sum;
+        scheduleResize(null);
+      });
+      var areas0 = document.querySelectorAll("textarea");
+      for (var ai = 0; ai < areas0.length; ai++) areaRO.observe(areas0[ai]);
     }
     window.addEventListener("load", function () {
       scheduleResize(null);

@@ -13,8 +13,8 @@
  * 1. Host temporarily enlarges the iframe to the max content-fit canvas
  *    (measure-request → measure-go), then SDK measures.
  * 2. SDK also expands the layout containing block so `min(100%, N)` reveals N.
- * 3. Prefer child/content bounds (union of children, not viewport offset*);
- *    never use html/body offset* as a floor that blocks shrink.
+ * 3. Prefer the union of children (stacked page), not the single tallest
+ *    child and not viewport offset*. A stretched body scroll is ignored.
  * 4. Fluid `width:100%` apps that fill the expand canvas fall back to the
  *    constrained (current-frame) measure.
  * 5. Explicit `openbot.micro.reportSize({width?, height?})` always wins when
@@ -89,25 +89,23 @@ export function pickPreferredContentSize(metrics: PreferredContentMetrics): {
 } {
   const unionW = finiteNonNeg(metrics.contentWidth ?? metrics.contentRight);
   const unionH = finiteNonNeg(metrics.contentHeight ?? metrics.contentBottom);
-  let width = Math.max(
-    unionW,
-    finiteNonNeg(metrics.maxChildScrollWidth),
-    finiteNonNeg(metrics.bodyScrollWidth),
-  );
-  let height = Math.max(
-    unionH,
-    finiteNonNeg(metrics.maxChildScrollHeight),
-    finiteNonNeg(metrics.bodyScrollHeight),
-  );
-
   const childW = finiteNonNeg(metrics.maxChildScrollWidth);
   const childH = finiteNonNeg(metrics.maxChildScrollHeight);
-  if (childW > 0 && childW < width - MICRO_SHELL_MEASURE_CHILD_SLACK_PX) {
-    width = childW;
-  }
-  if (childH > 0 && childH < height - MICRO_SHELL_MEASURE_CHILD_SLACK_PX) {
-    height = childH;
-  }
+  const scrollW = finiteNonNeg(metrics.bodyScrollWidth);
+  const scrollH = finiteNonNeg(metrics.bodyScrollHeight);
+  const slack = MICRO_SHELL_MEASURE_CHILD_SLACK_PX;
+
+  // Union is the stacked document (title + editors + footer). The tallest
+  // child is only one sibling — replacing the union with it clips the rest
+  // (JSON formatter: 390px textarea, page ~670px). A child larger than the
+  // union is overflow inside that child and must be kept.
+  let width = Math.max(unionW, childW);
+  let height = Math.max(unionH, childH);
+
+  // Scroll size a few pixels above the union is padding/subpixels. Far above
+  // is the stretched measure canvas and is not content.
+  if (scrollW > width && scrollW <= width + slack) width = scrollW;
+  if (scrollH > height && scrollH <= height + slack) height = scrollH;
 
   return { width: Math.ceil(width), height: Math.ceil(height) };
 }

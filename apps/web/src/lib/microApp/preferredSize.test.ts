@@ -79,6 +79,20 @@ describe("pickPreferredContentSize", () => {
     expect(size.height).toBe(400);
   });
 
+  it("keeps stacked siblings — tallest child must not replace the page", () => {
+    // JSON formatter: side-by-side 390px textareas plus title, toolbar, footer.
+    const size = pickPreferredContentSize({
+      contentWidth: 1000,
+      contentHeight: 673,
+      maxChildScrollWidth: 1000,
+      maxChildScrollHeight: 390,
+      bodyScrollWidth: 1000,
+      bodyScrollHeight: 673,
+    });
+    expect(size.width).toBe(1000);
+    expect(size.height).toBe(673);
+  });
+
   it("union box ignores centering offset (tall measure canvas)", () => {
     // Child visually centered: top=200, height=280 → bottom=480; union height still 280.
     const size = pickPreferredContentSize({
@@ -169,8 +183,10 @@ describe("OPENBOT_MICRO_SDK preferred-measure contract", () => {
     expect(OPENBOT_MICRO_SDK).toContain("MutationObserver");
     expect(OPENBOT_MICRO_SDK).toContain("reportSize");
     expect(OPENBOT_MICRO_SDK).not.toContain("docEl.offsetHeight");
-    // window.resize / ResizeObserver on html|body would re-enter on host iframe echo
+    // window.resize / ResizeObserver on html|body would re-enter on host iframe echo.
+    // Textarea resize is observed separately (height only).
     expect(OPENBOT_MICRO_SDK).not.toMatch(/addEventListener\(\s*["']resize["']/);
-    expect(OPENBOT_MICRO_SDK).not.toContain("new ResizeObserver");
+    expect(OPENBOT_MICRO_SDK).toContain('querySelectorAll("textarea")');
+    expect(OPENBOT_MICRO_SDK).not.toMatch(/ResizeObserver[\s\S]{0,200}observe\(\s*document\.(body|documentElement)/);
   });
 });
