@@ -622,10 +622,10 @@ body,
 }
 
 .md-codeblock {
-  margin: 0.7em 0;
+  margin: 0.8em 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-secondary);
+  border-radius: calc(var(--radius) * 3);
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -633,11 +633,19 @@ body,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 10px;
+  min-height: 36px;
+  padding: 4px 8px 4px 14px;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-secondary);
-  font-size: 11px;
+  background: var(--surface);
+  font-size: 12px;
   color: var(--muted);
+}
+
+.md-codeblock-lang {
+  font-family: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
 }
 
 .md-copy {
@@ -645,8 +653,8 @@ body,
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
-  padding: 2px 6px;
+  font-size: 12px;
+  padding: 4px 8px;
   border-radius: 6px;
 }
 .md-copy:hover {
@@ -670,22 +678,32 @@ body,
   border-bottom-style: solid;
 }
 
-.md-codeblock pre {
+.md-codeblock-body pre {
   margin: 0;
-  padding: 12px 14px;
-  overflow: auto;
+  padding: 14px 16px;
+  overflow-x: auto;
   font-family: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-  background: transparent;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+  background: transparent !important;
+  color: var(--foreground);
 }
 
-.md-codeblock code {
+.md-codeblock-body code {
   font-family: inherit;
   font-size: inherit;
   background: none;
   color: inherit;
   padding: 0;
+}
+
+/* Shiki dual themes (defaultColor: false) → pick the variable set for the active theme. */
+.md-codeblock-body .shiki span {
+  color: var(--shiki-light);
+}
+.dark .md-codeblock-body .shiki span {
+  color: var(--shiki-dark);
 }
 
 .main > .status {
