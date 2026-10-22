@@ -1015,8 +1015,9 @@ dialog.modal-backdrop:not([open]) {
 .modal h3 { margin-top: 0; }
 .modal ul { color: var(--muted); padding-left: 18px; }
 
-/* Exclude shadcn/Radix primitives (Switch / Select trigger render as <button>). */
-.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]) {
+/* Exclude shadcn/Radix primitives and micro-app chrome.
+   margin-top here used to grow the tool header past the 56px fit budget and paint an outer scrollbar. */
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]):not(.settings-close):not(.settings-hub-close):not(.settings-shell-back) {
   margin-top: 12px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -1125,7 +1126,7 @@ button.ghost {
 .llm-item.default { border-color: var(--accent); }
 .llm-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .llm-actions button,
-.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]) {
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]):not(.settings-close):not(.settings-hub-close):not(.settings-shell-back) {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
