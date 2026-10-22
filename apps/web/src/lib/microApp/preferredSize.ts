@@ -19,10 +19,11 @@
  *    constrained (current-frame) measure.
  * 5. Explicit `openbot.micro.reportSize({width?, height?})` always wins when
  *    the app supplies numbers.
- * 6. Outer shell must not scroll — dialog/shell/body use overflow:clip and
- *    size budget includes header chrome + dialog border; only the stage
- *    scrolls when content exceeds the viewport max. Iframe document also
- *    overflow:hidden so a 1–2px measure miss cannot look like an outer bar.
+ * 6. Dialog/shell stay overflow:clip and max out at the viewport box, so the
+ *    chrome never scrolls. The iframe stays at the full reported size (the
+ *    document is overflow:hidden — shrinking it clips the tool). The stage is
+ *    the only scrollport and scrolls that iframe when header + content exceed
+ *    the box. A 1–2px measure miss stays inside the iframe, not an outer bar.
  */
 
 /** Layout base used during unconstrained preferred-width measure (px). */

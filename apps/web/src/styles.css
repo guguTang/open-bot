@@ -3331,12 +3331,14 @@ html.capacitor-native {
 }
 
 .settings-dialog-shell {
-  /* Radix DialogContent is centered with translate; fullscreen shell must pin to the viewport. */
+  /* Radix DialogContent is centered with the `translate` property (not `transform`);
+     fullscreen shell must pin to the viewport. */
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
   transform: none !important;
+  translate: none !important;
   width: 100% !important;
   max-width: 100% !important;
   height: 100% !important;
@@ -5192,12 +5194,12 @@ html.touch-ui .composer-quote-clear {
 
 /* === micro-app shell content-fit (iframe postMessage resize) ===
    Hub list keeps the shared settings-dialog size (not content-fit).
-   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
-   stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
-   Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
-   No hardcoded portrait preference — shell follows reported resize width/height.
-   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport (minus chrome+border);
-   outer overflow:clip + border:none — never show dialog/shell scrollbar; stage scrolls past max.
+   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content).
+   One height budget: dialog/shell max = viewport box and overflow:clip (chrome
+   never scrolls); header keeps its natural height; iframe is the full reported
+   size (its document is overflow:hidden, so a shorter iframe clips the tool);
+   the stage is the only scrollport and scrolls that iframe when header+content
+   exceed the box. Fitting tools hug with no scrollbar.
    Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
 /* `.modal` raises specificity above the later `.modal.settings-dialog` size polish,
@@ -5221,13 +5223,19 @@ html.touch-ui .composer-quote-clear {
 
 .settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
   box-sizing: border-box;
-  width: min(90vw, max(280px, var(--micro-shell-content-w, 480px)));
+  width: min(90vw, max(280px, calc(var(--micro-shell-content-w, 480px) + var(--micro-shell-scrollbar-x, 0px))));
   max-width: min(90vw, calc(100vw - 32px));
-  /* height:auto hugs header chrome + content; max caps to viewport (chrome budgeted in clamp). */
+  /* height:auto hugs header + iframe. max-height is the only cap; the stage
+     scrolls inside it. min-width:0 keeps a wide measure canvas from stretching the dialog. */
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
+  min-width: 0;
   overflow: clip;
+}
+
+.settings-dialog--micro-fit .micro-app-shell--desktop > .micro-app-shell-desktop-head {
+  flex: 0 0 auto;
 }
 
 .micro-app-shell--fit .micro-app-shell-body {
@@ -5255,12 +5263,25 @@ html.touch-ui .composer-quote-clear {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* Stage hugs reported iframe size — no leftover blank that invites outer scroll */
   width: var(--micro-shell-content-w, auto);
   height: var(--micro-shell-content-h, auto);
   max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex: 0 1 auto;
   overflow: clip;
   box-sizing: border-box;
+}
+
+/* Desktop scrollport: shell width, not the iframe's full size. overflow:auto
+   so extra chrome the 56px header budget does not know about (capability
+   panels) can still scroll the full iframe. A fitting tool has equal
+   scroll and client size, so no bar is painted. Sheet keeps the rule above. */
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--sized {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .micro-app-shell--fit .micro-app-shell-stage--measuring {
@@ -5271,9 +5292,23 @@ html.touch-ui .composer-quote-clear {
   max-width: none;
 }
 
-.micro-app-shell--fit .micro-app-shell-stage--scroll {
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x {
+  overflow-y: hidden;
+  overflow-x: auto;
+}
+
+/* Horizontal bar sits under the iframe instead of covering its last pixels. */
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x:not(.micro-app-shell-stage--scroll-y) {
+  height: calc(var(--micro-shell-content-h, 160px) + var(--micro-shell-scrollbar-y, 0px));
+}
+
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x.micro-app-shell-stage--scroll-y {
   overflow: auto;
-  max-height: min(calc(90vh - 56px), calc(100vh - 88px));
 }
 
 .micro-app-shell--fit .micro-app-shell-frame,
