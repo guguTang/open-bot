@@ -3,6 +3,7 @@ import {
   isValidElement,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -23,6 +24,7 @@ import { ImageDiagramCard } from "./ImageDiagramCard";
 import { HtmlPreviewModal } from "./HtmlPreviewModal";
 import { looksLikeHtml, parseSandboxHref, previewTitleFromPath } from "./htmlPreviewModel";
 import { useSandboxHtmlPreview } from "./useSandboxHtmlPreview";
+import { highlightToHtml, isShikiLangReady, loadShikiLang, resolveShikiLang } from "../lib/shiki";
 
 type Props = {
   content: string;
@@ -61,10 +63,32 @@ function CodeBlock({
   children?: ReactNode;
   onPreview: (html: string, title: string) => void;
 }) {
-  const match = /language-(\w+)/.exec(className || "");
+  const match = /language-([\w+#-]+)/.exec(className || "");
   const lang = match?.[1] ?? "";
   const code = extractText(children).replace(/\n$/, "");
   const [copied, setCopied] = useState(false);
+  const shikiLang = resolveShikiLang(lang);
+  const [ready, setReady] = useState(() => (shikiLang ? isShikiLangReady(shikiLang) : false));
+  useEffect(() => {
+    if (!shikiLang) return;
+    if (isShikiLangReady(shikiLang)) {
+      setReady(true);
+      return;
+    }
+    let alive = true;
+    loadShikiLang(shikiLang).then(
+      () => alive && setReady(true),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [shikiLang]);
+  // Sync once the grammar is loaded, so streaming ticks re-highlight in the same render (no flash).
+  const html = useMemo(
+    () => (ready && shikiLang ? highlightToHtml(code, shikiLang) : null),
+    [ready, shikiLang, code],
+  );
   const canPreview = PREVIEWABLE_LANGS.has(lang.toLowerCase()) || looksLikeHtml(code, lang);
 
   const onCopy = useCallback(() => {
@@ -89,9 +113,15 @@ function CodeBlock({
           </button>
         </div>
       </div>
-      <pre>
-        <code className={className}>{children}</code>
-      </pre>
+      {html ? (
+        <div className="md-codeblock-body" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className="md-codeblock-body">
+          <pre>
+            <code className={className}>{code}</code>
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
