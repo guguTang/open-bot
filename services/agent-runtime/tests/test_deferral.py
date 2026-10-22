@@ -166,3 +166,45 @@ def test_host_list_hint_uses_the_users_own_sentence():
     messages = [{"role": "user", "content": brief}]
     assert host_followup_prompt(["sandbox_shell"], messages) is None
     assert host_followup_prompt([], messages) is None
+
+def test_colleague_note_about_delete_card_does_not_force_host_delete():
+    """Handoff notes like 【333】…无法弹出删除确认卡 must not become delete intent."""
+    messages = [
+        {"role": "user", "content": "优锘科技是做什么的"},
+        {"role": "assistant", "content": "优锘科技主要做数字孪生与可视化运维相关产品。"},
+        {
+            "role": "user",
+            "content": "【333】我这边无法弹出删除确认卡，你那边再看下宿主删除链路。",
+        },
+    ]
+    assert host_followup_prompt([], messages) is None
+    assert host_followup_prompt(["host_ls"], messages) is None
+
+
+def test_real_user_delete_and_retry_still_nudge():
+    messages = [
+        {"role": "user", "content": "删了这些文件"},
+        {"role": "assistant", "content": "已发起删除，请在电脑上确认。"},
+    ]
+    assert host_followup_prompt([], messages) == CONTINUE_HOST_DELETE
+
+    messages = [
+        {
+            "role": "assistant",
+            "content": "这两次删除请求被拒绝了。需要我再试一次吗？",
+        },
+        {"role": "user", "content": "再试一次"},
+    ]
+    assert host_followup_prompt([], messages) == CONTINUE_HOST_DELETE
+
+
+def test_handoff_embedding_own_ask_delete_still_nudges():
+    messages = [
+        {
+            "role": "user",
+            "content": "【333】用户要删本机文件。请处理用户刚说的：删掉这两个 mp4",
+        },
+    ]
+    assert host_followup_prompt([], messages) == CONTINUE_HOST_DELETE
+    assert host_followup_prompt(["host_delete"], messages) is None
+

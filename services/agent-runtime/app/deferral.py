@@ -137,6 +137,27 @@ def host_list_hint(text: str) -> str | None:
     return None
 
 
+def _host_followup_intent_text(messages: list[dict] | None) -> str:
+    """Newest user intent for host delete/retry nudge, skipping pure colleague notes.
+
+    Walk newest-first. Colleague handoffs (【…】) are skipped unless they embed
+    OWN_ASK_MARKER; then only the text after the marker counts. Does not change
+    last_real_user_text or how history is assembled into LLM messages.
+    """
+    for message in reversed(messages or []):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = str(message.get("content") or "").strip()
+        if not content or content in _CONTINUE_MARKERS:
+            continue
+        if _colleague_note(content):
+            if _OWN_ASK_MARKER not in content:
+                continue
+            return own_user_ask(content)
+        return content
+    return ""
+
+
 def host_followup_prompt(tools_used: list[str] | None, messages: list[dict] | None) -> str | None:
     """If the user asked to delete on the computer but no delete tool ran, nudge once.
 
@@ -144,7 +165,7 @@ def host_followup_prompt(tools_used: list[str] | None, messages: list[dict] | No
     appended after the model has already finished other work.
     """
     used = set(tools_used or [])
-    text = last_real_user_text(messages)
+    text = _host_followup_intent_text(messages)
     if not text:
         return None
     if _DELETE_INTENT.search(text) or (
