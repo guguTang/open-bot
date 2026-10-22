@@ -6,7 +6,12 @@ import {
   register,
   startOIDCLogin,
 } from "../../api";
-import { Button, Card, Input, Label, Separator, Tabs, TextField } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiServerField } from "../ApiServerField";
 
 type AuthMode = "login" | "register";
@@ -72,7 +77,7 @@ export function AuthPage({
     <main className="grid min-h-full place-items-center bg-background p-6">
       <Card className="w-[min(400px,100%)] p-6">
         <form className="flex flex-col gap-4" onSubmit={onAuth}>
-          <Card.Header className="flex-row items-center gap-3 p-0">
+          <CardHeader className="flex-row items-center gap-3 p-0">
             <div
               aria-hidden
               className="grid size-9 shrink-0 place-items-center rounded-md bg-accent font-semibold text-accent-foreground"
@@ -80,45 +85,51 @@ export function AuthPage({
               ob
             </div>
             <div className="flex flex-col">
-              <Card.Title>open-bot</Card.Title>
-              <Card.Description>登录后使用自定义 LLM</Card.Description>
+              <CardTitle>open-bot</CardTitle>
+              <CardDescription>登录后使用自定义 LLM</CardDescription>
             </div>
-          </Card.Header>
+          </CardHeader>
 
           <Tabs
-            selectedKey={authMode}
-            onSelectionChange={(k) => setAuthMode(k === "register" ? "register" : "login")}
+            value={authMode}
+            onValueChange={(k) => setAuthMode(k === "register" ? "register" : "login")}
             className="w-full"
           >
-            <Tabs.ListContainer>
-              <Tabs.List aria-label="登录或注册" className="w-full">
-                <Tabs.Tab id="login" className="flex-1">
-                  登录
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-                <Tabs.Tab id="register" className="flex-1">
-                  注册
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-              </Tabs.List>
-            </Tabs.ListContainer>
+            <TabsList aria-label="登录或注册" className="w-full">
+              <TabsTrigger value="login" className="flex-1">
+                登录
+              </TabsTrigger>
+              <TabsTrigger value="register" className="flex-1">
+                注册
+              </TabsTrigger>
+            </TabsList>
           </Tabs>
 
-          <TextField isRequired name="username" value={authUser} onChange={setAuthUser} minLength={2}>
-            <Label>用户名</Label>
-            <Input variant="secondary" autoComplete="username" />
-          </TextField>
-          <TextField
-            isRequired
-            name="password"
-            type="password"
-            value={authPass}
-            onChange={setAuthPass}
-            minLength={4}
-          >
-            <Label>密码</Label>
-            <Input variant="secondary" autoComplete={authMode === "login" ? "current-password" : "new-password"} />
-          </TextField>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="auth-username">用户名</Label>
+            <Input
+              id="auth-username"
+              name="username"
+              required
+              minLength={2}
+              autoComplete="username"
+              value={authUser}
+              onChange={(e) => setAuthUser(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="auth-password">密码</Label>
+            <Input
+              id="auth-password"
+              name="password"
+              type="password"
+              required
+              minLength={4}
+              autoComplete={authMode === "login" ? "current-password" : "new-password"}
+              value={authPass}
+              onChange={(e) => setAuthPass(e.target.value)}
+            />
+          </div>
 
           {authError ? (
             <p role="alert" className="text-sm text-danger">
@@ -137,7 +148,7 @@ export function AuthPage({
                 或
                 <Separator className="flex-1" />
               </div>
-              <Button variant="outline" fullWidth isDisabled={authBusy} onPress={() => void onCasdoorLogin()}>
+              <Button variant="outline" fullWidth isDisabled={authBusy} onClick={() => void onCasdoorLogin()}>
                 用 Casdoor 登录
               </Button>
             </>

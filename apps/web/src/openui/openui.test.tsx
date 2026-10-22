@@ -88,15 +88,26 @@ describe("OpenUIBlock", () => {
   it("includes form values in the submitted message", async () => {
     await render(<OpenUIBlock source={FORM} streaming={false} />);
     const input = container.querySelector<HTMLInputElement>("input[name=name]")!;
-    const select = container.querySelector<HTMLSelectElement>("select[name=slot]")!;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {
       setValue.call(input, "张三");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    const trigger = container.querySelector<HTMLButtonElement>("[data-slot=select-trigger]")!;
+    expect(trigger.getAttribute("role")).toBe("combobox");
+    // Radix keeps a clipped, aria-hidden <select> for form autofill. It is not the visible control.
+    const native = container.querySelector("select");
+    expect(native?.getAttribute("aria-hidden")).toBe("true");
+    expect(native?.tabIndex).toBe(-1);
     await act(async () => {
-      select.value = "下午";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      trigger.click();
+    });
+    const option = [...document.querySelectorAll<HTMLElement>("[data-slot=select-item]")].find(
+      (el) => el.textContent === "下午",
+    );
+    expect(option).toBeTruthy();
+    await act(async () => {
+      option!.click();
     });
     await act(async () => buttons()[0]!.click());
     expect(host.send).toHaveBeenCalledTimes(1);

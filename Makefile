@@ -28,15 +28,9 @@ endif
 # core: postgres, redis, minio, markitdown (document parse, host :8010)
 COMPOSE ?= docker compose -f deploy/compose.yaml --project-directory deploy
 
-# JS monorepo install with HeroUI Pro CDN auth (see .env.heroui.local / docs/本地启动.md)
-# Loads gitignored .env then .env.heroui.local so HEROUI_AUTH_TOKEN is available to postinstall.
+# JS monorepo install. apps/web no longer needs a HeroUI Pro CDN token.
 install-js:
-	set -a && [ -f .env ] && . ./.env; [ -f .env.heroui.local ] && . ./.env.heroui.local; set +a && \
-	  if [ -z "$$HEROUI_AUTH_TOKEN" ]; then \
-	    echo "WARN: HEROUI_AUTH_TOKEN unset — @heroui-pro/react postinstall may skip CDN artifacts."; \
-	    echo "      Create .env.heroui.local (see .env.example) or: pnpm dlx heroui-pro@latest login"; \
-	  fi && \
-	  pnpm install
+	pnpm install
 
 compose-up:
 	$(COMPOSE) up -d

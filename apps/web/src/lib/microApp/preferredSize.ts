@@ -13,16 +13,17 @@
  * 1. Host temporarily enlarges the iframe to the max content-fit canvas
  *    (measure-request → measure-go), then SDK measures.
  * 2. SDK also expands the layout containing block so `min(100%, N)` reveals N.
- * 3. Prefer child/content bounds (union of children, not viewport offset*);
- *    never use html/body offset* as a floor that blocks shrink.
+ * 3. Prefer the union of children (stacked page), not the single tallest
+ *    child and not viewport offset*. A stretched body scroll is ignored.
  * 4. Fluid `width:100%` apps that fill the expand canvas fall back to the
  *    constrained (current-frame) measure.
  * 5. Explicit `openbot.micro.reportSize({width?, height?})` always wins when
  *    the app supplies numbers.
- * 6. Outer shell must not scroll — dialog/shell/body use overflow:clip and
- *    size budget includes header chrome + dialog border; only the stage
- *    scrolls when content exceeds the viewport max. Iframe document also
- *    overflow:hidden so a 1–2px measure miss cannot look like an outer bar.
+ * 6. Dialog/shell stay overflow:clip and max out at the viewport box, so the
+ *    chrome never scrolls. The iframe stays at the full reported size (the
+ *    document is overflow:hidden — shrinking it clips the tool). The stage is
+ *    the only scrollport and scrolls that iframe when header + content exceed
+ *    the box. A 1–2px measure miss stays inside the iframe, not an outer bar.
  */
 
 /** Layout base used during unconstrained preferred-width measure (px). */
@@ -88,25 +89,23 @@ export function pickPreferredContentSize(metrics: PreferredContentMetrics): {
 } {
   const unionW = finiteNonNeg(metrics.contentWidth ?? metrics.contentRight);
   const unionH = finiteNonNeg(metrics.contentHeight ?? metrics.contentBottom);
-  let width = Math.max(
-    unionW,
-    finiteNonNeg(metrics.maxChildScrollWidth),
-    finiteNonNeg(metrics.bodyScrollWidth),
-  );
-  let height = Math.max(
-    unionH,
-    finiteNonNeg(metrics.maxChildScrollHeight),
-    finiteNonNeg(metrics.bodyScrollHeight),
-  );
-
   const childW = finiteNonNeg(metrics.maxChildScrollWidth);
   const childH = finiteNonNeg(metrics.maxChildScrollHeight);
-  if (childW > 0 && childW < width - MICRO_SHELL_MEASURE_CHILD_SLACK_PX) {
-    width = childW;
-  }
-  if (childH > 0 && childH < height - MICRO_SHELL_MEASURE_CHILD_SLACK_PX) {
-    height = childH;
-  }
+  const scrollW = finiteNonNeg(metrics.bodyScrollWidth);
+  const scrollH = finiteNonNeg(metrics.bodyScrollHeight);
+  const slack = MICRO_SHELL_MEASURE_CHILD_SLACK_PX;
+
+  // Union is the stacked document (title + editors + footer). The tallest
+  // child is only one sibling — replacing the union with it clips the rest
+  // (JSON formatter: 390px textarea, page ~670px). A child larger than the
+  // union is overflow inside that child and must be kept.
+  let width = Math.max(unionW, childW);
+  let height = Math.max(unionH, childH);
+
+  // Scroll size a few pixels above the union is padding/subpixels. Far above
+  // is the stretched measure canvas and is not content.
+  if (scrollW > width && scrollW <= width + slack) width = scrollW;
+  if (scrollH > height && scrollH <= height + slack) height = scrollH;
 
   return { width: Math.ceil(width), height: Math.ceil(height) };
 }

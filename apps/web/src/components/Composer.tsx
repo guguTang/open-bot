@@ -1,5 +1,6 @@
 import { ArrowUp, CornerUpLeft, Plus, Square, X } from "lucide-react";
-import { Button, Tooltip } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { useAutoGrowTextarea } from "../lib/useAutoGrowTextarea";
@@ -357,18 +358,20 @@ export function Composer({
           aria-hidden
           tabIndex={-1}
         />
-        <Tooltip delay={400}>
-          <Button
-            isIconOnly
-            variant="ghost"
-            className="composer-attach"
-            aria-label="添加附件"
-            isDisabled={disabled || sending || !onFilesChange}
-            onPress={() => fileRef.current?.click()}
-          >
-            <Plus size={18} strokeWidth={2.25} aria-hidden />
-          </Button>
-          <Tooltip.Content>添加附件</Tooltip.Content>
+        <Tooltip delayDuration={400}>
+          <TooltipTrigger asChild>
+            <Button
+              isIconOnly
+              variant="ghost"
+              className="composer-attach"
+              aria-label="添加附件"
+              isDisabled={disabled || sending || !onFilesChange}
+              onPress={() => fileRef.current?.click()}
+            >
+              <Plus size={18} strokeWidth={2.25} aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>添加附件</TooltipContent>
         </Tooltip>
         <div className="composer-input-wrap">
           {showPicker ? (

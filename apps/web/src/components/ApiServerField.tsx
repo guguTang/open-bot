@@ -7,7 +7,9 @@ import {
   setApiBase,
   type ApiHealthProbeResult,
 } from "../api";
-import { Button, Input, Label, TextField } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -74,22 +76,21 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
 
   return (
     <div className={cn("flex flex-col gap-2", variant === "login" && "mt-2")}>
-      <TextField
-        name="api-server-url"
-        value={draft}
-        onChange={(v) => {
-          setDraft(v);
-          setProbe(null);
-        }}
-        isDisabled={busy}
-      >
-        <Label>服务器地址</Label>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="api-server-url">服务器地址</Label>
         <Input
-          variant="secondary"
+          id="api-server-url"
+          name="api-server-url"
           type="url"
           inputMode="url"
           autoComplete="url"
           placeholder={DEFAULT_API_BASE}
+          value={draft}
+          disabled={busy}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setProbe(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -97,7 +98,7 @@ export function ApiServerField({ variant = "login", onApplied }: Props) {
             }
           }}
         />
-      </TextField>
+      </div>
       <p className="m-0 text-xs leading-snug text-muted">{help}</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="ghost" isDisabled={busy} onPress={() => void runProbe(draft)}>

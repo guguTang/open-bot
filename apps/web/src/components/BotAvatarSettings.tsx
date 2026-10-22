@@ -1,5 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Button, Modal, ToggleButton, ToggleButtonGroup } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Agent } from "../api";
 import { usePreferHostMachines } from "../hooks/usePreferHostMachines";
 import {
@@ -41,7 +49,7 @@ type PreviewMode = BotPresenceStatus | typeof SEARCHING_PREVIEW_ID;
 
 /**
  * Bot 形象 + 优先电脑.
- * Desktop: HeroUI Modal (CloseTrigger, primary Save, ghost Cancel, NativeSelect secondary).
+ * Desktop: Dialog (close button, primary Save, ghost Cancel, shadcn Select).
  * sheetForm (touch OR ≤860): fullscreen shell chrome matching settings subpages.
  */
 export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
@@ -101,7 +109,6 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
     }
   };
 
-  const previewKeys = new Set([previewMode]);
   const formBody = (
     <>
       <div className="bot-avatar-preview">
@@ -114,27 +121,25 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
           status={previewMode === SEARCHING_PREVIEW_ID ? "working" : previewMode}
           searchingHint={previewMode === SEARCHING_PREVIEW_ID}
         />
-        <ToggleButtonGroup
+        <ToggleGroup
+          type="single"
           aria-label="预览表情"
-          selectionMode="single"
-          selectedKeys={previewKeys}
-          onSelectionChange={(keys) => {
-            if (typeof keys === "string") return;
-            const id = [...keys][0];
-            if (id) setPreviewMode(String(id) as PreviewMode);
+          value={previewMode}
+          onValueChange={(id) => {
+            if (id) setPreviewMode(id as PreviewMode);
           }}
           size="sm"
           className="bot-avatar-status-toggles flex flex-wrap gap-1"
         >
           {PREVIEW_STATUSES.map((s) => (
-            <ToggleButton key={s.id} id={s.id}>
+            <ToggleGroupItem key={s.id} value={s.id}>
               {s.label}
-            </ToggleButton>
+            </ToggleGroupItem>
           ))}
-          <ToggleButton id={SEARCHING_PREVIEW_ID} aria-label="检索动画预览">
+          <ToggleGroupItem value={SEARCHING_PREVIEW_ID} aria-label="检索动画预览">
             检索动画
-          </ToggleButton>
-        </ToggleButtonGroup>
+          </ToggleGroupItem>
+        </ToggleGroup>
         <div className="muted small">预览五态 + 检索动画变体（仅本地试看，不改真实 presence）</div>
       </div>
 
@@ -221,34 +226,36 @@ export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {
   }
 
   return (
-    <Modal.Backdrop
-      isOpen={open}
+    <Dialog
+      open={open}
       onOpenChange={(next) => {
         if (!next && !busy) onClose();
       }}
-      isDismissable={!busy}
     >
-      <Modal.Container size="md" placement="center" className="w-[min(440px,calc(100vw-24px))]">
-        <Modal.Dialog className="gap-3 overflow-hidden p-4">
-          <Modal.CloseTrigger />
-          <Modal.Header>
-            <Modal.Heading>Bot 形象 · {agent.name}</Modal.Heading>
-          </Modal.Header>
-          <Modal.Body className="min-h-0 gap-3 overflow-y-auto p-0">
-            <form id="bot-avatar-form" className="bot-avatar-form flex flex-col gap-3" onSubmit={(e) => void submit(e)}>
-              {formBody}
-            </form>
-          </Modal.Body>
-          <Modal.Footer className="flex gap-2">
-            <Button type="submit" form="bot-avatar-form" variant="primary" isDisabled={busy}>
-              {busy ? "保存中…" : "保存"}
-            </Button>
-            <Button type="button" variant="ghost" isDisabled={busy} onPress={onClose}>
-              取消
-            </Button>
-          </Modal.Footer>
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+      <DialogContent
+        className="flex max-h-[min(85dvh,720px)] w-[min(440px,calc(100vw-24px))] max-w-[calc(100vw-24px)] flex-col gap-3 overflow-hidden sm:max-w-[440px]"
+        onEscapeKeyDown={(event) => {
+          if (busy) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (busy) event.preventDefault();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Bot 形象 · {agent.name}</DialogTitle>
+        </DialogHeader>
+        <form id="bot-avatar-form" className="bot-avatar-form flex min-h-0 flex-col gap-3 overflow-y-auto" onSubmit={(e) => void submit(e)}>
+          {formBody}
+        </form>
+        <DialogFooter className="gap-2 sm:justify-start">
+          <Button type="submit" form="bot-avatar-form" variant="primary" isDisabled={busy}>
+            {busy ? "保存中…" : "保存"}
+          </Button>
+          <Button type="button" variant="ghost" isDisabled={busy} onClick={onClose}>
+            取消
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

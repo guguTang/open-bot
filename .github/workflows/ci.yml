@@ -13,9 +13,6 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
-    env:
-      # HeroUI Pro CDN postinstall — use CI/CD token (Settings → Secrets → Actions)
-      HEROUI_AUTH_TOKEN: ${{ secrets.HEROUI_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 

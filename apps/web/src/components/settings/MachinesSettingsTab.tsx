@@ -28,7 +28,7 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   SettingsCard,
   SettingsEmpty,
@@ -235,21 +235,25 @@ function CurrentMachineSection({
                 始终允许：除硬拒绝（curl|sh、rm -rf /、mkfs）外直接执行，不弹确认卡。用户规则「先询问」命中时仍会确认。
               </FieldDescription>
             </FieldContent>
-            <NativeSelect
+            <Select
               value={hostExecPolicy}
               disabled={machinesBusy || !current}
-              aria-label="在这台电脑上执行"
-              onChange={(e) => {
+              onValueChange={(next) => {
                 if (!current) return;
-                onHostExecPolicyChange(normalizeMachineExecPolicy(e.target.value));
+                onHostExecPolicyChange(normalizeMachineExecPolicy(next));
               }}
             >
-              {MACHINE_EXEC_POLICY_OPTIONS.map((o) => (
-                <NativeSelectOption key={o.value} value={o.value}>
-                  {o.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger aria-label="在这台电脑上执行" className="w-full min-w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MACHINE_EXEC_POLICY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           {!current ? (
             <FieldDescription>

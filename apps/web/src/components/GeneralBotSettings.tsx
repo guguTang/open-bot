@@ -22,7 +22,7 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SELECT_EMPTY, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SettingsCard, SettingsSection } from "./SettingsLayout";
 
@@ -127,25 +127,29 @@ export function GeneralBotSettings({ onSettingsChange, sectionTitle = "审核与
                 用于报告时间与例行任务。选择「自动检测」则跟随本机系统时区。
               </FieldDescription>
             </FieldContent>
-            <NativeSelect
-              value={timezone}
+            <Select
+              value={timezone || SELECT_EMPTY}
               disabled={!loaded || busy}
-              aria-label="时区"
-              onChange={(e) => {
-                const v = e.target.value;
+              onValueChange={(next) => {
+                const v = next === SELECT_EMPTY ? "" : next;
                 setTimezone(v);
                 void persist({ timezone: v });
               }}
             >
-              {COMMON_TIMEZONES.map((z) => (
-                <NativeSelectOption key={z.value || "auto"} value={z.value}>
-                  {z.value === "" ? `${z.label}（${detected}）` : z.label}
-                </NativeSelectOption>
-              ))}
-              {timezone && !COMMON_TIMEZONES.some((z) => z.value === timezone) ? (
-                <NativeSelectOption value={timezone}>{timezone}</NativeSelectOption>
-              ) : null}
-            </NativeSelect>
+              <SelectTrigger aria-label="时区" className="w-full min-w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COMMON_TIMEZONES.map((z) => (
+                  <SelectItem key={z.value || "auto"} value={z.value || SELECT_EMPTY}>
+                    {z.value === "" ? `${z.label}（${detected}）` : z.label}
+                  </SelectItem>
+                ))}
+                {timezone && !COMMON_TIMEZONES.some((z) => z.value === timezone) ? (
+                  <SelectItem value={timezone}>{timezone}</SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
           </Field>
 
           <Field orientation="responsive">
@@ -194,15 +198,19 @@ export function GeneralBotSettings({ onSettingsChange, sectionTitle = "审核与
                 </Field>
                 <Field className="w-auto">
                   <FieldLabel htmlFor="bot-rule-action-select">它应该:</FieldLabel>
-                  <NativeSelect
-                    id="bot-rule-action-select"
+                  <Select
                     value={draftAction}
                     disabled={busy}
-                    onChange={(e) => setDraftAction(e.target.value as "ask_first" | "auto_allow")}
+                    onValueChange={(next) => setDraftAction(next as "ask_first" | "auto_allow")}
                   >
-                    <NativeSelectOption value="auto_allow">自动允许</NativeSelectOption>
-                    <NativeSelectOption value="ask_first">先询问</NativeSelectOption>
-                  </NativeSelect>
+                    <SelectTrigger id="bot-rule-action-select" className="min-w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto_allow">自动允许</SelectItem>
+                      <SelectItem value="ask_first">先询问</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Button
                   type="button"
