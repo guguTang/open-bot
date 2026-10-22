@@ -1,5 +1,5 @@
-import { Plus, Users } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Plus, Users, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,10 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Label } from "@/components/ui/label";
-import { SearchField } from "@/components/ui/search-field";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import type { Agent } from "../api";
 import { cn } from "@/lib/utils";
 import { usePreferHostMachines } from "../hooks/usePreferHostMachines";
@@ -42,11 +42,33 @@ export type NewChatPopoverProps = {
   initialMode?: NewChatMode;
 };
 
+/** Desktop side panel: hugs content, matches the pre-shadcn popover next to 「+」. */
+const panelClass =
+  "flex w-[min(360px,calc(100vw-24px))] max-w-[calc(100vw-24px)] flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-(--bg-elevated) p-2.5 text-foreground shadow-(--shadow-lg) sm:max-w-[360px]";
+
+const rowBtnClass =
+  "flex w-full cursor-pointer items-center gap-3 rounded-md border-0 bg-transparent px-3 py-2.5 text-left text-sm text-foreground hover:bg-(--bg-hover) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const fieldLabelClass = "text-[13px] font-normal text-muted";
+
+const fieldControlClass =
+  "h-10 border-border bg-(--bg-soft) shadow-none focus-visible:border-(--border-strong) focus-visible:ring-ring/30";
+
+function outsideNode(event: { target: EventTarget | null }): Node | null {
+  return event.target instanceof Node ? event.target : null;
+}
+
+function shouldKeepPopoverOpen(node: Node | null, anchor: HTMLElement | null) {
+  if (!node) return false;
+  if (anchor?.contains(node)) return true;
+  const el = node instanceof Element ? node : node.parentElement;
+  return Boolean(el?.closest("[data-slot='select-content'], [data-slot='select-item']"));
+}
 
 export function NewChatPopover({
   open,
   agents,
-  anchorRef: _anchorRef,
+  anchorRef,
   onClose,
   onSelectAgent,
   onCreateBot,
@@ -54,7 +76,10 @@ export function NewChatPopover({
   initialMode = "list",
 }: NewChatPopoverProps) {
   const searchRef = useRef<HTMLInputElement>(null);
+  const virtualRef = useRef<HTMLElement | null>(null);
   const sheetForm = useSheetFormUi();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [placed, setPlaced] = useState(false);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<NewChatMode>(initialMode);
   const [groupName, setGroupName] = useState("");
@@ -79,6 +104,18 @@ export function NewChatPopover({
     });
   }, [agents, query]);
 
+  useLayoutEffect(() => {
+    if (!open || sheetForm) {
+      setAnchorEl(null);
+      setPlaced(false);
+      return;
+    }
+    const el = anchorRef.current;
+    virtualRef.current = el;
+    setAnchorEl(el);
+    setPlaced(true);
+  }, [open, sheetForm, anchorRef]);
+
   useEffect(() => {
     if (!open) return;
     setQuery("");
@@ -99,11 +136,14 @@ export function NewChatPopover({
     }
     setBusy(false);
     setError("");
-    const t = window.setTimeout(() => searchRef.current?.focus(), 30);
+    const t = window.setTimeout(() => {
+      if ((initialMode || "list") === "list") searchRef.current?.focus();
+    }, 30);
     return () => window.clearTimeout(t);
   }, [open, agents, initialMode]);
 
-  const onOpenChange = (next: boolean) => {
+  /** Sheet / unanchored dialog: step back to the list before dismissing. */
+  const dismissToListOrClose = (next: boolean) => {
     if (!next) {
       if (mode === "group" || mode === "bot") {
         setMode("list");
@@ -114,8 +154,13 @@ export function NewChatPopover({
     }
   };
 
-  void _anchorRef;
+  const backToList = () => {
+    setMode("list");
+    setError("");
+  };
+
   if (!open) return null;
+  if (!sheetForm && !placed) return null;
 
   const toggleMember = (id: string) => {
     setMemberIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -165,98 +210,117 @@ export function NewChatPopover({
   };
 
   const touchMin = sheetForm ? "min-h-11" : "";
-  const title =
-    mode === "bot" ? "创建新 Bot" : mode === "group" ? "创建群聊" : "新对话";
+  const title = mode === "bot" ? "创建新 Bot" : mode === "group" ? "创建群聊" : "新对话";
+
+  const startBot = () => {
+    setMode("bot");
+    setError("");
+    const n = query.trim();
+    setBotName(n);
+    const used = agents
+      .filter((a) => a.avatar_shape && a.avatar_color)
+      .map((a) => `${a.avatar_shape}|${a.avatar_color}`);
+    const d = pickDefaultAvatar(n || `new-bot-${Date.now()}`, used);
+    setBotShape(d.shape);
+    setBotColor(d.color);
+  };
 
   const body = (
-    <div className={cn("flex min-h-0 flex-col gap-2 overflow-hidden", sheetForm ? "flex-1" : "max-h-[min(640px,80vh)]")}>
+    <div className={cn("flex min-h-0 flex-col gap-2 overflow-hidden", sheetForm ? "min-h-0 flex-1" : "")}>
       {mode === "list" ? (
         <>
-          <SearchField
-            aria-label="搜索或创建 Bot"
-            value={query}
-            onChange={setQuery}
-            placeholder="搜索或创建 Bot"
-            inputRef={searchRef}
-            className="shrink-0"
-          />
+          <label className="flex shrink-0 items-center gap-0.5 rounded-md border border-transparent bg-(--bg-soft) px-3 py-1 focus-within:border-(--border-strong) focus-within:bg-(--surface)">
+            <span className="shrink-0 whitespace-nowrap text-[13px] text-muted">收件人：</span>
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索或创建 Bot"
+              aria-label="搜索或创建 Bot"
+              autoComplete="off"
+              className="h-8 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+            />
+          </label>
 
           <div className="flex shrink-0 flex-col gap-0.5">
-            <Button
-              variant="ghost"
-              className={cn("justify-start gap-3", touchMin)}
-              onClick={() => {
-                setMode("bot");
-                setError("");
-                const n = query.trim();
-                setBotName(n);
-                const used = agents
-                  .filter((a) => a.avatar_shape && a.avatar_color)
-                  .map((a) => `${a.avatar_shape}|${a.avatar_color}`);
-                const d = pickDefaultAvatar(n || `new-bot-${Date.now()}`, used);
-                setBotShape(d.shape);
-                setBotColor(d.color);
-              }}
-            >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-default text-muted" aria-hidden>
+            <button type="button" className={cn(rowBtnClass, touchMin)} onClick={startBot}>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-(--bg-soft) text-muted" aria-hidden>
                 <Plus size={18} strokeWidth={2} aria-hidden />
               </span>
               创建新 Bot
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn("justify-start gap-3", touchMin)}
+            </button>
+            <button
+              type="button"
+              className={cn(rowBtnClass, touchMin)}
               onClick={() => {
                 setMode("group");
                 setError("");
                 setGroupName(query.trim());
               }}
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-default text-muted" aria-hidden>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-(--bg-soft) text-muted" aria-hidden>
                 <Users size={18} strokeWidth={2} aria-hidden />
               </span>
               创建群聊
-            </Button>
+            </button>
           </div>
 
-          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col overflow-y-auto p-0" aria-label="助手列表">
+          <div
+            className={cn(
+              "flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain pb-1",
+              sheetForm ? "max-h-[min(52dvh,420px)]" : "max-h-[min(360px,46vh)]",
+            )}
+            role="listbox"
+            aria-label="助手列表"
+          >
             {filtered.length === 0 ? (
-              <li className="list-none px-3 py-4 text-sm text-muted">无匹配助手</li>
+              <div className="px-3 py-4 text-[13px] text-muted">无匹配助手</div>
             ) : (
               filtered.map((a) => (
-                <Item key={a.id} className={cn(touchMin)}>
-                  <ItemContent>
-                    <AgentAvatar
-                      id={a.id}
-                      name={a.name}
-                      size={36}
-                      shape={a.avatar_shape}
-                      color={a.avatar_color}
-                      online={a.online === true}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <ItemTitle>{a.name}</ItemTitle>
-                      {a.description ? <ItemDescription>{a.description}</ItemDescription> : null}
-                    </div>
-                  </ItemContent>
-                  <ItemActions>
-                    <Button variant="ghost" onClick={() => void onSelectAgent(a)}>
-                      打开
-                    </Button>
-                  </ItemActions>
-                </Item>
+                <button
+                  key={a.id}
+                  type="button"
+                  className={cn(rowBtnClass, "group", touchMin)}
+                  role="option"
+                  aria-selected={false}
+                  onClick={() => void onSelectAgent(a)}
+                >
+                  <AgentAvatar
+                    id={a.id}
+                    name={a.name}
+                    size={36}
+                    shape={a.avatar_shape}
+                    color={a.avatar_color}
+                    online={a.online === true}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{a.name}</div>
+                    {a.description ? <div className="truncate text-xs text-muted">{a.description}</div> : null}
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-accent opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    打开对话
+                  </span>
+                </button>
               ))
             )}
-          </ul>
+          </div>
         </>
       ) : mode === "bot" ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" className={cn("w-fit", touchMin)} onClick={() => { setMode("list"); setError(""); }}>
-              ← 返回
-            </Button>
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <div
+            className={cn(
+              "flex min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1",
+              sheetForm ? "max-h-[min(62dvh,560px)]" : "max-h-[min(520px,68vh)]",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" className={cn("h-auto px-2 py-1 text-muted hover:bg-(--bg-hover)", touchMin)} onClick={backToList}>
+                ← 返回
+              </Button>
+              {!sheetForm ? <h2 className="m-0 text-[15px] font-semibold">创建新 Bot</h2> : null}
+            </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-bot-name">名称</Label>
+              <Label htmlFor="new-bot-name" className={fieldLabelClass}>名称</Label>
               <Input
                 id="new-bot-name"
                 value={botName}
@@ -264,28 +328,31 @@ export function NewChatPopover({
                 autoFocus
                 required
                 placeholder="Bot 名称（必填）"
+                className={cn(fieldControlClass, sheetForm && "min-h-11 text-base")}
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-bot-desc">描述（可选）</Label>
+              <Label htmlFor="new-bot-desc" className={fieldLabelClass}>描述（可选）</Label>
               <Input
                 id="new-bot-desc"
                 value={botDesc}
                 onChange={(e) => setBotDesc(e.target.value)}
                 placeholder="简短介绍"
+                className={cn(fieldControlClass, sheetForm && "min-h-11 text-base")}
               />
             </div>
-            <label className="flex flex-col gap-1.5 text-sm text-muted">
-              人设 / System Prompt（可选）
-              <textarea
-                className="mt-0.5 min-h-[72px] w-full resize-y rounded-md border border-border bg-surface px-2.5 py-2 text-foreground outline-none focus:border-focus"
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-bot-prompt" className={fieldLabelClass}>人设 / System Prompt（可选）</Label>
+              <Textarea
+                id="new-bot-prompt"
                 rows={4}
                 value={botPrompt}
                 onChange={(e) => setBotPrompt(e.target.value)}
                 placeholder="你是……"
+                className="min-h-[72px] resize-y border-border bg-(--bg-soft) shadow-none focus-visible:border-(--border-strong) focus-visible:ring-ring/30"
               />
-            </label>
-            <div className="flex flex-col gap-2 rounded-lg bg-default/60 px-3 py-2.5">
+            </div>
+            <div className="flex flex-col gap-2 rounded-[10px] bg-(--bg-soft) px-3 py-2.5">
               <div className="flex flex-col items-center gap-2 px-0 pt-2 pb-1">
                 <AgentAvatar id={botName || "new-bot"} name={botName || "Bot"} size={48} shape={botShape} color={botColor} />
                 <div className="text-xs text-muted">形象预览（可改；不改则用自动分配）</div>
@@ -293,16 +360,24 @@ export function NewChatPopover({
               <div className="text-xs text-muted">形状</div>
               <div className="grid grid-cols-4 gap-2">
                 {AVATAR_SHAPES.map((shape) => (
-                  <Button
+                  <button
                     key={shape}
-                    variant={botShape === shape ? "secondary" : "ghost"}
-                    className={cn("flex h-auto flex-col items-center gap-1 py-2", sheetForm && "min-h-11")}
+                    type="button"
+                    className={cn(
+                      "flex cursor-pointer flex-col items-center justify-center rounded-[10px] border border-border bg-(--surface) px-1 py-2",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      botShape === shape && "border-foreground shadow-[0_0_0_1px_var(--foreground)]",
+                      sheetForm && "min-h-11",
+                    )}
                     onClick={() => setBotShape(shape)}
                     aria-label={AVATAR_SHAPE_LABELS[shape]}
+                    aria-pressed={botShape === shape}
                   >
                     <AgentAvatar id={botName || "new-bot"} name={botName || "Bot"} size={28} shape={shape} color={botColor} />
-                    <span className="text-[10px]">{AVATAR_SHAPE_LABELS[shape]}</span>
-                  </Button>
+                    <span className={cn("mt-1 text-center text-[11px] leading-tight text-muted", botShape === shape && "text-foreground")}>
+                      {AVATAR_SHAPE_LABELS[shape]}
+                    </span>
+                  </button>
                 ))}
               </div>
               <div className="text-xs text-muted">主色</div>
@@ -313,12 +388,14 @@ export function NewChatPopover({
                     type="button"
                     className={cn(
                       "aspect-square w-full cursor-pointer rounded-full border-2 border-transparent p-0",
-                      botColor.toLowerCase() === c.toLowerCase() && "border-background shadow-[0_0_0_2px_var(--accent)]",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      botColor.toLowerCase() === c.toLowerCase() && "border-(--bg-elevated) shadow-[0_0_0_2px_var(--accent)]",
                     )}
                     style={{ background: c }}
                     onClick={() => setBotColor(c)}
                     title={c}
                     aria-label={c}
+                    aria-pressed={botColor.toLowerCase() === c.toLowerCase()}
                   />
                 ))}
               </div>
@@ -330,22 +407,30 @@ export function NewChatPopover({
                 sheetForm={sheetForm}
               />
             </div>
-            {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
+            {error ? <p className="text-[13px] text-danger" role="alert">{error}</p> : null}
           </div>
-          <div className="shrink-0 border-t border-separator py-2">
-            <Button fullWidth isPending={busy} onClick={() => void submitBot()}>
+          <div className="shrink-0 border-t border-border bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <Button fullWidth className="h-10 font-semibold" isPending={busy} onClick={() => void submitBot()}>
               {busy ? "创建中…" : "创建并开始聊天"}
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" className={cn("w-fit", touchMin)} onClick={() => { setMode("list"); setError(""); }}>
-              ← 返回
-            </Button>
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <div
+            className={cn(
+              "flex min-h-0 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1",
+              sheetForm ? "max-h-[min(62dvh,560px)]" : "max-h-[min(520px,68vh)]",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" className={cn("h-auto px-2 py-1 text-muted hover:bg-(--bg-hover)", touchMin)} onClick={backToList}>
+                ← 返回
+              </Button>
+              {!sheetForm ? <h2 className="m-0 text-[15px] font-semibold">创建群聊</h2> : null}
+            </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="new-group-name">名称</Label>
+              <Label htmlFor="new-group-name" className={fieldLabelClass}>名称</Label>
               <Input
                 id="new-group-name"
                 value={groupName}
@@ -353,24 +438,25 @@ export function NewChatPopover({
                 autoFocus
                 required
                 placeholder="群聊名称"
+                className={cn(fieldControlClass, sheetForm && "min-h-11 text-base")}
               />
             </div>
             <div className="text-xs text-muted">选择成员（助手）</div>
-            <div className="flex max-h-70 min-h-30 flex-1 flex-col gap-0.5 overflow-y-auto">
+            <div className="flex max-h-70 min-h-30 flex-col gap-0.5 overflow-y-auto">
               {agents.map((a) => {
                 const checked = memberIdSet.has(a.id);
                 return (
                   <label
                     key={a.id}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm hover:bg-default",
-                      checked && "bg-default",
+                      "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm hover:bg-(--bg-hover)",
+                      checked && "bg-(--bg-hover)",
                       touchMin,
                     )}
                   >
                     <input
                       type="checkbox"
-                      className="accent-[var(--accent)]"
+                      className="size-4 accent-(--accent)"
                       checked={checked}
                       onChange={() => toggleMember(a.id)}
                     />
@@ -387,10 +473,10 @@ export function NewChatPopover({
                 );
               })}
             </div>
-            {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
+            {error ? <p className="text-[13px] text-danger" role="alert">{error}</p> : null}
           </div>
-          <div className="shrink-0 border-t border-separator py-2">
-            <Button fullWidth isPending={busy} onClick={() => void submitGroup()}>
+          <div className="shrink-0 border-t border-border bg-(--bg-elevated) py-2 pb-[calc(4px+var(--safe-bottom,0px))]">
+            <Button fullWidth className="h-10 font-semibold" isPending={busy} onClick={() => void submitGroup()}>
               {busy ? "创建中…" : "创建群聊"}
             </Button>
           </div>
@@ -401,27 +487,77 @@ export function NewChatPopover({
 
   if (sheetForm) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" showHandle className="mx-auto max-h-[95vh] w-full max-w-lg gap-2 p-0">
-          <SheetHeader className="pb-0">
-            <SheetTitle>{title}</SheetTitle>
-          </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-hidden p-3 pt-0">{body}</div>
+      <Sheet open={open} onOpenChange={dismissToListOrClose}>
+        <SheetContent
+          side="bottom"
+          showHandle
+          showCloseButton={false}
+          className="mx-auto max-h-[min(90dvh,90vh)] w-full max-w-lg gap-0 rounded-t-2xl border-border bg-(--bg-elevated) p-0 shadow-(--shadow-lg)"
+        >
+          <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 px-3 pt-1">
+            <SheetTitle className="text-base font-semibold">{title}</SheetTitle>
+            <SheetClose
+              aria-label="关闭"
+              className="grid size-11 place-items-center rounded-[10px] text-muted hover:bg-(--bg-hover) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onClose}
+            >
+              <X size={20} aria-hidden />
+            </SheetClose>
+          </div>
+          <div className="min-h-0 overflow-hidden px-3 pb-[calc(10px+var(--safe-bottom,0px))]">{body}</div>
         </SheetContent>
       </Sheet>
     );
   }
 
+  if (anchorEl) {
+    return (
+      <Popover open={open} onOpenChange={(next) => { if (!next) onClose(); }} modal={false}>
+        <PopoverAnchor virtualRef={virtualRef} />
+        <PopoverContent
+          side="right"
+          align="start"
+          sideOffset={12}
+          alignOffset={-4}
+          // Stay beside the 「+」 button. Desktop is wider than the sheet breakpoint,
+          // so the 360px panel fits on the right; flipping would cover the sidebar.
+          avoidCollisions={false}
+          aria-label={title}
+          className={panelClass}
+          onEscapeKeyDown={(event) => {
+            if (mode === "bot" || mode === "group") {
+              event.preventDefault();
+              backToList();
+            }
+          }}
+          onInteractOutside={(event) => {
+            if (shouldKeepPopoverOpen(outsideNode(event), anchorEl)) event.preventDefault();
+          }}
+          onOpenAutoFocus={(event) => {
+            if (mode === "list") {
+              event.preventDefault();
+              searchRef.current?.focus();
+            }
+          }}
+        >
+          {body}
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={dismissToListOrClose}>
       <DialogContent
-        className="flex w-[min(380px,calc(100vw-24px))] max-w-[calc(100vw-24px)] flex-col gap-3 overflow-hidden p-3 sm:max-w-[380px]"
+        showCloseButton={false}
+        overlayClassName="bg-black/20"
+        className={cn(panelClass, "top-[12vh] translate-y-0")}
       >
-        <DialogHeader>
+        <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription className="sr-only">选择已有助手，或创建新的 Bot / 群聊</DialogDescription>
+          <DialogDescription>选择已有助手，或创建新的 Bot / 群聊</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 overflow-hidden p-0">{body}</div>
+        {body}
       </DialogContent>
     </Dialog>
   );
