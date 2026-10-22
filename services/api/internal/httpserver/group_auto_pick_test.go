@@ -395,8 +395,8 @@ func TestBuildAutoPickDecisionPayloadOpaqueKeys(t *testing.T) {
 	if !strings.Contains(state, "修 bug") || !strings.Contains(state, "上次提到 API") {
 		t.Fatalf("state=%q", state)
 	}
-	if !strings.Contains(state, "Current user intent") || !strings.Contains(state, "用户想：修 bug") {
-		t.Fatalf("state must include Current user intent: %q", state)
+	if !strings.Contains(state, "User message:\n修 bug") {
+		t.Fatalf("state must include the raw User message: %q", state)
 	}
 	// Must not put raw agent ids as criteria keys
 	for k := range crit {
@@ -1693,17 +1693,14 @@ func TestBuildAutoPickDecisionPayloadCapabilityProfilesAndFollowUp(t *testing.T)
 			t.Fatalf("prompt must not stack dead specialty needles %q: %s", dead, instr)
 		}
 	}
-	if !strings.Contains(instr, "Last answered by") {
-		t.Fatalf("FOLLOW-UP instructions must teach Last answered by continuity: %s", instr)
+	if !strings.Contains(instr, "answered that turn") {
+		t.Fatalf("FOLLOW-UP instructions must teach answerer continuity: %s", instr)
 	}
 	if !strings.Contains(st, "Member capability profiles") {
 		t.Fatalf("state missing capability profiles: %q", st)
 	}
 	if !strings.Contains(st, "FOLLOW-UP") {
 		t.Fatalf("state must teach FOLLOW-UP: %q", st)
-	}
-	if !strings.Contains(st, "Last answered by") {
-		t.Fatalf("state Recent framing must mention Last answered by: %q", st)
 	}
 	if !strings.Contains(st, syn) {
 		t.Fatalf("state must carry Recent specialty ask: %q", st)
@@ -1712,15 +1709,18 @@ func TestBuildAutoPickDecisionPayloadCapabilityProfilesAndFollowUp(t *testing.T)
 	if !strings.Contains(st, "写代码") && !strings.Contains(st, "码农") {
 		t.Fatalf("coding capability profile missing: %q", st)
 	}
-	// Current user intent + interrupt: newest ask wins over unfinished prior work.
-	if !strings.Contains(st, "Current user intent") || !strings.Contains(st, "用户想：再来个哭脸") {
-		t.Fatalf("state must carry Current user intent summary: %q", st)
+	// Interrupt: newest ask wins over unfinished prior work.
+	if !strings.Contains(st, "User message:\n再来个哭脸") {
+		t.Fatalf("state must carry the raw User message: %q", st)
+	}
+	if strings.Contains(st, "用户想：") {
+		t.Fatalf("state must not carry a text-joined intent summary: %q", st)
 	}
 	if !strings.Contains(st, "newest wins") {
 		t.Fatalf("state must teach interrupt/newest-wins: %q", st)
 	}
-	if !strings.Contains(instr, "INTERRUPT") || !strings.Contains(instr, "Current user intent") {
-		t.Fatalf("instructions must teach interrupt + Current user intent: %s", instr)
+	if !strings.Contains(instr, "INTERRUPT") {
+		t.Fatalf("instructions must teach interrupt: %s", instr)
 	}
 	count := q[autoPickDecisionCountKey].(map[string]any)
 	countInstr := fmt.Sprint(count["instructions"])
@@ -1729,253 +1729,6 @@ func TestBuildAutoPickDecisionPayloadCapabilityProfilesAndFollowUp(t *testing.T)
 	}
 }
 
-// Langfuse peek 38529ebd (2026-10-12 17:51 CST): 「通过选择不同心情生成不同svg」
-// with Recent 「谁会写代码 | 给我写个html | Last answered by: 文章, 代码」→ SystemOne
-// choice=all @0.55 / both bots ran. State must surface Current user intent so the
-// newest specialty ask wins over unfinished prior asks (no SVG keyword needle).
-func TestBuildAutoPickDecisionPayloadCurrentUserIntentInterrupt(t *testing.T) {
-	members := []string{"writer", "coder"}
-	agents := []*db.Agent{
-		{ID: "writer", Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。"},
-		{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
-	}
-	ut := "通过选择不同心情生成不同svg"
-	syn := "User: 谁会写代码 | User: 给我写个html | Last answered by: 文章 — 负责写东西与改稿…, 代码 — 负责写代码与排障…"
-	_, q, st := buildAutoPickDecisionPayload(ut, members, agents, syn, false)
-	pick := q["pick"].(map[string]any)
-	instr := fmt.Sprint(pick["instructions"])
-	if !strings.Contains(st, "Current user intent") {
-		t.Fatalf("missing Current user intent block: %q", st)
-	}
-	if !strings.Contains(st, "用户想："+ut) {
-		t.Fatalf("INTERRUPT intent must stay newest-only (no prior bind): %q", st)
-	}
-	if strings.Contains(st, "用户想：继续完善") {
-		t.Fatalf("INTERRUPT must not bind prior as 继续完善: %q", st)
-	}
-	if !strings.Contains(st, "newest wins") {
-		t.Fatalf("state must teach newest-wins interrupt: %q", st)
-	}
-	if !strings.Contains(st, syn) {
-		t.Fatalf("Recent context still present for FOLLOW-UP support: %q", st)
-	}
-	if !strings.Contains(instr, "INTERRUPT") {
-		t.Fatalf("instructions missing INTERRUPT: %s", instr)
-	}
-	if !strings.Contains(instr, "Current user intent") {
-		t.Fatalf("instructions missing Current user intent: %s", instr)
-	}
-	// No SVG/HTML specialty needle reintroduction.
-	for _, dead := range []string{"SVG/HTML/CSS/JS", "要html", "改成html"} {
-		if strings.Contains(instr, dead) {
-			t.Fatalf("must not restack specialty needles %q", dead)
-		}
-	}
-}
-
-// Langfuse peek c5c3d672 (2026-10-12 18:57 CST): 「修改下，换成动物的表情」 with Recent
-// html canvas mood page + who-can 「谁能写代码」 + dual Last answered by → intent must bind
-// the html/canvas prior (skip who-can), not echo the short ask alone.
-func TestCurrentUserIntentSummaryPeekC5c3d672(t *testing.T) {
-	syn := "User: 给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg | User: 谁能写代码 | Last answered by: 文章 — 写东西与改稿…, 代码 — 写代码与排障…"
-	ut := "修改下，换成动物的表情"
-	got, mode := currentUserIntentJoin(ut, syn)
-	if mode != "follow_up" {
-		t.Fatalf("want follow_up join, got mode=%s summary=%q", mode, got)
-	}
-	if !strings.Contains(got, "继续完善") {
-		t.Fatalf("follow-up must bind prior with 继续完善: %q", got)
-	}
-	if !strings.Contains(got, "html") && !strings.Contains(got, "canvas") {
-		t.Fatalf("prior must be html/canvas task, got %q", got)
-	}
-	if strings.Contains(got, "谁能写代码") {
-		t.Fatalf("prior must skip who-can census ask, got %q", got)
-	}
-	if !strings.Contains(got, ut) {
-		t.Fatalf("summary must keep current ask, got %q", got)
-	}
-}
-
-func TestBuildAutoPickDecisionPayloadJointIntentFollowUpPeekC5c3d672(t *testing.T) {
-	members := []string{"writer", "coder"}
-	agents := []*db.Agent{
-		{ID: "writer", Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。"},
-		{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
-	}
-	ut := "修改下，换成动物的表情"
-	syn := "User: 给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg | User: 谁能写代码 | Last answered by: 文章 — 写东西与改稿…, 代码 — 写代码与排障…"
-	_, q, st := buildAutoPickDecisionPayload(ut, members, agents, syn, false)
-	if !strings.Contains(st, "继续完善") {
-		t.Fatalf("state intent must bind prior task: %q", st)
-	}
-	if !strings.Contains(st, "html") && !strings.Contains(st, "canvas") {
-		t.Fatalf("state intent must carry html/canvas anchor: %q", st)
-	}
-	if strings.Contains(st, "用户想：继续完善「谁能写代码」") || strings.Contains(st, "继续完善「谁能写代码") {
-		t.Fatalf("must not bind who-can as prior: %q", st)
-	}
-	// Exact raw echo of short ask alone is the bug (c5c3d672).
-	if strings.Contains(st, "用户想："+ut) && !strings.Contains(st, "继续完善") {
-		t.Fatalf("must not leave intent as raw short-ask echo: %q", st)
-	}
-	pick := q["pick"].(map[string]any)
-	instr := fmt.Sprint(pick["instructions"])
-	if !strings.Contains(instr, "继续完善") {
-		t.Fatalf("instructions should teach bound follow-up intent: %s", instr)
-	}
-	if !strings.Contains(st, "may already bind prior session task") {
-		t.Fatalf("state classify line must mention prior bind: %q", st)
-	}
-}
-
-func TestCurrentUserIntentSummaryJoinModes(t *testing.T) {
-	syn := "User: 给我写个html页面，用canvas | User: 谁能写代码 | Last answered by: 代码 — 写代码…"
-
-	// INTERRUPT / self-contained (peek 38529ebd shape): newest-only.
-	utNew := "通过选择不同心情生成不同svg"
-	got, mode := currentUserIntentJoin(utNew, syn)
-	if mode != "new" || got != utNew {
-		t.Fatalf("INTERRUPT want newest-only, got mode=%s summary=%q", mode, got)
-	}
-
-	// Who-can this turn: newest-only (do not bind html).
-	utWho := "谁会写代码"
-	got, mode = currentUserIntentJoin(utWho, syn)
-	if mode != "new" || got != utWho {
-		t.Fatalf("who-can want newest-only, got mode=%s summary=%q", mode, got)
-	}
-
-	// All-hands: not 继续完善.
-	utAll := "都介绍下自己"
-	got, mode = currentUserIntentJoin(utAll, syn)
-	if mode != "new" || strings.Contains(got, "继续完善") {
-		t.Fatalf("all-hands must not bind 继续完善, got mode=%s summary=%q", mode, got)
-	}
-
-	// No synopsis: none.
-	got, mode = currentUserIntentJoin("修改下，换成动物的表情", "")
-	if mode != "none" || got != "修改下，换成动物的表情" {
-		t.Fatalf("empty synopsis want none echo, got mode=%s summary=%q", mode, got)
-	}
-
-	// Soft: long ask (>40 runes) that still carries a follow-up marker.
-	utSoft := "把刚才那个页面里的按钮颜色改成红色并且加上一点简单的动画效果让整个交互看起来更生动一些"
-	if len([]rune(utSoft)) <= 40 {
-		t.Fatalf("soft fixture must be >40 runes, got %d", len([]rune(utSoft)))
-	}
-	got, mode = currentUserIntentJoin(utSoft, syn)
-	if mode != "soft" {
-		t.Fatalf("long+marker want soft, got mode=%s summary=%q", mode, got)
-	}
-	if !strings.Contains(got, "结合近期") || !strings.Contains(got, "本轮") {
-		t.Fatalf("soft framing missing: %q", got)
-	}
-	if strings.Contains(got, "谁能写代码") {
-		t.Fatalf("soft prior must skip who-can: %q", got)
-	}
-
-	// Short unmarked anaphora (no marker list hit) → soft, not raw-only new.
-	got, mode = currentUserIntentJoin("为什么不能", syn)
-	if mode != "soft" {
-		t.Fatalf("short unmarked want soft, got mode=%s summary=%q", mode, got)
-	}
-	if !strings.Contains(got, "结合近期") || !strings.Contains(got, "为什么不能") {
-		t.Fatalf("soft framing missing for 为什么不能: %q", got)
-	}
-}
-
-// Langfuse group bc4f77e0 「你们都能干啥」: after 代码 answered RPG micro-app ask,
-// short follow-ups without marker keywords must soft/follow_up-bind prior (not raw new),
-// so decide FOLLOW-UP can sticky to Last answered by 代码.
-func TestCurrentUserIntentJoinRPGStickyFollowUps(t *testing.T) {
-	syn := "User: 写个小工具 RPG | Last answered by: 代码 — 负责写代码与排障…"
-	priorNeedle := "写个小工具 RPG"
-
-	cases := []struct {
-		ut      string
-		wantMode string
-	}{
-		{"好，最后落地成小工具。", "soft"},
-		{"武侠的，参考仙逆中剧情角色", "soft"},
-		{"剧情人物按照《仙逆》中的来啊", "soft"},
-		{"为什么不能", "soft"},
-		{"我自己用 不传播", "soft"},
-	}
-	for _, tc := range cases {
-		got, mode := currentUserIntentJoin(tc.ut, syn)
-		if mode != tc.wantMode {
-			t.Fatalf("%q want mode=%s, got mode=%s summary=%q", tc.ut, tc.wantMode, mode, got)
-		}
-		if mode == "new" || got == tc.ut {
-			t.Fatalf("%q must not stay raw-only new, got mode=%s summary=%q", tc.ut, mode, got)
-		}
-		if !strings.Contains(got, priorNeedle) && !strings.Contains(got, "小工具") {
-			t.Fatalf("%q must bind prior RPG/小工具 task, got %q", tc.ut, got)
-		}
-		if !strings.Contains(got, tc.ut) && !strings.Contains(got, clipRunes(tc.ut, 80)) {
-			t.Fatalf("%q must keep current ask in summary, got %q", tc.ut, got)
-		}
-	}
-
-	// Marker short → hard follow_up.
-	got, mode := currentUserIntentJoin("修改下，换成武侠的", syn)
-	if mode != "follow_up" || !strings.Contains(got, "继续完善") {
-		t.Fatalf("marker short want follow_up, got mode=%s summary=%q", mode, got)
-	}
-}
-
-func TestBuildAutoPickDecisionPayloadRPGStickyPrefersLastCoder(t *testing.T) {
-	members := []string{"assistant", "coder", "writer333"}
-	agents := []*db.Agent{
-		{ID: "assistant", Name: "助手", Description: "综合问答与小工具说明。"},
-		{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
-		{ID: "writer333", Name: "333", Description: "负责写东西与改稿：小说、仙侠剧情。"},
-	}
-	ut := "好，最后落地成小工具。"
-	syn := "User: 写个小工具 RPG | Last answered by: 代码 — 负责写代码与排障…"
-	_, q, st := buildAutoPickDecisionPayload(ut, members, agents, syn, false)
-	if !strings.Contains(st, "结合近期") && !strings.Contains(st, "继续完善") {
-		t.Fatalf("state intent must soft/follow_up bind prior RPG: %q", st)
-	}
-	if strings.Contains(st, "用户想："+ut) && !strings.Contains(st, "结合近期") && !strings.Contains(st, "继续完善") {
-		t.Fatalf("must not leave intent as raw short-ask echo: %q", st)
-	}
-	if !strings.Contains(st, "写个小工具") {
-		t.Fatalf("state must carry prior 小工具 anchor: %q", st)
-	}
-	pick := q["pick"].(map[string]any)
-	instr := fmt.Sprint(pick["instructions"])
-	for _, needle := range []string{"single newest", "Last answered by", "FOLLOW-UP", "hard mismatch"} {
-		if !strings.Contains(instr, needle) {
-			t.Fatalf("FOLLOW-UP sticky instructions missing %q: %s", needle, instr)
-		}
-	}
-	if !strings.Contains(st, "single newest") {
-		t.Fatalf("state Recent framing must teach single newest sticky: %q", st)
-	}
-}
-
-func TestLooksLikeNewAskAndFollowUpBias(t *testing.T) {
-	// Newest-wins cases.
-	for _, ut := range []string{"谁会写代码", "都介绍下自己", "大家好", "@代码 帮我改", "通过选择不同心情生成不同svg"} {
-		if !looksLikeNewAsk(ut) {
-			t.Fatalf("want looksLikeNewAsk true for %q", ut)
-		}
-	}
-	// Short unmarked / marker continuations — NOT new (soft or follow_up path).
-	for _, ut := range []string{"为什么不能", "我自己用 不传播", "好，最后落地成小工具。", "修改下，换成动物的表情"} {
-		if looksLikeNewAsk(ut) {
-			t.Fatalf("want looksLikeNewAsk false for sticky %q", ut)
-		}
-	}
-	if !looksLikeFollowUp("修改下，换成动物的表情") {
-		t.Fatal("marker short must looksLikeFollowUp")
-	}
-	if looksLikeFollowUp("为什么不能") {
-		t.Fatal("unmarked short must not hard follow_up (soft instead)")
-	}
-}
 
 // Underpick choice=mN never expands via count≈roster + probs[all] (full_roster_count_expand
 // removed). Weak or strong probs[all] both keep the mapped primary; only choice=all means everyone.

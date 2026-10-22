@@ -32,6 +32,12 @@ type groupAutoPickResult struct {
 	// AllowSecondFailOpen: if every AutoPick candidate PASS-es, run lead (or all).
 	// False for who-can / specialty / all-hands so PASS cannot dump incapable peers.
 	AllowSecondFailOpen bool
+	// TaskIntentJudged: decide classified this turn against the group's open background
+	// task (intent head saw it). The send gate then uses CancelOpenTask instead of the
+	// legacy cancel-phrase check (「加个暂停键」 is a feature ask, not stop).
+	TaskIntentJudged bool
+	// CancelOpenTask: the model classified this turn as "stop the background task".
+	CancelOpenTask bool
 }
 
 func clampAutoPickK(k int) int {
@@ -620,10 +626,16 @@ var whoCanAbilityMarkers = []string{
 // Heuristic has no all-hands keyword short-circuit — decision mode is the product path
 // for intro / roast-everyone; heuristic remains specialty/role matching only.
 func runAutoPickByMode(mode, userText string, members []string, agents []*db.Agent, leadID string, k int, synopsis string, deps *autoPickDecisionDeps) groupAutoPickResult {
+	return runAutoPickByModeWithTurns(mode, userText, members, agents, leadID, k, synopsis, deps, nil)
+}
+
+// runAutoPickByModeWithTurns is runAutoPickByMode with structured turn context for decide
+// (prior turns + answerers, reply_to, open background task). Heuristic ignores tc.
+func runAutoPickByModeWithTurns(mode, userText string, members []string, agents []*db.Agent, leadID string, k int, synopsis string, deps *autoPickDecisionDeps, tc *autoPickTurnContext) groupAutoPickResult {
 	mode = db.NormalizeAutoPickMode(mode)
 	switch mode {
 	case db.AutoPickDecision:
-		if pick, ok := autoPickDecision(context.Background(), deps, userText, members, agents, k, synopsis); ok {
+		if pick, ok := autoPickDecisionWithTurns(context.Background(), deps, userText, members, agents, k, synopsis, tc); ok {
 			return pick
 		}
 		// Decide failed (timeout/parse/low-conf/off). Specialty heuristic keeps capable

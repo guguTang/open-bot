@@ -192,9 +192,10 @@ func TestSpecialtyMismatchHTMLCanvasWrongM0WithXianGei(t *testing.T) {
 	}
 }
 
-// peek c5c3d672 shape: short follow-up has no coding needles; intent join binds html/canvas
-// prior. Wrong choice=m0(文章) must specialty_mismatch_profile_match → coder.
-func TestSpecialtyMismatchFollowUpUsesJoinedIntent(t *testing.T) {
+// peek c5c3d672 shape: short follow-up 「修改下，换成动物的表情」 after the coder answered an
+// html/canvas ask. The model's intent=follow_up + bound=t1 keeps the coder even when its
+// pick wrongly parks on the writer m0 — no joined-intent text probe / needle tables.
+func TestFollowUpIntentKeepsCoderOverWrongPick(t *testing.T) {
 	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
 	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
 	members := []string{writer, coder}
@@ -202,33 +203,28 @@ func TestSpecialtyMismatchFollowUpUsesJoinedIntent(t *testing.T) {
 		{ID: writer, Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。"},
 		{ID: coder, Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。"},
 	}
-	ut := "修改下，换成动物的表情"
-	syn := "User: 给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。先给骨架即可，别太长。 | Last answered by: 代码 — 写代码与排障…"
-	if userTextHitsRoleSynonym(ut) {
-		t.Fatal("raw follow-up must not hit specialty synonym (no needle spam on short ask)")
+	msgs := []db.Message{
+		{ID: "u1", Role: "user", Content: "给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。"},
+		{ID: "a1", Role: "assistant", AgentID: coder, Content: "<html>…</html>"},
+		{ID: "u2", Role: "user", Content: "修改下，换成动物的表情"},
 	}
-	probe := specialtyProbeText(ut, syn)
-	if !userTextHitsRoleSynonym(probe) {
-		t.Fatalf("joined intent probe must hit coding synonym, got %q", probe)
-	}
+	tc := buildAutoPickTurnContext(msgs, nil, members, autoPickTurnContextMax)
 	deps := &autoPickDecisionDeps{
 		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
-				"count": map[string]any{"type": "noul", "noul": "0.99"},
-				"pick": map[string]any{
-					"type": "choice", "choice": "m0",
-					"probabilities": map[string]any{"all": "0.15", "m0": "0.48", "m1": "0.37"},
-					"confidence": "0.48",
-				},
+				"count":  map[string]any{"type": "noul", "noul": "0.99"},
+				"pick":   map[string]any{"type": "choice", "choice": "m0", "probabilities": map[string]any{"all": "0.15", "m0": "0.48", "m1": "0.37"}, "confidence": "0.48"},
+				"intent": map[string]any{"type": "choice", "choice": "follow_up", "probabilities": map[string]any{"follow_up": "0.8", "new_ask": "0.2"}},
+				"bound":  map[string]any{"type": "choice", "choice": "t1", "probabilities": map[string]any{"t1": "0.9", "none": "0.1"}},
 			}, nil
 		},
 	}
-	got := runAutoPickByMode(db.AutoPickDecision, ut, members, agents, writer, 1, syn, deps)
+	got := runAutoPickByModeWithTurns(db.AutoPickDecision, "修改下，换成动物的表情", members, agents, writer, 1, "", deps, tc)
 	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != coder {
-		t.Fatalf("follow-up wrong m0 must rematch to coder via joined intent, got %#v", got)
+		t.Fatalf("follow-up bound to coder turn must stay on coder, got %#v", got)
 	}
-	if got.AllowSecondFailOpen {
-		t.Fatal("follow-up specialty rematch must close second-wave")
+	if got.AllowSecondFailOpen || !got.LeadFallback[coder] {
+		t.Fatalf("sticky follow-up must close second-wave and forbid [PASS], got %#v", got)
 	}
 }
