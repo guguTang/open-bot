@@ -2,8 +2,8 @@ packages:
   - "apps/*"
   - "e2e"
 
-# pnpm 10 默认拦截依赖的 postinstall。HeroUI Pro 的产物就是靠 postinstall
-# 从 CDN 拉取的，必须放行；esbuild / unrs-resolver 是 Metro 与 Expo CLI 的依赖。
+# pnpm 10 默认拦截依赖的 postinstall。esbuild / unrs-resolver 是 Metro 与 Expo CLI 的依赖。
+# heroui-native-pro 仍留给 apps/mobile-rn 的可选 Pro 包（web 已不再使用 @heroui-pro/react）。
 # Android 上 react-native-webview 的 injectedObjectJson 晚于页面脚本，
 # DOM 入口会在 $$EXPO_DOM_HOST_OS 写入前就执行。这个补丁让引导脚本等到值就绪再加载 bundle。
 patchedDependencies:
@@ -12,11 +12,8 @@ patchedDependencies:
 onlyBuiltDependencies:
   - esbuild
   - heroui-native-pro
-  - heroui-pro
   - node-pty
   - unrs-resolver
 
 allowBuilds:
-  '@heroui-pro/react': true
   heroui-native-pro: true
-  heroui-pro: true

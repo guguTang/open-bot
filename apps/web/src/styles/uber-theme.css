@@ -1,7 +1,7 @@
-/* HeroUI「Uber」主题（黑白自适应，0.25rem 圆角，Inter）。
-   来源：heroui-inc/heroui apps/docs/src/styles/theme-presets.css 中的 uber 预设（HeroUI Theme Builder 同款），
-   已包含 #6400 / #6556 的 accent-foreground 与暗色白色 accent 修正。
-   放在 @heroui/styles 与 @heroui-pro/react/css 之后、不分层，覆盖默认主题变量。 */
+/* Uber 主题（黑白自适应，0.25rem 圆角，Inter）。
+   来源：heroui-inc/heroui apps/docs/src/styles/theme-presets.css 中的 uber 预设，
+   已包含 accent-foreground 与暗色白色 accent 修正。
+   不分层，供 shadcn CSS 变量与应用自定义样式读取。暗色由 theme.ts 写到 html.dark / data-theme。 */
 :root,
 [data-theme="light"] {
   color-scheme: light;
@@ -45,6 +45,23 @@
     --chart-4: oklch(from var(--accent) calc(l + 0.12) c h);
     --chart-5: oklch(from var(--accent) calc(l + 0.24) c h);
   --font-sans: "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+}
+
+/* shadcn 别名跟随上面的 Uber token（含 .dark 覆盖）。 */
+:root {
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-foreground);
+  --secondary: var(--default);
+  --secondary-foreground: var(--default-foreground);
+  --card: var(--surface);
+  --card-foreground: var(--surface-foreground);
+  --popover: var(--overlay);
+  --popover-foreground: var(--overlay-foreground);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+  --input: var(--field-border);
+  --ring: var(--focus);
+  --muted-foreground: var(--muted);
 }
 
 :root.dark,

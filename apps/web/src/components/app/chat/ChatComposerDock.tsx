@@ -1,5 +1,5 @@
 import { ArrowDown } from "lucide-react";
-import { Button } from "@heroui/react";
+import { Button } from "@/components/ui/button";
 import type { RefObject } from "react";
 import { pinStick } from "../../../lib/scrollStick";
 import { resolveActiveAgent, resolveActiveChannel } from "../../../lib/app/workspaceDerived";

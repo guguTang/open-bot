@@ -1,7 +1,18 @@
 import { Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Button, Input, Label, Modal, SearchField, TextField } from "@heroui/react";
-import { ListView, Sheet } from "@heroui-pro/react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { Label } from "@/components/ui/label";
+import { SearchField } from "@/components/ui/search-field";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { Agent } from "../api";
 import { cn } from "@/lib/utils";
 import { usePreferHostMachines } from "../hooks/usePreferHostMachines";
@@ -162,24 +173,19 @@ export function NewChatPopover({
       {mode === "list" ? (
         <>
           <SearchField
-            variant="secondary"
             aria-label="搜索或创建 Bot"
             value={query}
             onChange={setQuery}
+            placeholder="搜索或创建 Bot"
+            inputRef={searchRef}
             className="shrink-0"
-          >
-            <SearchField.Group>
-              <SearchField.SearchIcon />
-              <SearchField.Input ref={searchRef as never} placeholder="搜索或创建 Bot" />
-              <SearchField.ClearButton />
-            </SearchField.Group>
-          </SearchField>
+          />
 
           <div className="flex shrink-0 flex-col gap-0.5">
             <Button
               variant="ghost"
               className={cn("justify-start gap-3", touchMin)}
-              onPress={() => {
+              onClick={() => {
                 setMode("bot");
                 setError("");
                 const n = query.trim();
@@ -200,7 +206,7 @@ export function NewChatPopover({
             <Button
               variant="ghost"
               className={cn("justify-start gap-3", touchMin)}
-              onPress={() => {
+              onClick={() => {
                 setMode("group");
                 setError("");
                 setGroupName(query.trim());
@@ -213,55 +219,62 @@ export function NewChatPopover({
             </Button>
           </div>
 
-          <ListView
-            aria-label="助手列表"
-            variant="secondary"
-            selectionMode="none"
-            className="min-h-0 flex-1 border-0 bg-transparent shadow-none"
-            items={filtered}
-            renderEmptyState={() => (
-              <div className="px-3 py-4 text-sm text-muted">无匹配助手</div>
+          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col overflow-y-auto p-0" aria-label="助手列表">
+            {filtered.length === 0 ? (
+              <li className="list-none px-3 py-4 text-sm text-muted">无匹配助手</li>
+            ) : (
+              filtered.map((a) => (
+                <Item key={a.id} className={cn(touchMin)}>
+                  <ItemContent>
+                    <AgentAvatar
+                      id={a.id}
+                      name={a.name}
+                      size={36}
+                      shape={a.avatar_shape}
+                      color={a.avatar_color}
+                      online={a.online === true}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <ItemTitle>{a.name}</ItemTitle>
+                      {a.description ? <ItemDescription>{a.description}</ItemDescription> : null}
+                    </div>
+                  </ItemContent>
+                  <ItemActions>
+                    <Button variant="ghost" onClick={() => void onSelectAgent(a)}>
+                      打开
+                    </Button>
+                  </ItemActions>
+                </Item>
+              ))
             )}
-          >
-            {(a) => (
-              <ListView.Item id={a.id} textValue={a.name} className={cn(touchMin)}>
-                <ListView.ItemContent>
-                  <AgentAvatar
-                    id={a.id}
-                    name={a.name}
-                    size={36}
-                    shape={a.avatar_shape}
-                    color={a.avatar_color}
-                    online={a.online === true}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <ListView.Title>{a.name}</ListView.Title>
-                    {a.description ? <ListView.Description>{a.description}</ListView.Description> : null}
-                  </div>
-                </ListView.ItemContent>
-                <ListView.ItemAction>
-                  <Button variant="ghost" onPress={() => void onSelectAgent(a)}>
-                    打开
-                  </Button>
-                </ListView.ItemAction>
-              </ListView.Item>
-            )}
-          </ListView>
+          </ul>
         </>
       ) : mode === "bot" ? (
         <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
+            <Button variant="ghost" className={cn("w-fit", touchMin)} onClick={() => { setMode("list"); setError(""); }}>
               ← 返回
             </Button>
-            <TextField value={botName} onChange={setBotName} isRequired>
-              <Label>名称</Label>
-              <Input variant="secondary" autoFocus placeholder="Bot 名称（必填）" />
-            </TextField>
-            <TextField value={botDesc} onChange={setBotDesc}>
-              <Label>描述（可选）</Label>
-              <Input variant="secondary" placeholder="简短介绍" />
-            </TextField>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-bot-name">名称</Label>
+              <Input
+                id="new-bot-name"
+                value={botName}
+                onChange={(e) => setBotName(e.target.value)}
+                autoFocus
+                required
+                placeholder="Bot 名称（必填）"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-bot-desc">描述（可选）</Label>
+              <Input
+                id="new-bot-desc"
+                value={botDesc}
+                onChange={(e) => setBotDesc(e.target.value)}
+                placeholder="简短介绍"
+              />
+            </div>
             <label className="flex flex-col gap-1.5 text-sm text-muted">
               人设 / System Prompt（可选）
               <textarea
@@ -284,7 +297,7 @@ export function NewChatPopover({
                     key={shape}
                     variant={botShape === shape ? "secondary" : "ghost"}
                     className={cn("flex h-auto flex-col items-center gap-1 py-2", sheetForm && "min-h-11")}
-                    onPress={() => setBotShape(shape)}
+                    onClick={() => setBotShape(shape)}
                     aria-label={AVATAR_SHAPE_LABELS[shape]}
                   >
                     <AgentAvatar id={botName || "new-bot"} name={botName || "Bot"} size={28} shape={shape} color={botColor} />
@@ -320,7 +333,7 @@ export function NewChatPopover({
             {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
           </div>
           <div className="shrink-0 border-t border-separator py-2">
-            <Button fullWidth isPending={busy} onPress={() => void submitBot()}>
+            <Button fullWidth isPending={busy} onClick={() => void submitBot()}>
               {busy ? "创建中…" : "创建并开始聊天"}
             </Button>
           </div>
@@ -328,13 +341,20 @@ export function NewChatPopover({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-0.5 py-1">
-            <Button variant="ghost" className={cn("w-fit", touchMin)} onPress={() => { setMode("list"); setError(""); }}>
+            <Button variant="ghost" className={cn("w-fit", touchMin)} onClick={() => { setMode("list"); setError(""); }}>
               ← 返回
             </Button>
-            <TextField value={groupName} onChange={setGroupName} isRequired>
-              <Label>名称</Label>
-              <Input variant="secondary" autoFocus placeholder="群聊名称" />
-            </TextField>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-group-name">名称</Label>
+              <Input
+                id="new-group-name"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                autoFocus
+                required
+                placeholder="群聊名称"
+              />
+            </div>
             <div className="text-xs text-muted">选择成员（助手）</div>
             <div className="flex max-h-70 min-h-30 flex-1 flex-col gap-0.5 overflow-y-auto">
               {agents.map((a) => {
@@ -370,7 +390,7 @@ export function NewChatPopover({
             {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
           </div>
           <div className="shrink-0 border-t border-separator py-2">
-            <Button fullWidth isPending={busy} onPress={() => void submitGroup()}>
+            <Button fullWidth isPending={busy} onClick={() => void submitGroup()}>
               {busy ? "创建中…" : "创建群聊"}
             </Button>
           </div>
@@ -381,36 +401,28 @@ export function NewChatPopover({
 
   if (sheetForm) {
     return (
-      <Sheet isOpen={open} onOpenChange={onOpenChange} placement="bottom" isDismissable>
-        <Sheet.Backdrop>
-          <Sheet.Content className="mx-auto max-h-[95vh] w-full max-w-lg">
-            <Sheet.Dialog>
-              <Sheet.Handle />
-              <Sheet.CloseTrigger />
-              <Sheet.Header>
-                <Sheet.Heading>{title}</Sheet.Heading>
-              </Sheet.Header>
-              <Sheet.Body className="min-h-0 overflow-hidden p-3 pt-0">{body}</Sheet.Body>
-            </Sheet.Dialog>
-          </Sheet.Content>
-        </Sheet.Backdrop>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="bottom" showHandle className="mx-auto max-h-[95vh] w-full max-w-lg gap-2 p-0">
+          <SheetHeader className="pb-0">
+            <SheetTitle>{title}</SheetTitle>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-hidden p-3 pt-0">{body}</div>
+        </SheetContent>
       </Sheet>
     );
   }
 
   return (
-    <Modal>
-      <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} isDismissable>
-        <Modal.Container size="sm" placement="center" className="w-[min(380px,calc(100vw-24px))]">
-          <Modal.Dialog className="gap-3 overflow-hidden p-3">
-            <Modal.CloseTrigger />
-            <Modal.Header>
-              <Modal.Heading>{title}</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body className="min-h-0 overflow-hidden p-0">{body}</Modal.Body>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex w-[min(380px,calc(100vw-24px))] max-w-[calc(100vw-24px)] flex-col gap-3 overflow-hidden p-3 sm:max-w-[380px]"
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">选择已有助手，或创建新的 Bot / 群聊</DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 overflow-hidden p-0">{body}</div>
+      </DialogContent>
+    </Dialog>
   );
 }

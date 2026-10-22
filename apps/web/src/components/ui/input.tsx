@@ -1,17 +1,22 @@
-import * as React from "react"
-import { Input as HeroInput } from "@heroui/react"
-import { cn } from "cn"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-/** HeroUI Input（Uber 主题）；保留原生 input 的 props 与 onChange 事件签名。 */
-function Input({ className, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
-    <HeroInput
+    <input
+      type={type}
       data-slot="input"
-      variant="secondary"
-      className={cn("w-full min-w-0", className)}
-      {...(props as React.ComponentProps<typeof HeroInput>)}
+      className={cn(
+        "h-9 w-full min-w-0 rounded-md border border-input bg-[var(--field-background)] px-3 py-1 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none",
+        "placeholder:text-[var(--field-placeholder)]",
+        "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+        "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
+        className,
+      )}
+      {...props}
     />
-  )
+  );
 }
 
-export { Input }
+export { Input };

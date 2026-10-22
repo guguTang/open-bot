@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NativeSelect as ProNativeSelect } from "@heroui-pro/react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
@@ -7,33 +7,41 @@ type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 };
 
 /**
- * Drop-in native <select> that uses HeroUI Pro NativeSelect chrome.
- * Children should be <NativeSelectOption> / <option>.
+ * Native `<select>` with shadcn chrome.
+ * Children should be `<NativeSelectOption>` / `<option>`.
  */
 const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
-  ({ className, size = "default", children, ...props }, ref) => {
+  ({ className, size = "default", children, style, ...props }, ref) => {
     return (
-      <ProNativeSelect
-        fullWidth
-        className={cn("w-full", size === "sm" && "text-sm", className)}
-        data-slot="native-select-wrapper"
-      >
-        <ProNativeSelect.Trigger
-          ref={ref as never}
-          className={cn(size === "sm" && "min-h-8 text-sm")}
-          {...(props as object)}
+      <div className="relative w-full min-w-0" data-slot="native-select-wrapper">
+        <select
+          ref={ref}
+          data-slot="native-select"
+          data-size={size}
+          className={cn(
+            "h-9 w-full min-w-0 appearance-none rounded-md border border-input bg-[var(--field-background)] ps-3 pe-9 text-sm text-foreground shadow-xs outline-none",
+            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+            size === "sm" && "h-8 text-sm",
+            className,
+          )}
+          style={{ paddingInlineEnd: "2.25rem", ...style }}
+          {...props}
         >
           {children}
-          <ProNativeSelect.Indicator />
-        </ProNativeSelect.Trigger>
-      </ProNativeSelect>
+        </select>
+        <ChevronDown
+          aria-hidden
+          className="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+      </div>
     );
   },
 );
 NativeSelect.displayName = "NativeSelect";
 
 function NativeSelectOption({ className, ...props }: React.ComponentProps<"option">) {
-  return <ProNativeSelect.Option className={className} {...props} />;
+  return <option data-slot="native-select-option" className={className} {...props} />;
 }
 
 export { NativeSelect, NativeSelectOption };

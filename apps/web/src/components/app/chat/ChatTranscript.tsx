@@ -5,7 +5,7 @@
  * scrollport. This app uses flex-direction:column-reverse stick-to-bottom
  * (see styles.css .messages + useChatScrollPin). Replacing the scroller would
  * break pin behaviour and OpenUI streaming. Keep the reverse scroller; jump-to-
- * bottom lives in ChatComposerDock (HeroUI Button).
+ * bottom lives in ChatComposerDock.
  */
 import { type RefObject, useMemo } from "react";
 import { agentNameMap } from "../../../lib/app/workspaceDerived";

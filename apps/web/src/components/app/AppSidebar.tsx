@@ -1,8 +1,10 @@
 import { ChevronDown, Copy, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { memo, useDeferredValue, useMemo } from "react";
-import type { Key } from "react-aria-components";
-import { Button, SearchField, Tooltip } from "@heroui/react";
-import { EmptyState, ListView } from "@heroui-pro/react";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
+import { SearchField } from "@/components/ui/search-field";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Agent, Channel } from "../../api";
 import { runSearchHints } from "../../lib/runFace";
 import { AccountMenu } from "../AccountMenu";
@@ -117,6 +119,16 @@ function AppSidebarInner() {
     return items;
   }, [agents, channels, deferredConvSearch, agentNameById]);
 
+  const selectedKey = conversation?.channel_id
+    ? `channel:${conversation.channel_id}`
+    : conversation?.agent_id || agentId
+      ? `agent:${conversation?.agent_id || agentId}`
+      : "";
+  const selectConv = (key: string) => {
+    if (key.startsWith("agent:")) void sessionActions().onSelectAgent(key.slice(6));
+    else if (key.startsWith("channel:")) void sessionActions().openChannelChat(key.slice(8));
+  };
+
   const identityFocus =
     activeAgent || agents.find((a) => a.id === agentId) || agents[0] || null;
   const busyKeySet = useMemo(() => new Set(busySelectionKeys), [busySelectionKeys]);
@@ -222,32 +234,30 @@ function AppSidebarInner() {
         </div>
       ) : (
         <div className="flex min-w-0 shrink-0 items-center gap-1.5 px-1 py-0.5">
-          <SearchField variant="secondary"
+          <SearchField
             aria-label="搜索助手或群聊"
             value={convSearch}
             onChange={setConvSearch}
+            placeholder="搜索助手 / 群聊"
+            inputClassName="text-sm md:text-xs"
             className="min-w-0 flex-1"
-          >
-            <SearchField.Group>
-              <SearchField.SearchIcon />
-              <SearchField.Input placeholder="搜索助手 / 群聊" className="text-sm md:text-xs" />
-              <SearchField.ClearButton />
-            </SearchField.Group>
-          </SearchField>
-          <Tooltip delay={400}>
-            <Button
-              ref={actions.newChatBtnRef as never}
-              isIconOnly
-              size="sm"
-              variant="secondary"
-              aria-label="新建聊天"
-              aria-haspopup="dialog"
-              aria-expanded={showNewChat}
-              onPress={() => sessionActions().onOpenNewChatList()}
-            >
-              <Plus size={16} strokeWidth={2.25} aria-hidden />
-            </Button>
-            <Tooltip.Content>新建聊天</Tooltip.Content>
+          />
+          <Tooltip delayDuration={400}>
+            <TooltipTrigger asChild>
+              <Button
+                ref={actions.newChatBtnRef}
+                isIconOnly
+                size="sm"
+                variant="secondary"
+                aria-label="新建聊天"
+                aria-haspopup="dialog"
+                aria-expanded={showNewChat}
+                onClick={() => sessionActions().onOpenNewChatList()}
+              >
+                <Plus size={16} strokeWidth={2.25} aria-hidden />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>新建聊天</TooltipContent>
           </Tooltip>
         </div>
       )}
@@ -256,55 +266,130 @@ function AppSidebarInner() {
       <MicroAppShortcuts surface={sheetForm || isCapacitorNative() ? "mobile_shortcut" : "desktop_shortcut"} />
 
       <div className={cn(sidebarListClass(sheetForm), "px-0.5")}>
-        <ListView
-          aria-label="会话列表"
-          variant="secondary"
-          selectionMode="single"
-          selectionBehavior="replace"
-          selectedKeys={
-            conversation?.channel_id
-              ? new Set([`channel:${conversation.channel_id}`])
-              : conversation?.agent_id || agentId
-                ? new Set([`agent:${conversation?.agent_id || agentId}`])
-                : new Set()
-          }
-          onSelectionChange={(keys) => {
-            if (keys === "all") return;
-            const id = [...(keys as Set<Key>)][0];
-            if (!id) return;
-            const key = String(id);
-            if (key.startsWith("agent:")) void sessionActions().onSelectAgent(key.slice(6));
-            else if (key.startsWith("channel:")) void sessionActions().openChannelChat(key.slice(8));
-          }}
-          renderEmptyState={() => (
-            <EmptyState className="px-3 py-6">
-              <EmptyState.Title>
-                {agents.length === 0 && channels.length === 0 ? "暂无助手" : "无匹配会话"}
-              </EmptyState.Title>
-              <EmptyState.Description>
-                {agents.length === 0 && channels.length === 0
-                  ? "点击「+」新建助手，选好岗位后即可开聊。"
-                  : "试试别的关键词。"}
-              </EmptyState.Description>
-            </EmptyState>
-          )}
-          items={convItems.map((item) =>
-            item.kind === "agent"
-              ? { id: `agent:${item.agent.id}`, kind: "agent" as const, agent: item.agent }
-              : { id: `channel:${item.channel.id}`, kind: "channel" as const, channel: item.channel },
-          )}
-          className="conv-list min-h-0 flex-1 border-0 bg-transparent shadow-none"
-        >
-          {(row) => {
-            if (row.kind === "agent") {
-              const a = row.agent;
-              const snippet = (a.last_message || a.description || "").trim() || "尚未开始对话";
+        <ul className="conv-list m-0 flex min-h-0 flex-1 list-none flex-col border-0 bg-transparent p-0" aria-label="会话列表">
+          {convItems.length === 0 ? (
+            <li className="list-none">
+              <Empty className="px-3 py-6">
+                <EmptyHeader>
+                  <EmptyTitle>
+                    {agents.length === 0 && channels.length === 0 ? "暂无助手" : "无匹配会话"}
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    {agents.length === 0 && channels.length === 0
+                      ? "点击「+」新建助手，选好岗位后即可开聊。"
+                      : "试试别的关键词。"}
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </li>
+          ) : (
+            convItems.map((row) => {
+              if (row.kind === "agent") {
+                const a = row.agent;
+                const id = `agent:${a.id}`;
+                const snippet = (a.last_message || a.description || "").trim() || "尚未开始对话";
+                return (
+                  <Item
+                    key={id}
+                    selected={selectedKey === id}
+                    className={cn("group", sheetForm && "min-h-16 rounded-none")}
+                    onPointerDown={(e) => beginConvLongPress(e, { kind: "agent", agent: a })}
+                    onPointerMove={moveConvLongPress}
+                    onPointerUp={endConvLongPress}
+                    onPointerCancel={endConvLongPress}
+                    onContextMenu={(e) => {
+                      if (touchUi) e.preventDefault();
+                    }}
+                  >
+                    <ItemContent>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-left text-inherit"
+                        onClick={() => selectConv(id)}
+                      >
+                        <AgentAvatar
+                          id={a.id}
+                          name={a.name}
+                          size={sheetForm ? 46 : 32}
+                          shape={a.avatar_shape}
+                          color={a.avatar_color}
+                          status={presenceByAgent[a.id] || "idle"}
+                          searchingHint={searchHints.listAgentSearching(a.id)}
+                          online={isBotOnline(a.id)}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <ItemTitle className={cn(sheetForm && "text-[15px]")}>
+                            {a.name}
+                            {busyKeySet.has(id) ? (
+                              <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
+                            ) : null}
+                          </ItemTitle>
+                          <ItemDescription>{snippet}</ItemDescription>
+                        </div>
+                      </button>
+                    </ItemContent>
+                    <ItemActions
+                      className={cn(!touchOrSheet && "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100")}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Tooltip delayDuration={300}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="ghost"
+                            aria-label="Bot 设置"
+                            disabled={agentBusy}
+                            onClick={() => sessionActions().onOpenBotSettings(a.id)}
+                          >
+                            <Settings size={14} strokeWidth={2} aria-hidden />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Bot 设置</TooltipContent>
+                      </Tooltip>
+                      <Tooltip delayDuration={300}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="ghost"
+                            aria-label="复制助手"
+                            disabled={agentBusy}
+                            onClick={() => sessionActions().setCloneTarget(a)}
+                          >
+                            <Copy size={14} strokeWidth={2} aria-hidden />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>复制助手</TooltipContent>
+                      </Tooltip>
+                      <Tooltip delayDuration={300}>
+                        <TooltipTrigger asChild>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="danger-soft"
+                            aria-label="删除助手"
+                            disabled={agentBusy}
+                            onClick={() => void sessionActions().removeAgent(a)}
+                          >
+                            <Trash2 size={14} strokeWidth={2} aria-hidden />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>删除助手</TooltipContent>
+                      </Tooltip>
+                    </ItemActions>
+                  </Item>
+                );
+              }
+              const ch = row.channel;
+              const id = `channel:${ch.id}`;
+              const memberNames = (ch.members || []).map((mid) => agentNameById.get(mid) || mid).join("、") || "无成员";
               return (
-                <ListView.Item
-                  id={row.id}
-                  textValue={a.name}
+                <Item
+                  key={id}
+                  selected={selectedKey === id}
                   className={cn("group", sheetForm && "min-h-16 rounded-none")}
-                  onPointerDown={(e) => beginConvLongPress(e as never, { kind: "agent", agent: a })}
+                  onPointerDown={(e) => beginConvLongPress(e, { kind: "channel", channel: ch })}
                   onPointerMove={moveConvLongPress}
                   onPointerUp={endConvLongPress}
                   onPointerCancel={endConvLongPress}
@@ -312,131 +397,63 @@ function AppSidebarInner() {
                     if (touchUi) e.preventDefault();
                   }}
                 >
-                  <ListView.ItemContent>
-                    <AgentAvatar
-                      id={a.id}
-                      name={a.name}
-                      size={sheetForm ? 46 : 32}
-                      shape={a.avatar_shape}
-                      color={a.avatar_color}
-                      status={presenceByAgent[a.id] || "idle"}
-                      searchingHint={searchHints.listAgentSearching(a.id)}
-                      online={isBotOnline(a.id)}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <ListView.Title className={cn(sheetForm && "text-[15px]")}>
-                        {a.name}
-                        {busyKeySet.has(`agent:${a.id}`) ? (
-                          <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
-                        ) : null}
-                      </ListView.Title>
-                      <ListView.Description>{snippet}</ListView.Description>
-                    </div>
-                  </ListView.ItemContent>
-                  <ListView.ItemAction className={cn(!touchOrSheet && "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100")}>
-                    <Tooltip delay={300}>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="ghost"
-                        aria-label="Bot 设置"
-                        isDisabled={agentBusy}
-                        onPress={() => sessionActions().onOpenBotSettings(a.id)}
-                      >
-                        <Settings size={14} strokeWidth={2} aria-hidden />
-                      </Button>
-                      <Tooltip.Content>Bot 设置</Tooltip.Content>
-                    </Tooltip>
-                    <Tooltip delay={300}>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="ghost"
-                        aria-label="复制助手"
-                        isDisabled={agentBusy}
-                        onPress={() => sessionActions().setCloneTarget(a)}
-                      >
-                        <Copy size={14} strokeWidth={2} aria-hidden />
-                      </Button>
-                      <Tooltip.Content>复制助手</Tooltip.Content>
-                    </Tooltip>
-                    <Tooltip delay={300}>
-                      <Button
-                        isIconOnly
-                        size="sm"
-                        variant="danger-soft"
-                        aria-label="删除助手"
-                        isDisabled={agentBusy}
-                        onPress={() => void sessionActions().removeAgent(a)}
-                      >
-                        <Trash2 size={14} strokeWidth={2} aria-hidden />
-                      </Button>
-                      <Tooltip.Content>删除助手</Tooltip.Content>
-                    </Tooltip>
-                  </ListView.ItemAction>
-                </ListView.Item>
-              );
-            }
-            const ch = row.channel;
-            const memberNames = (ch.members || []).map((id) => agentNameById.get(id) || id).join("、") || "无成员";
-            return (
-              <ListView.Item
-                id={row.id}
-                textValue={ch.name}
-                className={cn("group", sheetForm && "min-h-16 rounded-none")}
-                onPointerDown={(e) => beginConvLongPress(e as never, { kind: "channel", channel: ch })}
-                onPointerMove={moveConvLongPress}
-                onPointerUp={endConvLongPress}
-                onPointerCancel={endConvLongPress}
-                onContextMenu={(e) => {
-                  if (touchUi) e.preventDefault();
-                }}
-              >
-                <ListView.ItemContent>
-                  <div className={channelMemberStackClass} aria-hidden>
-                    {channelMemberProfiles(ch, agents, agentNameById)
-                      .slice(0, 3)
-                      .map((p) => (
-                        <AgentAvatar
-                          key={p.agent_id}
-                          id={p.agent_id}
-                          name={p.name}
-                          size={sheetForm ? 28 : 22}
-                          shape={p.avatar_shape}
-                          color={p.avatar_color}
-                          online={isBotOnline(p.agent_id, p.online)}
-                        />
-                      ))}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <ListView.Title className={cn(sheetForm && "text-[15px]")}>
-                      {ch.name}
-                      {busyKeySet.has(`channel:${ch.id}`) ? (
-                        <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
-                      ) : null}
-                    </ListView.Title>
-                    <ListView.Description>{memberNames}</ListView.Description>
-                  </div>
-                </ListView.ItemContent>
-                <ListView.ItemAction className={cn(!touchOrSheet && "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100")}>
-                  <Tooltip delay={300}>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="danger-soft"
-                      aria-label="删除群聊"
-                      isDisabled={channelBusy}
-                      onPress={() => void sessionActions().removeChannel(ch)}
+                  <ItemContent>
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent p-0 text-left text-inherit"
+                      onClick={() => selectConv(id)}
                     >
-                      <Trash2 size={14} strokeWidth={2} aria-hidden />
-                    </Button>
-                    <Tooltip.Content>删除群聊</Tooltip.Content>
-                  </Tooltip>
-                </ListView.ItemAction>
-              </ListView.Item>
-            );
-          }}
-        </ListView>
+                      <div className={channelMemberStackClass} aria-hidden>
+                        {channelMemberProfiles(ch, agents, agentNameById)
+                          .slice(0, 3)
+                          .map((p) => (
+                            <AgentAvatar
+                              key={p.agent_id}
+                              id={p.agent_id}
+                              name={p.name}
+                              size={sheetForm ? 28 : 22}
+                              shape={p.avatar_shape}
+                              color={p.avatar_color}
+                              online={isBotOnline(p.agent_id, p.online)}
+                            />
+                          ))}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <ItemTitle className={cn(sheetForm && "text-[15px]")}>
+                          {ch.name}
+                          {busyKeySet.has(id) ? (
+                            <span className={runBusyDotClass()} title="回复中" aria-label="回复中" />
+                          ) : null}
+                        </ItemTitle>
+                        <ItemDescription>{memberNames}</ItemDescription>
+                      </div>
+                    </button>
+                  </ItemContent>
+                  <ItemActions
+                    className={cn(!touchOrSheet && "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100")}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Tooltip delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="danger-soft"
+                          aria-label="删除群聊"
+                          disabled={channelBusy}
+                          onClick={() => void sessionActions().removeChannel(ch)}
+                        >
+                          <Trash2 size={14} strokeWidth={2} aria-hidden />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>删除群聊</TooltipContent>
+                    </Tooltip>
+                  </ItemActions>
+                </Item>
+              );
+            })
+          )}
+        </ul>
       </div>
 
       {!sheetForm ? (

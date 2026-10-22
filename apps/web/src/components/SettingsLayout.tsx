@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Card } from "@heroui/react";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /** Outer wrapper for every Settings tab body. */
@@ -52,7 +52,7 @@ export function SettingsCard({
       variant="secondary"
       className={cn("settings-card shadow-none", padded && "settings-card-padded", className)}
     >
-      <Card.Content className="p-0">{children}</Card.Content>
+      <CardContent className="p-0">{children}</CardContent>
     </Card>
   );
 }

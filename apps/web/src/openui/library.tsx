@@ -4,8 +4,12 @@
  */
 import { createContext, useContext } from "react";
 import { FormNameContext, useFormName, useIsStreaming, useStateField, useTriggerAction } from "@openuidev/react-lang";
-import { Button, Card, Input, Label, ScrollShadow, Table, TextField } from "@heroui/react";
-import { NativeSelect } from "@heroui-pro/react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createOpenBotLibrary, type OpenBotRenderers } from "./spec";
 
 /** Peer Buttons flatten hierarchy — all secondary (taste: sibling items uniform). */
@@ -13,13 +17,13 @@ const OuiPeerButtonsContext = createContext(false);
 
 const renderers: OpenBotRenderers = {
   Card: ({ props, renderNode }) => (
-    <Card variant="secondary" className="oui-card">
+    <Card className="oui-card">
       {props.title ? (
-        <Card.Header>
-          <Card.Title className="oui-card-title">{props.title}</Card.Title>
-        </Card.Header>
+        <CardHeader>
+          <CardTitle className="oui-card-title">{props.title}</CardTitle>
+        </CardHeader>
       ) : null}
-      <Card.Content className="oui-card-body">{renderNode(props.children)}</Card.Content>
+      <CardContent className="oui-card-body">{renderNode(props.children)}</CardContent>
     </Card>
   ),
   Text: ({ props }) => {
@@ -36,8 +40,8 @@ const renderers: OpenBotRenderers = {
       <Button
         variant={primary ? "primary" : "secondary"}
         className={`oui-btn${primary ? " oui-btn-primary" : ""}`}
-        isDisabled={streaming}
-        onPress={() => void trigger(props.label, formName, props.action as never)}
+        disabled={streaming}
+        onClick={() => void trigger(props.label, formName, props.action as never)}
       >
         {props.label}
       </Button>
@@ -50,32 +54,30 @@ const renderers: OpenBotRenderers = {
   ),
   Table: ({ props }) => (
     <div className="oui-table-block">
-    <ScrollShadow orientation="horizontal" className="oui-table-scroll max-w-full" size={40}>
-      <Table variant="secondary" className="oui-table-wrap">
-        <Table.ScrollContainer>
-          <Table.Content aria-label="数据表" className="oui-table">
-            <Table.Header>
-              {props.headers.map((h, i) => (
-                <Table.Column key={i} isRowHeader={i === 0}>
-                  {h}
-                </Table.Column>
+    <div className="oui-table-scroll max-w-full">
+      <table className="oui-table w-max min-w-full caption-bottom text-sm">
+        <TableHeader>
+          <TableRow>
+            {props.headers.map((h, i) => (
+              <TableHead key={i} scope={i === 0 ? "row" : undefined}>
+                {h}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {props.rows.map((row, r) => (
+            <TableRow key={r}>
+              {row.map((c, i) => (
+                <TableCell key={i} className="tabular-nums">
+                  {c}
+                </TableCell>
               ))}
-            </Table.Header>
-            <Table.Body>
-              {props.rows.map((row, r) => (
-                <Table.Row key={r}>
-                  {row.map((c, i) => (
-                    <Table.Cell key={i} className="tabular-nums">
-                      {c}
-                    </Table.Cell>
-                  ))}
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Content>
-        </Table.ScrollContainer>
-      </Table>
-    </ScrollShadow>
+            </TableRow>
+          ))}
+        </TableBody>
+      </table>
+    </div>
     {/* Narrow containers: stacked card list instead of a sideways-scrolling table */}
     <ul className="oui-table-cards" aria-label="数据表">
       {props.rows.map((row, r) => (
@@ -126,41 +128,42 @@ const renderers: OpenBotRenderers = {
     const field = useStateField<string>(props.name);
     const streaming = useIsStreaming();
     return (
-      <TextField
-        className="oui-input"
-        name={props.name}
-        value={(field.value as string | undefined) ?? ""}
-        isDisabled={streaming}
-        onChange={(v) => field.setValue(v)}
-      >
-        <Label>{props.label}</Label>
-        <Input variant="secondary" placeholder={props.placeholder} />
-      </TextField>
+      <div className="oui-input flex flex-col gap-1.5">
+        <Label htmlFor={`oui-${props.name}`}>{props.label}</Label>
+        <Input
+          id={`oui-${props.name}`}
+          name={props.name}
+          value={(field.value as string | undefined) ?? ""}
+          disabled={streaming}
+          placeholder={props.placeholder}
+          onChange={(e) => field.setValue(e.target.value)}
+        />
+      </div>
     );
   },
   Select: function OuiSelect({ props }) {
     const field = useStateField<string>(props.name);
     const streaming = useIsStreaming();
     return (
-      <NativeSelect fullWidth variant="secondary" className="oui-input">
-        <Label>{props.label}</Label>
-        <NativeSelect.Trigger
+      <div className="oui-input flex flex-col gap-1.5">
+        <Label htmlFor={`oui-${props.name}`}>{props.label}</Label>
+        <NativeSelect
+          id={`oui-${props.name}`}
           name={props.name}
           value={(field.value as string | undefined) ?? ""}
           disabled={streaming}
           onChange={(e) => field.setValue(e.target.value)}
         >
-          <NativeSelect.Option value="" disabled>
+          <NativeSelectOption value="" disabled>
             请选择
-          </NativeSelect.Option>
+          </NativeSelectOption>
           {props.options.map((o) => (
-            <NativeSelect.Option key={o} value={o}>
+            <NativeSelectOption key={o} value={o}>
               {o}
-            </NativeSelect.Option>
+            </NativeSelectOption>
           ))}
-          <NativeSelect.Indicator />
-        </NativeSelect.Trigger>
-      </NativeSelect>
+        </NativeSelect>
+      </div>
     );
   },
 };
