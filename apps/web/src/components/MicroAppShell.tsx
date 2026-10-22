@@ -15,13 +15,16 @@ import { MicroAppCapabilityMatrix } from "./MicroAppCapabilityMatrix";
 import { buildMicroAppSrcdoc } from "../lib/microApp/sdk";
 import {
   clampMicroShellSize,
-  microShellHeightOverflow,
+  microShellScrollbarSize,
+  microShellStageScrolls,
+  resolveMicroShellFrameSize,
   MICRO_SHELL_DEFAULT_HEIGHT,
   MICRO_SHELL_DEFAULT_WIDTH,
   MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
   MICRO_SHELL_MIN_HEIGHT,
   MICRO_SHELL_MIN_WIDTH,
   type MicroShellSize,
+  type MicroShellStageScroll,
 } from "../lib/microApp/shellSize";
 import { MICRO_SHELL_MEASURE_EXPAND_PX } from "../lib/microApp/preferredSize";
 import {
@@ -85,7 +88,12 @@ export function MicroAppShell({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [frameSize, setFrameSize] = useState<MicroShellSize | null>(null);
-  const [frameScroll, setFrameScroll] = useState(false);
+  const [frameScroll, setFrameScroll] = useState<MicroShellStageScroll>({
+    width: false,
+    height: false,
+    reserveX: 0,
+    reserveY: 0,
+  });
   /** Host-assisted preferred measure: iframe briefly at max canvas, shell stays put (clipped). */
   const [measuring, setMeasuring] = useState(false);
   const measureGenRef = useRef(0);
@@ -118,7 +126,7 @@ export function MicroAppShell({
     setError("");
     setSrcdoc(null);
     setFrameSize(null);
-    setFrameScroll(false);
+    setFrameScroll({ width: false, height: false, reserveX: 0, reserveY: 0 });
     setMeasuring(false);
     measureGenRef.current += 1;
     revokeRef.current?.();
@@ -230,7 +238,7 @@ export function MicroAppShell({
         setMeasuring(false);
         return;
       }
-      const clamped = clampMicroShellSize({
+      const frame = resolveMicroShellFrameSize({
         width: rawW,
         height: rawH,
         narrow: sheetForm,
@@ -239,11 +247,20 @@ export function MicroAppShell({
       });
       if (iframe) {
         iframe.style.maxWidth = "";
-        iframe.style.width = `${clamped.width}px`;
-        iframe.style.height = `${clamped.height}px`;
+        iframe.style.width = `${frame.width}px`;
+        iframe.style.height = `${frame.height}px`;
       }
-      setFrameSize(clamped);
-      setFrameScroll(microShellHeightOverflow(rawH, clamped.height));
+      setFrameSize(frame);
+      setFrameScroll(
+        microShellStageScrolls({
+          reportedWidth: rawW,
+          reportedHeight: rawH,
+          narrow: sheetForm,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          scrollbar: sheetForm ? 0 : microShellScrollbarSize(),
+        }),
+      );
       setMeasuring(false);
     };
     window.addEventListener("message", onResizeMsg);
@@ -275,7 +292,7 @@ export function MicroAppShell({
       const built = buildMicroAppSrcdoc(runtime.entrypoint, runtime.files);
       revokeRef.current = built.revoke;
       setFrameSize(null);
-      setFrameScroll(false);
+      setFrameScroll({ width: false, height: false, reserveX: 0, reserveY: 0 });
       setMeasuring(false);
       measureGenRef.current += 1;
       setSrcdoc(built.srcdoc);
@@ -318,6 +335,8 @@ export function MicroAppShell({
               ["--micro-shell-content-w" as string]: `${displaySize.width}px`,
               ["--micro-shell-content-h" as string]: `${displaySize.height}px`,
               ["--micro-shell-chrome-h" as string]: `${MICRO_SHELL_DESKTOP_CHROME_HEIGHT}px`,
+              ["--micro-shell-scrollbar-x" as string]: `${frameScroll.reserveX}px`,
+              ["--micro-shell-scrollbar-y" as string]: `${frameScroll.reserveY}px`,
             }
           : undefined
       }
@@ -461,7 +480,9 @@ export function MicroAppShell({
           className={cn(
             "micro-app-shell-stage",
             frameSize && "micro-app-shell-stage--sized",
-            frameScroll && "micro-app-shell-stage--scroll",
+            (frameScroll.width || frameScroll.height) && "micro-app-shell-stage--scroll",
+            frameScroll.width && "micro-app-shell-stage--scroll-x",
+            frameScroll.height && "micro-app-shell-stage--scroll-y",
             measuring && "micro-app-shell-stage--measuring",
           )}
         >

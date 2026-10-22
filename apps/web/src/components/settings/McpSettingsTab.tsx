@@ -8,7 +8,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SELECT_EMPTY, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsCard,
@@ -136,20 +136,24 @@ export function McpSettingsTab({
               </Field>
               <Field>
                 <FieldLabel htmlFor="mcp-transport">传输</FieldLabel>
-                <NativeSelect
-                  id="mcp-transport"
+                <Select
                   value={mcpForm.transport}
-                  onChange={(e) =>
+                  onValueChange={(next) =>
                     setMcpForm({
                       ...mcpForm,
-                      transport: e.target.value as MCPServerInput["transport"],
+                      transport: next as MCPServerInput["transport"],
                     })
                   }
                 >
-                  <NativeSelectOption value="stdio">stdio</NativeSelectOption>
-                  <NativeSelectOption value="sse">sse</NativeSelectOption>
-                  <NativeSelectOption value="http">http</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="mcp-transport">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stdio">stdio</SelectItem>
+                    <SelectItem value="sse">sse</SelectItem>
+                    <SelectItem value="http">http</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               {mcpForm.transport === "stdio" ? (
                 <>
@@ -217,18 +221,22 @@ export function McpSettingsTab({
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="mcp-call-server">Server</FieldLabel>
-                <NativeSelect
-                  id="mcp-call-server"
-                  value={mcpCallServerId}
-                  onChange={(e) => setMcpCallServerId(e.target.value)}
+                <Select
+                  value={mcpCallServerId || SELECT_EMPTY}
+                  onValueChange={(next) => setMcpCallServerId(next === SELECT_EMPTY ? "" : next)}
                 >
-                  <NativeSelectOption value="">选择…</NativeSelectOption>
-                  {mcpServers.map((s) => (
-                    <NativeSelectOption key={s.id} value={s.id}>
-                      {s.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger id="mcp-call-server">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_EMPTY}>选择…</SelectItem>
+                    {mcpServers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="mcp-call-tool">Tool 名</FieldLabel>

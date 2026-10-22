@@ -4,7 +4,8 @@
 	dev-mobile-rn dev-mobile-rn-clear check-mobile-rn \
 	sandbox-image sandbox-image-desktop \
 	stop-api stop-runtime stop-web stop-worker stop-dev \
-	e2e-install e2e e2e-web e2e-admin backfill-embeddings dream-user
+	e2e-install e2e e2e-web e2e-admin backfill-embeddings dream-user \
+	install-js
 
 API_ADDR ?= :18080
 AGENT_RUNTIME_URL ?= http://127.0.0.1:8001
@@ -26,6 +27,10 @@ endif
 # Single compose entry: deploy/compose.yaml (profiles: casdoor, langfuse)
 # core: postgres, redis, minio, markitdown (document parse, host :8010)
 COMPOSE ?= docker compose -f deploy/compose.yaml --project-directory deploy
+
+# JS monorepo install. apps/web no longer needs a HeroUI Pro CDN token.
+install-js:
+	pnpm install
 
 compose-up:
 	$(COMPOSE) up -d

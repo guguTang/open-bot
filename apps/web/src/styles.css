@@ -1,12 +1,18 @@
 @import "tailwindcss";
-@import "@heroui/styles";
-@import "@heroui-pro/react/css";
-/* 主题：HeroUI Uber 预设（亮/暗），web 端唯一的颜色来源 */
+@import "tw-animate-css";
+/* 主题：Uber oklch 预设（亮/暗），web 端唯一的颜色来源。shadcn 语义色在 @theme 里指向这些变量。 */
 @import "./styles/uber-theme.css";
 
-/* 旧 shadcn 工具类名（text-muted-foreground、border-input …）映射到 HeroUI 语义 token。
-   与 HeroUI 同名的 background/foreground/border/accent/muted 由 HeroUI 自己提供，这里不再覆盖。 */
+/* Tailwind 工具类 → Uber 语义 token。
+   --color-muted 保持文字灰（text-muted / bg-muted 与原先一致），不要改成 shadcn 的 muted 底色。 */
 @theme inline {
+  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.5);
+  --radius-xl: calc(var(--radius) * 2);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
   --color-card: var(--surface);
   --color-card-foreground: var(--surface-foreground);
   --color-popover: var(--overlay);
@@ -15,11 +21,23 @@
   --color-primary-foreground: var(--accent-foreground);
   --color-secondary: var(--default);
   --color-secondary-foreground: var(--default-foreground);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--danger);
   --color-destructive-foreground: var(--danger-foreground);
+  --color-border: var(--border);
   --color-input: var(--field-border, var(--border));
   --color-ring: var(--focus);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-default: var(--default);
+  --color-surface: var(--surface);
+  --color-overlay: var(--overlay);
+  --color-separator: var(--separator);
+  --color-focus: var(--focus);
 }
 
 :root {
@@ -1015,8 +1033,9 @@ dialog.modal-backdrop:not([open]) {
 .modal h3 { margin-top: 0; }
 .modal ul { color: var(--muted); padding-left: 18px; }
 
-/* Exclude shadcn/Radix primitives (Switch etc. render as <button>). */
-.modal button:not([data-slot="switch"]) {
+/* Exclude shadcn/Radix primitives and micro-app chrome.
+   margin-top here used to grow the tool header past the 56px fit budget and paint an outer scrollbar. */
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]):not(.settings-close):not(.settings-hub-close):not(.settings-shell-back) {
   margin-top: 12px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -1125,7 +1144,7 @@ button.ghost {
 .llm-item.default { border-color: var(--accent); }
 .llm-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .llm-actions button,
-.modal button:not([data-slot="switch"]) {
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]):not(.settings-close):not(.settings-hub-close):not(.settings-shell-back) {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -1532,6 +1551,22 @@ button.ghost {
 .settings-dialog .settings-card textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* Radix Select keeps a clipped autofill <select aria-hidden>. Field rules above must not expand it. */
+.settings-dialog select[aria-hidden="true"],
+.settings-dialog-shell select[aria-hidden="true"],
+.modal select[aria-hidden="true"] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  pointer-events: none !important;
 }
 
 .settings-dialog .llm-form textarea,
@@ -3314,6 +3349,14 @@ html.capacitor-native {
 }
 
 .settings-dialog-shell {
+  /* Radix DialogContent is centered with the `translate` property (not `transform`);
+     fullscreen shell must pin to the viewport. */
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  transform: none !important;
+  translate: none !important;
   width: 100% !important;
   max-width: 100% !important;
   height: 100% !important;
@@ -5168,17 +5211,19 @@ html.touch-ui .composer-quote-clear {
 
 
 /* === micro-app shell content-fit (iframe postMessage resize) ===
-   Hub list keeps fixed settings-dialog ~860×680.
-   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
-   stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
-   Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
-   No hardcoded portrait preference — shell follows reported resize width/height.
-   Size source: openbot.micro { type:"resize", width, height }; max ≈ 90% viewport (minus chrome+border);
-   outer overflow:clip + border:none — never show dialog/shell scrollbar; stage scrolls past max.
+   Hub list keeps the shared settings-dialog size (not content-fit).
+   Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content).
+   One height budget: dialog/shell max = viewport box and overflow:clip (chrome
+   never scrolls); header keeps its natural height; iframe is the full reported
+   size (its document is overflow:hidden, so a shorter iframe clips the tool);
+   the stage is the only scrollport and scrolls that iframe when header+content
+   exceed the box. Fitting tools hug with no scrollbar.
    Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
-.settings-dialog.settings-dialog--micro-fit {
-  /* Override fixed 860×680 — hug shell child like a tight popover */
+/* `.modal` raises specificity above the later `.modal.settings-dialog` size polish,
+   which otherwise locks every settings dialog to ~960px and stops opened tools hugging content. */
+.modal.settings-dialog.settings-dialog--micro-fit {
+  /* Override fixed settings-dialog size — hug shell child like a tight popover */
   width: fit-content;
   min-width: min(280px, calc(100vw - 32px));
   max-width: min(90vw, calc(100vw - 32px));
@@ -5196,19 +5241,26 @@ html.touch-ui .composer-quote-clear {
 
 .settings-dialog.settings-dialog--micro-fit .micro-app-shell--desktop.micro-app-shell--fit {
   box-sizing: border-box;
-  width: min(90vw, max(280px, var(--micro-shell-content-w, 480px)));
+  width: min(90vw, max(280px, calc(var(--micro-shell-content-w, 480px) + var(--micro-shell-scrollbar-x, 0px))));
   max-width: min(90vw, calc(100vw - 32px));
-  /* height:auto hugs header chrome + content; max caps to viewport (chrome budgeted in clamp). */
+  /* height:auto hugs header + iframe. max-height is the only cap; the stage
+     scrolls inside it. min-width:0 keeps a wide measure canvas from stretching the dialog. */
   height: auto;
   max-height: min(90vh, calc(100vh - 32px));
   min-height: 0;
+  min-width: 0;
   overflow: clip;
 }
 
+.settings-dialog--micro-fit .micro-app-shell--desktop > .micro-app-shell-desktop-head {
+  flex: 0 0 auto;
+}
+
 .micro-app-shell--fit .micro-app-shell-body {
-  flex: 0 1 auto;
-  /* Outer shell must NOT scroll — hug content; only stage--scroll may overflow. */
-  overflow: clip;
+  flex: 1 1 auto;
+  /* Hidden, not clip: clip here cuts the stage (and its scrollbar) when the
+     stage is taller than the body. The stage is the scrollport. */
+  overflow: hidden;
   overscroll-behavior: contain;
   min-height: 0;
 }
@@ -5230,12 +5282,30 @@ html.touch-ui .composer-quote-clear {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* Stage hugs reported iframe size — no leftover blank that invites outer scroll */
   width: var(--micro-shell-content-w, auto);
   height: var(--micro-shell-content-h, auto);
   max-width: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex: 0 1 auto;
   overflow: clip;
   box-sizing: border-box;
+}
+
+/* Desktop scrollport: shell width, not the iframe's full size. overflow:auto
+   so extra chrome the 56px header budget does not know about (capability
+   panels) can still scroll the full iframe. A fitting tool has equal
+   scroll and client size, so no bar is painted. Sheet keeps the rule above. */
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--sized {
+  width: 100%;
+  max-width: 100%;
+  /* Cap the scrollport under the header even when a fixed height equal to the
+     iframe refuses to flex-shrink. The shell is overflow:clip; if the stage
+     stays as tall as the iframe, that clip hides the bottom and the stage
+     (same size as the iframe) has nothing to scroll. */
+  max-height: calc(min(90vh, 100vh - 32px) - var(--micro-shell-chrome-h, 56px));
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .micro-app-shell--fit .micro-app-shell-stage--measuring {
@@ -5246,9 +5316,23 @@ html.touch-ui .composer-quote-clear {
   max-width: none;
 }
 
-.micro-app-shell--fit .micro-app-shell-stage--scroll {
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-y {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x {
+  overflow-y: hidden;
+  overflow-x: auto;
+}
+
+/* Horizontal bar sits under the iframe instead of covering its last pixels. */
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x:not(.micro-app-shell-stage--scroll-y) {
+  height: calc(var(--micro-shell-content-h, 160px) + var(--micro-shell-scrollbar-y, 0px));
+}
+
+.settings-dialog--micro-fit .micro-app-shell--fit .micro-app-shell-stage--scroll-x.micro-app-shell-stage--scroll-y {
   overflow: auto;
-  max-height: min(calc(90vh - 56px), calc(100vh - 88px));
 }
 
 .micro-app-shell--fit .micro-app-shell-frame,
@@ -5406,7 +5490,9 @@ html.touch-ui .composer-quote-clear {
 .chat-message--user .bubble-user .bubble-text,
 .chat-row-user .bubble-user .bubble-text,
 .chat-message--user .bubble-user [data-slot="chat-message-content"],
-.chat-row-user .bubble-user [data-slot="chat-message-content"] {
+.chat-row-user .bubble-user [data-slot="chat-message-content"],
+.chat-message--user .bubble-user [data-slot="message-content"],
+.chat-row-user .bubble-user [data-slot="message-content"] {
   color: var(--accent-foreground);
 }
 .chat-message--assistant .bubble-assistant,
@@ -5441,7 +5527,7 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
 
 
 /* ---- Sidebar conversation list (taste: surface+shadow selection, actions never cover text) ---- */
-.conv-list .list-view__item {
+.conv-list [data-slot="item"] {
   --row-bg: var(--background);
   position: relative;
   border-bottom-width: 0;
@@ -5449,15 +5535,15 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   background-color: var(--row-bg);
   box-shadow: none;
 }
-.conv-list .list-view__item:hover,
-.conv-list .list-view__item[data-hovered="true"] {
+.conv-list [data-slot="item"]:hover,
+.conv-list [data-slot="item"][data-hovered="true"] {
   --row-bg: var(--default);
 }
-.conv-list .list-view__item[data-selected="true"] {
+.conv-list [data-slot="item"][data-selected="true"] {
   --row-bg: var(--surface);
   box-shadow: var(--shadow-sm), 0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent);
 }
-.conv-list [data-slot="list-view-item-action"] {
+.conv-list [data-slot="item-actions"] {
   position: absolute;
   right: 0.375rem;
   top: 50%;
@@ -5467,14 +5553,14 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   padding-left: 1.75rem;
   background: linear-gradient(to left, var(--row-bg) 70%, transparent);
 }
-.conv-list .list-view__item:hover [data-slot="list-view-description"],
-.conv-list .list-view__item:has(:focus-visible) [data-slot="list-view-description"],
-.conv-list .list-view__item[data-focus-visible="true"] [data-slot="list-view-description"],
-.touch-ui .conv-list [data-slot="list-view-description"] {
+.conv-list [data-slot="item"]:hover [data-slot="item-description"],
+.conv-list [data-slot="item"]:has(:focus-visible) [data-slot="item-description"],
+.conv-list [data-slot="item"][data-focus-visible="true"] [data-slot="item-description"],
+.touch-ui .conv-list [data-slot="item-description"] {
   padding-right: 6rem;
 }
-.conv-list [data-slot="list-view-description"],
-.conv-list [data-slot="list-view-title"] {
+.conv-list [data-slot="item-description"],
+.conv-list [data-slot="item-title"] {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5499,18 +5585,24 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   .oui-table-block .oui-table-cards { display: flex; }
 }
 /* Global :focus outline was clipped into a bar under the selected row; keyboard focus keeps an inset ring */
-.conv-list .list-view__item:focus,
-.conv-list .list-view__item[data-focused="true"] { outline: none; }
-.conv-list .list-view__item[data-focus-visible="true"] {
+.conv-list [data-slot="item"]:focus,
+.conv-list [data-slot="item"][data-focused="true"] { outline: none; }
+.conv-list [data-slot="item"][data-focus-visible="true"] {
   box-shadow: inset 0 0 0 2px var(--focus, var(--accent));
 }
 
 /* L5: row actions only on hover / keyboard focus — not on the selected row's persistent focus */
 @media (hover: hover) {
-  .conv-list .list-view__item:not(:hover):not([data-focus-visible="true"]):not(:has(:focus-visible)) [data-slot="list-view-item-action"] {
+  .conv-list [data-slot="item"]:not(:hover):not([data-focus-visible="true"]):not(:has(:focus-visible)) [data-slot="item-actions"] {
     opacity: 0;
     pointer-events: none;
   }
+}
+
+/* OpenUI tables: edge fade instead of ScrollShadow */
+.oui-table-scroll {
+  overflow-x: auto;
+  mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
 }
 
 /* M4: desktop floating chat header must not sit on top of the first bubble */

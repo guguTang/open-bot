@@ -1,5 +1,6 @@
 import { ChevronRight, X } from "lucide-react";
-import { Button, Card } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import type { Agent } from "../api";
 import { AgentAvatar } from "./AgentAvatar";
 

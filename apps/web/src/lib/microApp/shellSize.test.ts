@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   clampMicroShellSize,
   microShellHeightOverflow,
+  microShellStageScrolls,
   microShellViewportMaxBox,
+  resolveMicroShellFrameSize,
   MICRO_SHELL_MIN_HEIGHT,
   MICRO_SHELL_MIN_WIDTH,
   MICRO_SHELL_VIEWPORT_MAX_RATIO,
   MICRO_SHELL_DESKTOP_CHROME_HEIGHT,
   MICRO_SHELL_DIALOG_BORDER_TOTAL,
+  MICRO_SHELL_FRAME_ABSURD_CAP,
 } from "./shellSize";
 
 describe("clampMicroShellSize", () => {
@@ -142,6 +145,141 @@ describe("clampMicroShellSize", () => {
     const outerW = s.width + MICRO_SHELL_DIALOG_BORDER_TOTAL;
     expect(outerH).toBeLessThanOrEqual(box.height);
     expect(outerW).toBeLessThanOrEqual(box.width);
+  });
+});
+
+describe("resolveMicroShellFrameSize", () => {
+  it("keeps the full reported desktop size so the iframe is not clipped", () => {
+    const s = resolveMicroShellFrameSize({
+      width: 420,
+      height: 260,
+      narrow: false,
+      viewportWidth: 1280,
+      viewportHeight: 800,
+    });
+    expect(s).toEqual({ width: 420, height: 260 });
+    expect(
+      microShellStageScrolls({
+        reportedWidth: 420,
+        reportedHeight: 260,
+        narrow: false,
+        viewportWidth: 1280,
+        viewportHeight: 800,
+      }),
+    ).toEqual({ width: false, height: false, reserveX: 0, reserveY: 0 });
+  });
+
+  it("does not shrink a tall desktop tool to viewport-chrome; the stage scrolls", () => {
+    const rawH = 2000;
+    const vh = 900;
+    const s = resolveMicroShellFrameSize({
+      width: 360,
+      height: rawH,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    expect(s).toEqual({ width: 360, height: rawH });
+    const box = microShellViewportMaxBox({
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: vh,
+    });
+    expect(s.height).toBeGreaterThan(box.height - MICRO_SHELL_DESKTOP_CHROME_HEIGHT);
+    expect(
+      microShellStageScrolls({
+        reportedWidth: 360,
+        reportedHeight: rawH,
+        narrow: false,
+        viewportWidth: 1440,
+        viewportHeight: vh,
+      }),
+    ).toEqual({ width: false, height: true, reserveX: 0, reserveY: 0 });
+  });
+
+  it("reserves a vertical scrollbar beside a tall tool so the width is not squeezed", () => {
+    const scroll = microShellStageScrolls({
+      reportedWidth: 360,
+      reportedHeight: 2000,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      scrollbar: 15,
+    });
+    expect(scroll).toEqual({ width: false, height: true, reserveX: 15, reserveY: 0 });
+  });
+
+  it("reserves a horizontal scrollbar under a wide tool so the height is not covered", () => {
+    const scroll = microShellStageScrolls({
+      reportedWidth: 2000,
+      reportedHeight: 400,
+      narrow: false,
+      viewportWidth: 800,
+      viewportHeight: 600,
+      scrollbar: 15,
+    });
+    expect(scroll.height).toBe(false);
+    expect(scroll.width).toBe(true);
+    expect(scroll.reserveY).toBe(15);
+    expect(scroll.reserveX).toBe(0);
+  });
+
+  it("flags horizontal stage scroll when reported width exceeds the viewport box", () => {
+    const s = resolveMicroShellFrameSize({
+      width: 2000,
+      height: 400,
+      narrow: false,
+      viewportWidth: 800,
+      viewportHeight: 600,
+    });
+    expect(s.width).toBe(2000);
+    expect(s.height).toBe(400);
+    expect(
+      microShellStageScrolls({
+        reportedWidth: 2000,
+        reportedHeight: 400,
+        narrow: false,
+        viewportWidth: 800,
+        viewportHeight: 600,
+      }).width,
+    ).toBe(true);
+  });
+
+  it("caps a stuck measure canvas instead of displaying it", () => {
+    const s = resolveMicroShellFrameSize({
+      width: 50_000,
+      height: 50_000,
+      narrow: false,
+      viewportWidth: 1440,
+      viewportHeight: 900,
+    });
+    expect(s.width).toBe(MICRO_SHELL_FRAME_ABSURD_CAP);
+    expect(s.height).toBe(MICRO_SHELL_FRAME_ABSURD_CAP);
+  });
+
+  it("narrow mode still clamps the iframe to the sheet budget", () => {
+    const s = resolveMicroShellFrameSize({
+      width: 400,
+      height: 2000,
+      narrow: true,
+      viewportWidth: 390,
+      viewportHeight: 844,
+    });
+    expect(s.width).toBeLessThanOrEqual(390 - 32);
+    expect(s.height).toBeLessThanOrEqual(Math.floor(844 * 0.72));
+    expect(s.height).toBeGreaterThan(MICRO_SHELL_MIN_HEIGHT);
+  });
+
+  it("content that fits under the header does not ask the stage to scroll", () => {
+    expect(
+      microShellStageScrolls({
+        reportedWidth: 360,
+        reportedHeight: 396,
+        narrow: false,
+        viewportWidth: 1440,
+        viewportHeight: 900,
+      }),
+    ).toEqual({ width: false, height: false, reserveX: 0, reserveY: 0 });
   });
 });
 

@@ -8,7 +8,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -159,17 +159,22 @@ export function RoutinesSettingsTab({
               </Field>
               <Field>
                 <FieldLabel htmlFor="routine-agent">所属 Bot</FieldLabel>
-                <NativeSelect
-                  id="routine-agent"
+                <Select
                   value={routineForm.agent_id || agentId || ""}
-                  onChange={(e) => setRoutineForm({ ...routineForm, agent_id: e.target.value })}
+                  onValueChange={(next) => setRoutineForm({ ...routineForm, agent_id: next })}
+                  disabled={agents.length === 0}
                 >
-                  {agents.map((a) => (
-                    <NativeSelectOption key={a.id} value={a.id}>
-                      {a.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger id="routine-agent">
+                    <SelectValue placeholder={agents.length === 0 ? "暂无 Bot" : "选择 Bot"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field>
                 <FieldLabel htmlFor="routine-cron">Cron（5 字段，纯事件可留空）</FieldLabel>
