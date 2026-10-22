@@ -13,7 +13,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -174,15 +174,19 @@ export function BotSettingsPanel({
               </Field>
               <Field data-disabled={locked || undefined}>
                 <FieldLabel htmlFor="bot-computer-mode">电脑模式</FieldLabel>
-                <NativeSelect
-                  id="bot-computer-mode"
+                <Select
                   value={computerMode}
-                  onChange={(e) => setComputerMode(e.target.value as "team" | "private")}
+                  onValueChange={(next) => setComputerMode(next as "team" | "private")}
                   disabled={locked}
                 >
-                  <NativeSelectOption value="team">team · 账户共用文件</NativeSelectOption>
-                  <NativeSelectOption value="private">private · 本 Bot 私有文件</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger id="bot-computer-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="team">team · 账户共用文件</SelectItem>
+                    <SelectItem value="private">private · 本 Bot 私有文件</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" disabled={locked}>

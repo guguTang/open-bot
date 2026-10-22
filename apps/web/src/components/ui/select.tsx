@@ -5,8 +5,35 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
+/** Radix Select rejects `value=""`. Map a blank option through this sentinel. */
+export const SELECT_EMPTY = "__openbot_empty__";
+
+type SelectPortalContextValue = {
+  /** Native `<dialog>` top-layer, when the trigger lives inside one. */
+  container: HTMLElement | null;
+  registerTrigger: (node: HTMLElement | null) => void;
+};
+
+const SelectPortalContext = React.createContext<SelectPortalContextValue>({
+  container: null,
+  registerTrigger: () => {},
+});
+
 function Select({ ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  const [container, setContainer] = React.useState<HTMLElement | null>(null);
+  const registerTrigger = React.useCallback((node: HTMLElement | null) => {
+    const dialog = node?.closest("dialog") ?? null;
+    setContainer((current) => (current === dialog ? current : dialog));
+  }, []);
+  const portal = React.useMemo(
+    () => ({ container, registerTrigger }),
+    [container, registerTrigger],
+  );
+  return (
+    <SelectPortalContext.Provider value={portal}>
+      <SelectPrimitive.Root data-slot="select" {...props} />
+    </SelectPortalContext.Provider>
+  );
 }
 
 function SelectGroup({ ...props }: React.ComponentProps<typeof SelectPrimitive.Group>) {
@@ -21,10 +48,17 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  ref,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & { size?: "sm" | "default" }) {
+  const portal = React.useContext(SelectPortalContext);
   return (
     <SelectPrimitive.Trigger
+      ref={(node) => {
+        portal.registerTrigger(node);
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
+      }}
       data-slot="select-trigger"
       data-size={size}
       className={cn(
@@ -52,12 +86,13 @@ function SelectContent({
   position = "popper",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const portal = React.useContext(SelectPortalContext);
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={portal.container ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          "relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md",
+          "relative z-[100] max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",

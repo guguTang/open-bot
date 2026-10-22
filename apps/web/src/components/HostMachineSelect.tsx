@@ -1,8 +1,7 @@
-import { type ChangeEvent } from "react";
 import type { Machine } from "../api";
 import { machinePresenceLabel } from "../lib/machineRoster";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SELECT_EMPTY, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -38,19 +37,23 @@ export function HostMachineSelect({
     <>
       <div className={cn("flex flex-col gap-1.5", sheetForm && "text-base")}>
         <Label htmlFor={fieldId}>{label}</Label>
-        <NativeSelect
-          id={fieldId}
-          value={value}
+        <Select
+          value={value || SELECT_EMPTY}
           disabled={disabled}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
+          onValueChange={(next) => onChange(next === SELECT_EMPTY ? "" : next)}
         >
-          <NativeSelectOption value="">不指定（在你发消息的那台电脑上运行）</NativeSelectOption>
-          {machines.map((m) => (
-            <NativeSelectOption key={m.id} value={m.id}>
-              {(m.label || m.id) + " · " + machinePresenceLabel(m)}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={fieldId} className={cn(sheetForm && "min-h-11 text-base")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SELECT_EMPTY}>不指定（在你发消息的那台电脑上运行）</SelectItem>
+            {machines.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {(m.label || m.id) + " · " + machinePresenceLabel(m)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {machines.length === 0 ? (
         <div className="text-xs text-(--muted)">{emptyHint}</div>

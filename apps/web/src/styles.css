@@ -1015,8 +1015,8 @@ dialog.modal-backdrop:not([open]) {
 .modal h3 { margin-top: 0; }
 .modal ul { color: var(--muted); padding-left: 18px; }
 
-/* Exclude shadcn/Radix primitives (Switch etc. render as <button>). */
-.modal button:not([data-slot="switch"]) {
+/* Exclude shadcn/Radix primitives (Switch / Select trigger render as <button>). */
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]) {
   margin-top: 12px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
@@ -1125,7 +1125,7 @@ button.ghost {
 .llm-item.default { border-color: var(--accent); }
 .llm-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .llm-actions button,
-.modal button:not([data-slot="switch"]) {
+.modal button:not([data-slot="switch"]):not([data-slot="select-trigger"]) {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--text);
@@ -1532,6 +1532,22 @@ button.ghost {
 .settings-dialog .settings-card textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* Radix Select keeps a clipped autofill <select aria-hidden>. Field rules above must not expand it. */
+.settings-dialog select[aria-hidden="true"],
+.settings-dialog-shell select[aria-hidden="true"],
+.modal select[aria-hidden="true"] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  pointer-events: none !important;
 }
 
 .settings-dialog .llm-form textarea,

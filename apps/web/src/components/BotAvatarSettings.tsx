@@ -49,7 +49,7 @@ type PreviewMode = BotPresenceStatus | typeof SEARCHING_PREVIEW_ID;
 
 /**
  * Bot 形象 + 优先电脑.
- * Desktop: Dialog (close button, primary Save, ghost Cancel, native select).
+ * Desktop: Dialog (close button, primary Save, ghost Cancel, shadcn Select).
  * sheetForm (touch OR ≤860): fullscreen shell chrome matching settings subpages.
  */
 export function BotAvatarSettings({ agent, open, onClose, onSave }: Props) {

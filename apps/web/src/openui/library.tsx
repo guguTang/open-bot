@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createOpenBotLibrary, type OpenBotRenderers } from "./spec";
 
@@ -147,22 +147,22 @@ const renderers: OpenBotRenderers = {
     return (
       <div className="oui-input flex flex-col gap-1.5">
         <Label htmlFor={`oui-${props.name}`}>{props.label}</Label>
-        <NativeSelect
-          id={`oui-${props.name}`}
-          name={props.name}
+        <Select
           value={(field.value as string | undefined) ?? ""}
           disabled={streaming}
-          onChange={(e) => field.setValue(e.target.value)}
+          onValueChange={(next) => field.setValue(next)}
         >
-          <NativeSelectOption value="" disabled>
-            请选择
-          </NativeSelectOption>
-          {props.options.map((o) => (
-            <NativeSelectOption key={o} value={o}>
-              {o}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id={`oui-${props.name}`} className="oui-select">
+            <SelectValue placeholder="请选择" />
+          </SelectTrigger>
+          <SelectContent>
+            {props.options.map((o) => (
+              <SelectItem key={o} value={o}>
+                {o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     );
   },
