@@ -5190,7 +5190,7 @@ html.touch-ui .composer-quote-clear {
 
 
 /* === micro-app shell content-fit (iframe postMessage resize) ===
-   Hub list keeps fixed settings-dialog ~860×680.
+   Hub list keeps the shared settings-dialog size (not content-fit).
    Open tool (wide): .settings-dialog--micro-fit — Dialog hugs tool w/h (fit-content);
    stage has NO card margin/radius — iframe fills snug shell under top bar edge-to-edge.
    Orientation from content only: landscape → wide+flat; portrait → narrow+tall; square OK.
@@ -5199,8 +5199,10 @@ html.touch-ui .composer-quote-clear {
    outer overflow:clip + border:none — never show dialog/shell scrollbar; stage scrolls past max.
    Narrow/fullscreen (.settings-dialog-shell): dialog near-full; stage hugs content height. */
 
-.settings-dialog.settings-dialog--micro-fit {
-  /* Override fixed 860×680 — hug shell child like a tight popover */
+/* `.modal` raises specificity above the later `.modal.settings-dialog` size polish,
+   which otherwise locks every settings dialog to ~960px and stops opened tools hugging content. */
+.modal.settings-dialog.settings-dialog--micro-fit {
+  /* Override fixed settings-dialog size — hug shell child like a tight popover */
   width: fit-content;
   min-width: min(280px, calc(100vw - 32px));
   max-width: min(90vw, calc(100vw - 32px));
