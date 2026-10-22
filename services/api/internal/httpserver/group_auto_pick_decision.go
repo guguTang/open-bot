@@ -289,11 +289,11 @@ func buildAutoPickDecisionPayload(userText string, members []string, agents []*d
 		"Match the task to Member capability profiles — never park on \"all\", never pick an unrelated role. " +
 		"Research/lookup → research/资料/搜索 profiles; coding/debug/implementation → coding/写代码/排障 profiles only; " +
 		"writing/文案 → writer profiles only. Set count to how many matching profiles should reply.\n" +
-		"4) FOLLOW-UP: only when Current user intent is a short continuation of prior work (anaphora / same-task tweak), including when intent already binds a prior task as 「继续完善「…」」. " +
-		"Use Recent context: prior USER turns + \"Last answered by\" (which bot replied last). " +
-		"Keep that same specialty role mN(s) — usually the last answering bot when their profile still fits; " +
-		"choice = that mN; count near one specialist; NEVER choice=\"all\" — FORBIDDEN to pick all merely because Last answered by lists multiple bots. " +
-		"Member capability profiles remain authoritative if last answerer was a mismatch.\n" +
+		"4) FOLLOW-UP: when Current user intent is a short continuation / same-task tweak — including intent already bound as 「继续完善「…」」 or soft 「结合近期「…」，本轮：「…」」. " +
+		"Use Recent context: prior USER turns + \"Last answered by\" (single newest bot). " +
+		"choice MUST prefer that single newest Last-answered-by bot (same mN); only switch if that bot's role is a hard mismatch for the bound task. " +
+		"count near one specialist; NEVER choice=\"all\" — FORBIDDEN to pick all or re-specialize to another mN merely because the follow-up mentions a tool/genre/IP word. " +
+		"Member capability profiles remain authoritative only on hard role mismatch.\n" +
 		"INTERRUPT: when Current user intent is a new ask (new SPECIALTY / WHO-CAN / ALL-HANDS), newest wins — " +
 		"ignore unfinished prior USER asks and do not pick \"all\" merely because Recent shows multiple Last-answered-by bots.\n" +
 		"SINGLE / vague: one best-matching profile, or the generalist. When several specialists fit, set count and probabilities for a multi subset (not only all-or-one). " +
@@ -364,15 +364,16 @@ func buildAutoPickDecisionPayload(userText string, members []string, agents []*d
 	b.WriteString("Classify from Current user intent (may already bind prior session task when this turn is a short follow-up; if intent states a new self-contained ask, newest wins) then pick: ")
 	b.WriteString("ALL-HANDS → choice=\"all\" + full-roster count; ")
 	b.WriteString("WHO-CAN → capable mN subset only; SPECIALTY → matching-role mNs only (not all); ")
-	b.WriteString("FOLLOW-UP → if intent contains 「继续完善「…」」 or is a short continuation (prior USER + Last answered by), same role mN — FORBIDDEN choice=\"all\" merely because Last answered by lists multiple bots; ")
+	b.WriteString("FOLLOW-UP → if intent contains 「继续完善「…」」 / soft 「结合近期「…」，本轮：「…」」 or is a short continuation: choice MUST be the single newest Last-answered-by mN unless hard role mismatch — FORBIDDEN choice=\"all\" or peer re-specialize on tool/genre words; ")
 	b.WriteString("new ask interrupts unfinished prior work — newest wins.")
 	if whoCan {
 		b.WriteString(" This turn is WHO-CAN: capable = profile matches the asked skill; ignore peer self-intros. ")
 		b.WriteString("Never choice=all / never full-roster count when only a subset is capable.")
 	}
 	if syn := strings.TrimSpace(synopsis); syn != "" {
-		b.WriteString("\n\nRecent context (FOLLOW-UP support only when Current user intent is a short continuation; ")
-		b.WriteString("otherwise ignore unfinished prior asks / multi Last-answered-by from a different task; do not override Member capability profiles):\n")
+		b.WriteString("\n\nRecent context (FOLLOW-UP / soft-bound support when Current user intent continues prior work; ")
+		b.WriteString("Last answered by is the single newest sticky target — prefer that mN on follow-up; ")
+		b.WriteString("on who-can / all-hands / new self-contained ask ignore unfinished prior and do not override Member capability profiles):\n")
 		b.WriteString(syn)
 	}
 	return keyToID, questions, b.String()
@@ -380,8 +381,9 @@ func buildAutoPickDecisionPayload(userText string, members []string, agents []*d
 
 // currentUserIntentSummary builds decide-state 「用户想…」 body (caller prefixes 用户想：).
 // Deterministic prior-USER ⊕ current-ask join (scheme A / docs/群Auto选人-意图联合判定.md):
-// short follow-ups bind the latest non-who-can prior USER from synopsis; new / self-contained /
-// who-can / INTERRUPT stay newest-only. Zero extra LLM — no specialty keyword needle tables.
+// short continuations default to bind the latest non-who-can prior USER (follow_up/soft);
+// who-can / all-hands / @mention / self-contained specialty (INTERRUPT) stay newest-only.
+// Zero extra LLM — no specialty keyword needle tables.
 func currentUserIntentSummary(userText, synopsis string) string {
 	summary, _ := currentUserIntentJoin(userText, synopsis)
 	return summary
@@ -459,6 +461,18 @@ var intentFollowUpMarkers = []string{
 	"change it", "make it", "instead", "again", "same but", "update the",
 }
 
+// intentAllHandsMarkers: lightweight room-wide cues for intent join only (decide still
+// classifies ALL-HANDS without a phrase gate). Keeps intro/roast from soft-binding prior.
+var intentAllHandsMarkers = []string{
+	"都介绍", "大家都介绍", "在座的各位", "introduce yourselves", "everyone introduce",
+	"大家好", "各位好", "hello everyone", "hi everyone", "都是辣鸡", "都说说", "大家都说",
+	"挨个介绍", "轮流介绍",
+}
+
+// softJoinMaxRunes: soft join may bind prior slightly past the hard follow_up cap (40).
+// Beyond this without anaphora → treat as self-contained newest-wins.
+const softJoinMaxRunes = 56
+
 func hasIntentFollowUpMarker(userText string) bool {
 	lower := strings.ToLower(strings.TrimSpace(userText))
 	if lower == "" {
@@ -475,7 +489,35 @@ func hasIntentFollowUpMarker(userText string) bool {
 	return false
 }
 
-// looksLikeFollowUp: short utterance with anaphora / tweak markers → bind prior task.
+func looksLikeAllHandsAsk(userText string) bool {
+	lower := strings.ToLower(strings.TrimSpace(userText))
+	if lower == "" {
+		return false
+	}
+	for _, m := range intentAllHandsMarkers {
+		if m == "" {
+			continue
+		}
+		if strings.Contains(lower, strings.ToLower(m)) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeExplicitBotMention: @Name / 点名 — newest-wins (AutoPick usually skipped already).
+func looksLikeExplicitBotMention(userText string) bool {
+	s := strings.TrimSpace(userText)
+	if s == "" {
+		return false
+	}
+	if len(parseMentionTokens(s)) > 0 || mentionIncludesEveryone(s) {
+		return true
+	}
+	return strings.Contains(s, "点名")
+}
+
+// looksLikeFollowUp: short utterance with anaphora / tweak markers → hard-bind prior task.
 func looksLikeFollowUp(userText string) bool {
 	s := strings.TrimSpace(userText)
 	if s == "" {
@@ -487,8 +529,10 @@ func looksLikeFollowUp(userText string) bool {
 	return hasIntentFollowUpMarker(s)
 }
 
-// looksLikeNewAsk: who-can, or no follow-up marker (self-contained / INTERRUPT / all-hands).
-// Long asks that still carry markers fall through to soft join.
+// looksLikeNewAsk: who-can / all-hands / @mention / clear self-contained specialty.
+// Bias: short continuations default to continue prior (soft/follow_up); new tasks interrupt.
+// Do NOT treat "no marker" alone as newest-wins — that made soft join unreachable
+// (Langfuse group 「你们都能干啥」 RPG follow-ups jumped off 代码).
 func looksLikeNewAsk(userText string) bool {
 	s := strings.TrimSpace(userText)
 	if s == "" {
@@ -497,11 +541,24 @@ func looksLikeNewAsk(userText string) bool {
 	if isWhoCanIntent(s) {
 		return true
 	}
+	if looksLikeAllHandsAsk(s) {
+		return true
+	}
+	if looksLikeExplicitBotMention(s) {
+		return true
+	}
 	if hasIntentFollowUpMarker(s) {
 		return false
 	}
-	// No anaphora marker → newest wins (covers peek 38529ebd INTERRUPT + all-hands).
-	return true
+	// Self-contained specialty with role synonym (peek 38529ebd svg) → INTERRUPT.
+	if userTextHitsRoleSynonym(s) {
+		return true
+	}
+	// Long ask without anaphora → newest wins.
+	if len([]rune(s)) > softJoinMaxRunes {
+		return true
+	}
+	return false
 }
 
 func mapDecisionChoiceToAgentIDs(answers map[string]any, keyToID map[string]string, memberOrder []string, k int, allowMultiFromProbs bool, whoCan bool, countHint int) (ids []string, conf float64, allSelected bool, ok bool) {

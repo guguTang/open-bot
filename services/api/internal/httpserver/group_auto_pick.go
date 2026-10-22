@@ -736,17 +736,10 @@ func recentMessagesSynopsis(msgs []db.Message, maxMsgs int, agents []*db.Agent) 
 		parts = append(parts, userParts[i])
 	}
 	if len(lastAnswerers) > 0 {
-		// lastAnswerers is newest-first; show up to 2 for multi-reply turns.
-		n := len(lastAnswerers)
-		if n > 2 {
-			n = 2
-		}
-		// Emit oldest-of-these first for stable reading.
-		ans := make([]string, n)
-		for i := 0; i < n; i++ {
-			ans[n-1-i] = lastAnswerers[i]
-		}
-		parts = append(parts, "Last answered by: "+strings.Join(ans, ", "))
+		// lastAnswerers is newest-first. Show only the single newest answerer so
+		// FOLLOW-UP sticky rules have one clear mN target (dual peers as equal
+		// sticky targets caused RPG follow-ups to re-specialize off 代码).
+		parts = append(parts, "Last answered by: "+lastAnswerers[0])
 	}
 	return strings.Join(parts, " | ")
 }

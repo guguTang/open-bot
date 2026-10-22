@@ -1663,10 +1663,14 @@ func TestRecentMessagesSynopsisMultiLastAnswerers(t *testing.T) {
 	}
 	got := recentMessagesSynopsis(msgs, 2, agents)
 	if !strings.Contains(got, "Last answered by:") {
-		t.Fatalf("want last answerers, got %q", got)
+		t.Fatalf("want last answerer, got %q", got)
 	}
-	if !strings.Contains(got, "22") || !strings.Contains(got, "44") {
-		t.Fatalf("want both recent answerers, got %q", got)
+	// Sticky FOLLOW-UP needs a single newest target (44 replied after 22).
+	if !strings.Contains(got, "44") {
+		t.Fatalf("want newest answerer 44, got %q", got)
+	}
+	if strings.Contains(got, "22") {
+		t.Fatalf("must not list peer 22 as equal sticky target, got %q", got)
 	}
 }
 
@@ -1869,6 +1873,107 @@ func TestCurrentUserIntentSummaryJoinModes(t *testing.T) {
 	}
 	if strings.Contains(got, "谁能写代码") {
 		t.Fatalf("soft prior must skip who-can: %q", got)
+	}
+
+	// Short unmarked anaphora (no marker list hit) → soft, not raw-only new.
+	got, mode = currentUserIntentJoin("为什么不能", syn)
+	if mode != "soft" {
+		t.Fatalf("short unmarked want soft, got mode=%s summary=%q", mode, got)
+	}
+	if !strings.Contains(got, "结合近期") || !strings.Contains(got, "为什么不能") {
+		t.Fatalf("soft framing missing for 为什么不能: %q", got)
+	}
+}
+
+// Langfuse group bc4f77e0 「你们都能干啥」: after 代码 answered RPG micro-app ask,
+// short follow-ups without marker keywords must soft/follow_up-bind prior (not raw new),
+// so decide FOLLOW-UP can sticky to Last answered by 代码.
+func TestCurrentUserIntentJoinRPGStickyFollowUps(t *testing.T) {
+	syn := "User: 写个小工具 RPG | Last answered by: 代码 — 负责写代码与排障…"
+	priorNeedle := "写个小工具 RPG"
+
+	cases := []struct {
+		ut      string
+		wantMode string
+	}{
+		{"好，最后落地成小工具。", "soft"},
+		{"武侠的，参考仙逆中剧情角色", "soft"},
+		{"剧情人物按照《仙逆》中的来啊", "soft"},
+		{"为什么不能", "soft"},
+		{"我自己用 不传播", "soft"},
+	}
+	for _, tc := range cases {
+		got, mode := currentUserIntentJoin(tc.ut, syn)
+		if mode != tc.wantMode {
+			t.Fatalf("%q want mode=%s, got mode=%s summary=%q", tc.ut, tc.wantMode, mode, got)
+		}
+		if mode == "new" || got == tc.ut {
+			t.Fatalf("%q must not stay raw-only new, got mode=%s summary=%q", tc.ut, mode, got)
+		}
+		if !strings.Contains(got, priorNeedle) && !strings.Contains(got, "小工具") {
+			t.Fatalf("%q must bind prior RPG/小工具 task, got %q", tc.ut, got)
+		}
+		if !strings.Contains(got, tc.ut) && !strings.Contains(got, clipRunes(tc.ut, 80)) {
+			t.Fatalf("%q must keep current ask in summary, got %q", tc.ut, got)
+		}
+	}
+
+	// Marker short → hard follow_up.
+	got, mode := currentUserIntentJoin("修改下，换成武侠的", syn)
+	if mode != "follow_up" || !strings.Contains(got, "继续完善") {
+		t.Fatalf("marker short want follow_up, got mode=%s summary=%q", mode, got)
+	}
+}
+
+func TestBuildAutoPickDecisionPayloadRPGStickyPrefersLastCoder(t *testing.T) {
+	members := []string{"assistant", "coder", "writer333"}
+	agents := []*db.Agent{
+		{ID: "assistant", Name: "助手", Description: "综合问答与小工具说明。"},
+		{ID: "coder", Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
+		{ID: "writer333", Name: "333", Description: "负责写东西与改稿：小说、仙侠剧情。"},
+	}
+	ut := "好，最后落地成小工具。"
+	syn := "User: 写个小工具 RPG | Last answered by: 代码 — 负责写代码与排障…"
+	_, q, st := buildAutoPickDecisionPayload(ut, members, agents, syn, false)
+	if !strings.Contains(st, "结合近期") && !strings.Contains(st, "继续完善") {
+		t.Fatalf("state intent must soft/follow_up bind prior RPG: %q", st)
+	}
+	if strings.Contains(st, "用户想："+ut) && !strings.Contains(st, "结合近期") && !strings.Contains(st, "继续完善") {
+		t.Fatalf("must not leave intent as raw short-ask echo: %q", st)
+	}
+	if !strings.Contains(st, "写个小工具") {
+		t.Fatalf("state must carry prior 小工具 anchor: %q", st)
+	}
+	pick := q["pick"].(map[string]any)
+	instr := fmt.Sprint(pick["instructions"])
+	for _, needle := range []string{"single newest", "Last answered by", "FOLLOW-UP", "hard mismatch"} {
+		if !strings.Contains(instr, needle) {
+			t.Fatalf("FOLLOW-UP sticky instructions missing %q: %s", needle, instr)
+		}
+	}
+	if !strings.Contains(st, "single newest") {
+		t.Fatalf("state Recent framing must teach single newest sticky: %q", st)
+	}
+}
+
+func TestLooksLikeNewAskAndFollowUpBias(t *testing.T) {
+	// Newest-wins cases.
+	for _, ut := range []string{"谁会写代码", "都介绍下自己", "大家好", "@代码 帮我改", "通过选择不同心情生成不同svg"} {
+		if !looksLikeNewAsk(ut) {
+			t.Fatalf("want looksLikeNewAsk true for %q", ut)
+		}
+	}
+	// Short unmarked / marker continuations — NOT new (soft or follow_up path).
+	for _, ut := range []string{"为什么不能", "我自己用 不传播", "好，最后落地成小工具。", "修改下，换成动物的表情"} {
+		if looksLikeNewAsk(ut) {
+			t.Fatalf("want looksLikeNewAsk false for sticky %q", ut)
+		}
+	}
+	if !looksLikeFollowUp("修改下，换成动物的表情") {
+		t.Fatal("marker short must looksLikeFollowUp")
+	}
+	if looksLikeFollowUp("为什么不能") {
+		t.Fatal("unmarked short must not hard follow_up (soft instead)")
 	}
 }
 
