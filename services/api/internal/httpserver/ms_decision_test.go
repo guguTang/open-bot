@@ -85,7 +85,7 @@ func TestAutoPickMicrosoftDecisionPicksCoder(t *testing.T) {
 	srv, calls := fakeMSDecision(t, 200, coderPick(0.9))
 	ms := msBinding(t, srv.URL, 0.6)
 	deps := &autoPickDecisionDeps{Provider: "microsoft", Microsoft: true, Decide: microsoftAutoPickDecide(ms)}
-	got := runAutoPickByMode(db.AutoPickDecision, "帮我写个函数", members, agents, "lead", 1, "", deps)
+	got := runAutoPickByMode(db.AutoPickDecision, "帮我写代码修 bug", members, agents, "lead", 1, "", deps)
 	if got.Method != "decision" || len(got.AgentIDs) != 1 || got.AgentIDs[0] != "coder" {
 		t.Fatalf("got %#v", got)
 	}
@@ -107,7 +107,7 @@ func TestAutoPickMicrosoftDecisionFallbacks(t *testing.T) {
 		// Even if a legacy fn is accidentally composed, exclusive microsoftAutoPickDecide must not call it.
 		_ = legacy
 		deps := &autoPickDecisionDeps{Provider: "microsoft", Microsoft: true, Decide: microsoftAutoPickDecide(msBinding(t, srv.URL, 0.6))}
-		got := runAutoPickByMode(db.AutoPickDecision, "帮我写个函数", members, agents, "lead", 1, "", deps)
+		got := runAutoPickByMode(db.AutoPickDecision, "帮我写代码修 bug", members, agents, "lead", 1, "", deps)
 		if legacyCalls != 0 || got.Method != "decision->heuristic" || got.AgentIDs[0] != "coder" {
 			t.Fatalf("legacy=%d got=%#v", legacyCalls, got)
 		}
@@ -118,7 +118,7 @@ func TestAutoPickMicrosoftDecisionFallbacks(t *testing.T) {
 		var legacyCalls int32
 		_ = legacyCalls
 		deps := &autoPickDecisionDeps{Provider: "microsoft", Microsoft: true, Decide: microsoftAutoPickDecide(msBinding(t, srv.URL, 0))}
-		got := runAutoPickByMode(db.AutoPickDecision, "帮我写个函数", members, agents, "lead", 1, "", deps)
+		got := runAutoPickByMode(db.AutoPickDecision, "帮我写代码修 bug", members, agents, "lead", 1, "", deps)
 		if got.Method != "decision->heuristic" || got.AgentIDs[0] != "coder" {
 			t.Fatalf("got %#v", got)
 		}

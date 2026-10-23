@@ -59,7 +59,7 @@ func TestDecisionPayloadWithTurnsAddsIntentAndBound(t *testing.T) {
 	members, agents := intentTestGroup()
 	tc := buildAutoPickTurnContext(intentTestMsgs(), nil, members, 4)
 	tc.OpenTask = &autoPickOpenTask{AgentID: "coder", Goal: "做成小工具"}
-	_, q, st := buildAutoPickDecisionPayloadWithTurns("为什么", members, agents, "", false, tc)
+	_, q, st := buildAutoPickDecisionPayloadWithTurns("为什么", members, agents, "", tc)
 	intent, ok := q[autoPickIntentQKey].(map[string]any)
 	if !ok || intent["type"] != "choice" {
 		t.Fatalf("intent choice question missing: %#v", q)
@@ -87,7 +87,7 @@ func TestDecisionPayloadWithTurnsAddsIntentAndBound(t *testing.T) {
 		t.Fatalf("state must carry open task: %s", st)
 	}
 	// No turns → no follow_up class, no bound question.
-	_, q2, _ := buildAutoPickDecisionPayloadWithTurns("hi", members, agents, "", false, &autoPickTurnContext{})
+	_, q2, _ := buildAutoPickDecisionPayloadWithTurns("hi", members, agents, "", &autoPickTurnContext{})
 	if _, has := q2[autoPickBoundQKey]; has {
 		t.Fatal("bound question needs prior turns")
 	}
@@ -95,7 +95,7 @@ func TestDecisionPayloadWithTurnsAddsIntentAndBound(t *testing.T) {
 		t.Fatal("follow_up class requires prior turns")
 	}
 	// Legacy (nil tc): no intent questions.
-	_, q3, _ := buildAutoPickDecisionPayload("hi", members, agents, "User: x", false)
+	_, q3, _ := buildAutoPickDecisionPayload("hi", members, agents, "User: x")
 	if _, has := q3[autoPickIntentQKey]; has {
 		t.Fatal("nil turn context keeps the legacy pick/count schema")
 	}
@@ -301,11 +301,11 @@ func TestTargetsOnlyTaskOwner(t *testing.T) {
 func TestOpenTaskCancelIsModelClassified(t *testing.T) {
 	members, agents := intentTestGroup()
 	tc := &autoPickTurnContext{OpenTask: &autoPickOpenTask{AgentID: "coder", Goal: "贪吃蛇小游戏"}}
-	_, q, _ := buildAutoPickDecisionPayloadWithTurns("x", members, agents, "", false, tc)
+	_, q, _ := buildAutoPickDecisionPayloadWithTurns("x", members, agents, "", tc)
 	if c := q[autoPickIntentQKey].(map[string]any)["criteria"].(map[string]string); c[autoPickIntentCancel] == "" {
 		t.Fatal("cancel_task class must be offered while a task is open")
 	}
-	_, q2, _ := buildAutoPickDecisionPayloadWithTurns("x", members, agents, "", false, &autoPickTurnContext{Turns: []autoPickTurn{{Key: "t1", UserText: "hi"}}})
+	_, q2, _ := buildAutoPickDecisionPayloadWithTurns("x", members, agents, "", &autoPickTurnContext{Turns: []autoPickTurn{{Key: "t1", UserText: "hi"}}})
 	if c := q2[autoPickIntentQKey].(map[string]any)["criteria"].(map[string]string); c[autoPickIntentCancel] != "" {
 		t.Fatal("cancel_task needs an open task")
 	}
