@@ -369,3 +369,93 @@ func TestLowConfidencePickKeptWhenIntentIsNotAllHands(t *testing.T) {
 		t.Fatalf("without an intent answer low confidence still fail-opens, got %#v", got)
 	}
 }
+
+func TestPriorAllHandsRaisesBarForRepeatingAll(t *testing.T) {
+	members, agents := intentTestGroup()
+	// Newest turn answered by everyone — structured prior-all-hands.
+	tc := &autoPickTurnContext{Turns: []autoPickTurn{
+		{Key: "t1", UserText: "大家都说说怎么改进", AnswerIDs: []string{"writer", "coder", "pm"}},
+	}}
+	if !tc.newestWasAllHands(len(members)) {
+		t.Fatal("expected newestWasAllHands")
+	}
+	// Lukewarm all_hands (0.65) + pick=all must NOT wake the room after an all-hands prior
+	// (bar raised to 0.8); remap to top mN.
+	deps := decideWith(map[string]any{
+		"pick":   choiceAns("all", map[string]any{"all": "0.7", "m2": "0.2", "m0": "0.05", "m1": "0.05"}),
+		"intent": choiceAns("all_hands", map[string]any{"all_hands": "0.65", "new_ask": "0.3"}),
+		"count":  map[string]any{"noul": 1.0},
+	})
+	got := runAutoPickByModeWithTurns(db.AutoPickDecision, "帮我想想下个版本做什么", members, agents, "writer", 1, "", deps, tc)
+	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != "pm" {
+		t.Fatalf("after all-hands, weak all_hands+pick=all must remap to top member, got %#v", got)
+	}
+	// Same lukewarm signal WITHOUT prior all-hands: intent all_hands ≥0.6 still allows pick=all.
+	cold := decideWith(map[string]any{
+		"pick":   choiceAns("all", map[string]any{"all": "0.7", "m2": "0.2"}),
+		"intent": choiceAns("all_hands", map[string]any{"all_hands": "0.65"}),
+		"count":  map[string]any{"noul": 1.0},
+	})
+	got = runAutoPickByModeWithTurns(db.AutoPickDecision, "大家都说说怎么改进", members, agents, "writer", 1, "", cold, &autoPickTurnContext{})
+	if len(got.AgentIDs) != len(members) {
+		t.Fatalf("cold all_hands at 0.65 may still expand the roster, got %#v", got)
+	}
+	_, _, st := buildAutoPickDecisionPayloadWithTurns("下个版本", members, agents, "", tc)
+	if !strings.Contains(st, "newest answered turn was ALL-HANDS") {
+		t.Fatalf("state must warn after all-hands prior: %s", st)
+	}
+}
+
+func TestNewAskClampsSpecialtyCoPick(t *testing.T) {
+	members, agents := intentTestGroup()
+	deps := decideWith(map[string]any{
+		"pick": choiceAns("m0", map[string]any{"m0": "0.5", "m1": "0.45", "m2": "0.05"}),
+		"intent": choiceAns("new_ask", map[string]any{"new_ask": "0.85"}),
+		// count omitted → mapping may keep both above-floor mNs; clamp must drop to one.
+	})
+	got := runAutoPickByModeWithTurns(db.AutoPickDecision, "给这个功能写篇推广文案", members, agents, "writer", 2, "", deps, &autoPickTurnContext{})
+	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != "writer" {
+		t.Fatalf("confident new_ask must clamp co-picks to the top specialist, got %#v", got)
+	}
+}
+
+func TestDecideFailOpenStickyToSingleNewestAnswerer(t *testing.T) {
+	members, agents := intentTestGroup()
+	tc := &autoPickTurnContext{Turns: []autoPickTurn{
+		{Key: "t1", UserText: "你来当主持人开场", AnswerIDs: []string{"pm"}},
+	}}
+	deps := &autoPickDecisionDeps{
+		Provider: "laya",
+		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+	got := runAutoPickByModeWithTurns(db.AutoPickDecision, "我选择往左边走", members, agents, "writer", 1, "", deps, tc)
+	if got.Method != "decision->heuristic" || len(got.AgentIDs) != 1 || got.AgentIDs[0] != "pm" {
+		t.Fatalf("decide fail after single host must sticky, got %#v", got)
+	}
+	if got.AllowSecondFailOpen || !got.LeadFallback["pm"] {
+		t.Fatalf("sticky fail-open must LeadFallback host, got %#v", got)
+	}
+	// Whole-room prior → no sticky; cold fail-open still expands to all.
+	allTC := &autoPickTurnContext{Turns: []autoPickTurn{
+		{Key: "t1", UserText: "大家都介绍下", AnswerIDs: []string{"writer", "coder", "pm"}},
+	}}
+	got = runAutoPickByModeWithTurns(db.AutoPickDecision, "大家好", members, agents, "writer", 1, "", deps, allTC)
+	if got.Fallback != "all" || len(got.AgentIDs) != len(members) {
+		t.Fatalf("decide fail after all-hands prior still expands to all, got %#v", got)
+	}
+}
+
+func TestOpenTaskStateIncludesStatusAndCancelGuidance(t *testing.T) {
+	members, agents := intentTestGroup()
+	tc := &autoPickTurnContext{OpenTask: &autoPickOpenTask{AgentID: "coder", Goal: "贪吃蛇小游戏", Status: "running"}}
+	_, q, st := buildAutoPickDecisionPayloadWithTurns("算了先别做了", members, agents, "", tc)
+	crit := q[autoPickIntentQKey].(map[string]any)["criteria"].(map[string]string)
+	if !strings.Contains(crit[autoPickIntentCancel], "ABANDON") || !strings.Contains(crit[autoPickIntentCancel], "加一个暂停键") {
+		t.Fatalf("cancel criteria must contrast abandon vs feature-ask: %#v", crit[autoPickIntentCancel])
+	}
+	if !strings.Contains(st, "[running]") || !strings.Contains(st, "cancel_task") {
+		t.Fatalf("state must carry status + cancel routing: %s", st)
+	}
+}

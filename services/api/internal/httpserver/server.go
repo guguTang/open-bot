@@ -2173,7 +2173,7 @@ func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []s
 			if agentID == "" {
 				agentID = conv.AgentID
 			}
-			openTask = &autoPickOpenTask{AgentID: agentID, Goal: open.Goal}
+			openTask = &autoPickOpenTask{AgentID: agentID, Goal: open.Goal, Status: open.Status}
 			if conv.ChannelID == "" {
 				out := openTaskSendPlan(agentID)
 				log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)

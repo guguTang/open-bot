@@ -480,14 +480,34 @@ func runAutoPickByModeWithTurns(mode, userText string, members []string, agents 
 		// would have returned choice=all (Langfuse cf23 「大家好」 7.3s vs 8s client
 		// timeout) does not collapse the room to a single lead reply.
 		h := autoPickHeuristicAs("decision->heuristic", userText, members, agents, leadID, k, synopsis)
-		// Lead-only still expands to all (cf23 all-hands decide timeout) so the room is
-		// not collapsed to a single lead. Do NOT LeadFallback everyone: this is a broad
-		// path when intent is unknown — unrelated bots must still [PASS] via candidacy.
-		// True all-hands with successful choice=all still LeadFallbacks. A single
-		// specialty hit recovered via Recent-context synopsis (FOLLOW-UP + prior specialty
-		// USER ask) must NOT be dumped to everyone — that is the fail-open-all trap.
-		// No synonym / who-can phrase gates: keep a confident heuristic specialty hit;
-		// expand lead / low-confidence singles to the whole room (all-hands decide timeout).
+		// Keep a confident heuristic specialty hit (name/role token overlap).
+		if h.Fallback == "" && h.Confidence >= autoPickConfidenceFloor && len(h.AgentIDs) > 0 {
+			return h
+		}
+		// Decide died mid-thread after a single host/specialist answered: stick to them
+		// (RPG / specialty continuity). Do NOT sticky after a whole-room turn — that path
+		// falls through to room-wide fail-open below (cf23-style).
+		if sticky := func() []string {
+			if tc == nil {
+				return nil
+			}
+			return tc.singleNewestAnswerers(members)
+		}(); len(sticky) > 0 {
+			leadFB := map[string]bool{}
+			for _, id := range sticky {
+				leadFB[id] = true
+			}
+			log.Printf("auto_pick=decision->heuristic ids=%v conf=0.55 fallback= note=decide_fail_sticky_newest", sticky)
+			return groupAutoPickResult{
+				AgentIDs:            sticky,
+				Confidence:          0.55,
+				Method:              "decision->heuristic",
+				LeadFallback:        leadFB,
+				AllowSecondFailOpen: false,
+			}
+		}
+		// Lead-only / empty: expand to all (cf23 all-hands decide timeout on a cold turn).
+		// Do NOT LeadFallback everyone — candidacy [PASS] stays available.
 		if h.Fallback == "lead" || (len(h.AgentIDs) <= 1 && len(members) > 1 && h.Confidence < autoPickConfidenceFloor) {
 			out := copyStringSlice(members)
 			log.Printf("auto_pick=decision->heuristic ids=%v conf=0.00 fallback=all note=decide_fail_all_hands_failopen", out)

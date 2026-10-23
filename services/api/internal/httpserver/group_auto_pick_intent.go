@@ -81,6 +81,8 @@ type autoPickTurnContext struct {
 type autoPickOpenTask struct {
 	AgentID string
 	Goal    string
+	// Status is queued|running from conversation_tasks (structured cancel vs follow_up signal).
+	Status string
 }
 
 func (c *autoPickTurnContext) turn(key string) *autoPickTurn {
@@ -106,6 +108,45 @@ func (c *autoPickTurnContext) newestAnsweredTurn() string {
 		}
 	}
 	return ""
+}
+
+// newestWasAllHands is true when the latest answered turn woke (nearly) the whole roster.
+// Structured signal only — used to raise the bar for repeating all_hands on the next ask.
+func (c *autoPickTurnContext) newestWasAllHands(memberCount int) bool {
+	if c == nil || memberCount <= 1 {
+		return false
+	}
+	t := c.turn(c.newestAnsweredTurn())
+	if t == nil || len(t.AnswerIDs) == 0 {
+		return false
+	}
+	return len(t.AnswerIDs) >= memberCount
+}
+
+// singleNewestAnswerers returns the bots that alone answered the newest turn, or nil when
+// nobody / the whole room answered. Used for decide fail-open sticky (no phrase lists).
+func (c *autoPickTurnContext) singleNewestAnswerers(members []string) []string {
+	if c == nil || len(members) <= 1 {
+		return nil
+	}
+	t := c.turn(c.newestAnsweredTurn())
+	if t == nil || len(t.AnswerIDs) == 0 {
+		return nil
+	}
+	memberSet := map[string]struct{}{}
+	for _, m := range members {
+		memberSet[strings.TrimSpace(m)] = struct{}{}
+	}
+	var ids []string
+	for _, id := range t.AnswerIDs {
+		if _, ok := memberSet[id]; ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 || len(ids) >= len(members) {
+		return nil
+	}
+	return orderIDsByMembers(ids, members)
 }
 
 // buildAutoPickTurnContext groups the main timeline into user turns. The just-saved
@@ -203,7 +244,7 @@ func addTurnIntentQuestions(questions map[string]any, b *strings.Builder, tc *au
 		autoPickIntentWhoCan:   "Asks WHICH member(s) can do one specific skill (capability census). e.g. 「谁会写代码」「谁能做设计」「who can write SQL」",
 	}
 	if hasTask {
-		intentCriteria[autoPickIntentCancel] = "Asks to stop / cancel / drop the background task that is still in progress (「别做了」「先停下」「取消吧」). A feature request that merely mentions pause/stop (e.g. 「加一个暂停键」) is follow_up, not cancel_task."
+		intentCriteria[autoPickIntentCancel] = "User wants the owner to ABANDON the background task listed below — stop working, do not deliver. Soft drop-offs count (「算了，后台那个先别做了」「这个先不做了」「别做了」「先停下」「取消吧」). NOT cancel_task: asking whether it is done, or requesting a NEW feature to add into that same task (「做好了吗」「加一个暂停键」「顺便加上…」) — those are follow_up bound=task."
 	}
 	if !hasTurns {
 		// Nothing to continue — follow_up is not a valid class.
@@ -256,11 +297,18 @@ func addTurnIntentQuestions(questions map[string]any, b *strings.Builder, tc *au
 		b.WriteString("\n")
 	}
 	if hasTask {
-		b.WriteString("Background task still in progress (owner ")
+		b.WriteString("Background task still in progress")
+		if st := strings.TrimSpace(tc.OpenTask.Status); st != "" {
+			b.WriteString(" [")
+			b.WriteString(st)
+			b.WriteString("]")
+		}
+		b.WriteString(" (owner ")
 		b.WriteString(memberKeyLabel(tc.OpenTask.AgentID, idToKey, agents))
 		b.WriteString("): 「")
 		b.WriteString(clipRunes(tc.OpenTask.Goal, autoPickTurnTextClip))
-		b.WriteString("」 — only messages about that task go to its owner; unrelated asks go to the best-matching member.\n")
+		b.WriteString("」 — messages that continue or add features to THAT goal → follow_up + bound=task (owner); " +
+			"messages that abandon it → cancel_task (owner); unrelated new asks → best-matching member (task keeps running).\n")
 	}
 	if tc.ReplyToTurn != "" {
 		b.WriteString("The user explicitly quoted (clicked reply on) a message from turn ")
@@ -271,8 +319,15 @@ func addTurnIntentQuestions(questions map[string]any, b *strings.Builder, tc *au
 		}
 		b.WriteString(".\n")
 	}
+	if tc.newestWasAllHands(len(idToKey)) {
+		b.WriteString("NOTE: the newest answered turn was ALL-HANDS (every member spoke). " +
+			"Do NOT default this turn to all_hands / choice=\"all\" unless the User message ITSELF explicitly asks everyone again; " +
+			"a single specialty / host / product ask after an all-hands round is new_ask.\n")
+	}
 	b.WriteString("If the User message continues the SAME work of a listed turn, pick the bot that answered it; " +
-		"if it asks for a different kind of work about that result (copy, design, research, planning), pick the member whose role fits that work.")
+		"if it asks for a different kind of work about that result (copy, design, research, planning), pick the member whose role fits that work. " +
+		"intent=follow_up + a bound turn → stick to that turn's answerer mN (ignore specialty words that only appear inside the fiction or the tweak). " +
+		"intent=new_ask → newest wins; prefer the specialty profile that matches the new deliverable over any prior sticky host.")
 }
 
 func answeredBySuffix(t autoPickTurn, idToKey map[string]string, agents []*db.Agent) string {
@@ -411,13 +466,19 @@ func turnIntentWantsAll(ti autoPickTurnIntent) bool {
 
 // pickAllAllowed decides whether a pick-head choice=all may stand, given the intent head.
 // No intent answer (legacy schema / provider ignored the question) keeps the old rule.
-func pickAllAllowed(ti autoPickTurnIntent, pickAllConf float64) bool {
+// priorAllHands: newest answered turn woke the whole roster — require near-certainty to
+// repeat all_hands (small models leak all_hands at ~0.5–0.6 into the next specialty ask).
+func pickAllAllowed(ti autoPickTurnIntent, pickAllConf float64, priorAllHands bool) bool {
+	allHandsBar := autoPickIntentStrongConf
+	if priorAllHands {
+		allHandsBar = autoPickAllHandsStrongConf
+	}
 	switch {
 	case ti.Intent == "":
 		return true
 	case ti.Intent == autoPickIntentWhoCan:
 		return true // census mapping narrows "all" to the capable subset itself
-	case ti.Intent == autoPickIntentAllHands && ti.IntentConf >= autoPickIntentStrongConf:
+	case ti.Intent == autoPickIntentAllHands && ti.IntentConf >= allHandsBar:
 		return true
 	case turnIntentRejectsAll(ti):
 		return false

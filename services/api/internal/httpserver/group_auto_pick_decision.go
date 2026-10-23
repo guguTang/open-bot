@@ -153,12 +153,14 @@ func autoPickDecisionWithTurns(ctx context.Context, deps *autoPickDecisionDeps, 
 	// Cross-check the pick head against the intent head (pickAllAllowed): "all" stands only
 	// when the intent head agrees (all_hands / who_can) or is undecided and pick=all is
 	// near-certain; otherwise narrow to the most probable member.
+	// After an all-hands prior turn, require near-certainty to repeat all_hands.
+	priorAllHands := tc != nil && tc.newestWasAllHands(len(members))
 	pickRaw, _ := answers[autoPickDecisionQKey].(map[string]any)
 	pickChoice, pickProbs := decisionPickMeta(answers)
 	if !whoCan && pickRaw != nil && strings.EqualFold(pickChoice, autoPickDecisionAllKey) &&
-		!pickAllAllowed(turnIntent, autoPickDecisionConfidence(pickRaw, pickChoice, pickProbs)) {
+		!pickAllAllowed(turnIntent, autoPickDecisionConfidence(pickRaw, pickChoice, pickProbs), priorAllHands) {
 		if remapped, okr := answersWithoutAllChoice(answers); okr {
-			log.Printf("auto_pick=decision note=all_rejected_by_intent intent=%s(%.2f)", turnIntent.Intent, turnIntent.IntentConf)
+			log.Printf("auto_pick=decision note=all_rejected_by_intent intent=%s(%.2f) prior_all_hands=%v", turnIntent.Intent, turnIntent.IntentConf, priorAllHands)
 			answers = remapped
 		}
 	}
@@ -185,7 +187,8 @@ func autoPickDecisionWithTurns(ctx context.Context, deps *autoPickDecisionDeps, 
 	}
 	// FOLLOW-UP (model intent + bound turn): the bot(s) that answered the bound turn keep
 	// the task. LeadFallback (must answer) + closed second-wave so a [PASS] cannot hand
-	// the follow-up to an unrelated peer.
+	// the follow-up to an unrelated peer. Specialty words in the follow-up text are ignored
+	// once intent+bound are confident — the bound answerer wins.
 	if sticky := stickyFollowUpTargets(turnIntent, tc, members, ids); len(sticky) > 0 {
 		if turnIntent.IntentConf > conf {
 			conf = turnIntent.IntentConf
@@ -203,6 +206,13 @@ func autoPickDecisionWithTurns(ctx context.Context, deps *autoPickDecisionDeps, 
 			AllowSecondFailOpen: false,
 			TaskIntentJudged:    taskJudged,
 		}, true
+	}
+	// new_ask with a clear intent: one deliverable → one specialist. Drop soft co-picks
+	// from diluted mN probabilities (writer+coder both ~0.45 on a copy ask).
+	if !whoCan && !allSelected && turnIntent.Intent == autoPickIntentNewAsk &&
+		turnIntent.IntentConf >= autoPickIntentStrongConf && len(ids) > 1 {
+		log.Printf("auto_pick=decision ids=%v→%v conf=%.2f note=new_ask_clamp_single intent=%.2f", ids, ids[:1], conf, turnIntent.IntentConf)
+		ids = ids[:1]
 	}
 	// Intent head confidently says the whole room should speak → everyone (explicit
 	// all-hands classification, even when the pick head parked on one mN).
@@ -343,7 +353,8 @@ func buildAutoPickDecisionPayloadWithTurns(userText string, members []string, ag
 		"Includes the player's next in-world move while a member is hosting a game/story (「我选择…」「我拿起火把看看…」) — stick to that host mN; " +
 		"do NOT reclassify fiction look/read as research SPECIALTY. " +
 		"Pick the bot that answered that turn (same mN) unless its role is a hard mismatch; count near one specialist; NEVER choice=\"all\".\n" +
-		"INTERRUPT: a new self-contained ask (new SPECIALTY / WHO-CAN / ALL-HANDS) — newest wins; ignore unfinished prior asks.\n" +
+		"INTERRUPT: a new self-contained ask (new SPECIALTY / WHO-CAN / ALL-HANDS) — newest wins; ignore unfinished prior asks and any prior sticky host.\n" +
+		"After an ALL-HANDS round: the next specialty/host ask is SPECIALTY or a single host — NEVER reuse choice=\"all\" unless this message itself asks everyone again.\n" +
 		"SINGLE / vague: one best-matching profile, or the generalist. When several specialists fit, set count and probabilities for a multi subset (not only all-or-one). " +
 		"Reserve choice=\"all\" for ALL-HANDS only — not SPECIALTY or FOLLOW-UP."
 
