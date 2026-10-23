@@ -183,12 +183,14 @@ func (s *Server) handleAgentBusWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // deliverAgentMessage inserts a bus message, pushes WS, and optionally wakes targets.
+// conversationID pins the HandoffCard to the sender's live session when known.
 func (s *Server) deliverAgentMessage(
 	userID, fromAgentID string,
 	toAgentID, channelID *string,
 	priority bool,
 	body string,
 	replyToID *string,
+	conversationID string,
 ) (*db.AgentBusMessage, error) {
 	m, err := s.db.PostAgentMessage(userID, fromAgentID, toAgentID, channelID, priority, body, replyToID)
 	if err != nil {
@@ -201,7 +203,7 @@ func (s *Server) deliverAgentMessage(
 		s.schedulePriorityWake(userID, m)
 	}
 	// P1 projection: visible Bot↔Bot handoff → current session timeline (not model history).
-	s.projectHandoffAfterBusWrite(userID, m)
+	s.projectHandoffAfterBusWriteAt(userID, m, conversationID)
 	return m, nil
 }
 
@@ -225,13 +227,14 @@ func (s *Server) requireInternal(next http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) handleInternalPostAgentBusMessage(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		UserID      string `json:"user_id"`
-		FromAgentID string `json:"from_agent_id"`
-		ToAgentID   string `json:"to_agent_id"`
-		ChannelID   string `json:"channel_id"`
-		Priority    bool   `json:"priority"`
-		Body        string `json:"body"`
-		ReplyToID   string `json:"reply_to_id"`
+		UserID         string `json:"user_id"`
+		FromAgentID    string `json:"from_agent_id"`
+		ToAgentID      string `json:"to_agent_id"`
+		ChannelID      string `json:"channel_id"`
+		ConversationID string `json:"conversation_id"`
+		Priority       bool   `json:"priority"`
+		Body           string `json:"body"`
+		ReplyToID      string `json:"reply_to_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -264,7 +267,7 @@ func (s *Server) handleInternalPostAgentBusMessage(w http.ResponseWriter, r *htt
 			return
 		}
 	}
-	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, replyPtr)
+	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, replyPtr, body.ConversationID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

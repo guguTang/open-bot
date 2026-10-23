@@ -49,6 +49,7 @@ def _post_via_api(
     to_agent_id: str | None,
     channel_id: str | None,
     priority: bool,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     url = f"{_api_base()}/internal/agent-bus/messages"
     payload = {
@@ -61,6 +62,8 @@ def _post_via_api(
         payload["to_agent_id"] = to_agent_id
     if channel_id:
         payload["channel_id"] = channel_id
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -143,6 +146,7 @@ def project_handoff_note(
     status: str,
     agent_message_id: str,
     conversation_id: str | None = None,
+    channel_id: str | None = None,
     thread_root_id: str | None = None,
     viewer_agent_id: str | None = None,
     skip_if_projected: bool = True,
@@ -169,6 +173,8 @@ def project_handoff_note(
     }
     if conversation_id:
         payload["conversation_id"] = conversation_id.strip()
+    if channel_id:
+        payload["channel_id"] = channel_id.strip()
     if thread_root_id:
         payload["thread_root_id"] = thread_root_id.strip()
     if viewer_agent_id:
@@ -223,24 +229,30 @@ def send_agent_message(
             to_agent_id=to_agent_id,
             channel_id=channel_id,
             priority=priority,
+            conversation_id=conversation_id,
         )
         # P1: project visible handoff onto user timeline (API also hooks; skip_if_projected).
+        # Projection errors must not flip a successful bus send into a tool failure —
+        # that previously pushed the model to fall back to ask_agent (H7).
         if to_agent_id and out.get("id"):
-            status = "running" if priority else "done"
-            proj = project_handoff_note(
-                user_id=user_id,
-                from_bot=from_agent_id,
-                to_bot=to_agent_id,
-                purpose=body,
-                status=status,
-                agent_message_id=str(out["id"]),
-                viewer_agent_id=from_agent_id,
-                conversation_id=conversation_id,
-                channel_id=channel_id,
-                skip_if_projected=True,
-            )
-            if proj:
-                out["_handoff_projection"] = proj
+            try:
+                status = "running" if priority else "done"
+                proj = project_handoff_note(
+                    user_id=user_id,
+                    from_bot=from_agent_id,
+                    to_bot=to_agent_id,
+                    purpose=body,
+                    status=status,
+                    agent_message_id=str(out["id"]),
+                    viewer_agent_id=from_agent_id,
+                    conversation_id=conversation_id,
+                    channel_id=channel_id,
+                    skip_if_projected=True,
+                )
+                if proj:
+                    out["_handoff_projection"] = proj
+            except Exception as proj_err:  # noqa: BLE001
+                out["_handoff_projection"] = {"error": str(proj_err), "skipped": True}
         return out
     except Exception as api_err:
         fallback = (os.getenv("OPENBOT_BUS_PG_FALLBACK") or "").strip().lower() in {
@@ -262,19 +274,22 @@ def send_agent_message(
         )
         out["_api_error"] = str(api_err)
         if to_agent_id and out.get("id"):
-            status = "running" if priority else "done"
-            proj = project_handoff_note(
-                user_id=user_id,
-                from_bot=from_agent_id,
-                to_bot=to_agent_id,
-                purpose=body,
-                status=status,
-                agent_message_id=str(out["id"]),
-                viewer_agent_id=from_agent_id,
-                conversation_id=conversation_id,
-                channel_id=channel_id,
-                skip_if_projected=True,
-            )
-            if proj:
-                out["_handoff_projection"] = proj
+            try:
+                status = "running" if priority else "done"
+                proj = project_handoff_note(
+                    user_id=user_id,
+                    from_bot=from_agent_id,
+                    to_bot=to_agent_id,
+                    purpose=body,
+                    status=status,
+                    agent_message_id=str(out["id"]),
+                    viewer_agent_id=from_agent_id,
+                    conversation_id=conversation_id,
+                    channel_id=channel_id,
+                    skip_if_projected=True,
+                )
+                if proj:
+                    out["_handoff_projection"] = proj
+            except Exception as proj_err:  # noqa: BLE001
+                out["_handoff_projection"] = {"error": str(proj_err), "skipped": True}
         return out

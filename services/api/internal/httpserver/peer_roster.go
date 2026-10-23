@@ -52,9 +52,12 @@ func peerRosterBlock(selfID string, agents []*db.Agent, excludeIDs ...string) (s
 		return "", false
 	}
 	return "同事名单（同一账户里、且不在当前群里的其他助手。当前群成员由 Auto选人 / @ 调度，不要对他们调用 ask_agent。" +
-		"只在用户点名名单中的某位，或问题落在对方岗位描述里而你的岗位盖不住时，调用 ask_agent 问其中一位。一次只问一个。" +
-		"你能做、两边都能做、闲聊、名单里没有对口的人，不要问。同事的回复已经出现在当前会话里，不要把那段话再写一遍。" +
-		"若回复带 needs_user，或是在追问只有用户知道的细节：问题已经展示给用户，停下来等用户回答，不要替用户选定，不要复述问题，也不要用猜的内容再调用 ask_agent）：\n" + strings.Join(lines, "\n"), true
+		"两条路径：" +
+		"（1）问答咨询——你仍负责回用户：用户点名名单中的某位，或问题落在对方岗位描述里而你的岗位盖不住时，调用 ask_agent 问其中一位，一次只问一个；" +
+		"（2）移交任务——用户要对方接手/接管工作：调用 send_to_agent（to_agent_id=名单 id，priority=true，body 写清任务），不要用 ask_agent 代替交接。" +
+		"你能做、两边都能做、闲聊、名单里没有对口的人，不要问也不要交接。" +
+		"ask_agent 同事的回复已经出现在当前会话里，不要把那段话再写一遍。" +
+		"若 ask_agent 回复带 needs_user，或是在追问只有用户知道的细节：问题已经展示给用户，停下来等用户回答，不要替用户选定，不要复述问题，也不要用猜的内容再调用 ask_agent）：\n" + strings.Join(lines, "\n"), true
 }
 
 // peerRosterSystem appends the roster when this turn may ask a colleague.

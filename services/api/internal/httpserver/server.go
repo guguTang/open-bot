@@ -2933,7 +2933,7 @@ func (s *Server) handlePostAgentBusMessage(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, nil)
+	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, nil, "")
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})

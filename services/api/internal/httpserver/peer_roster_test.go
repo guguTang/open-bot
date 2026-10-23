@@ -26,6 +26,12 @@ func TestPeerRosterSkipsSelfAndBlankDescription(t *testing.T) {
 	if !strings.Contains(block, "不在当前群里") {
 		t.Fatalf("roster should describe out-of-group peers: %s", block)
 	}
+	if !strings.Contains(block, "send_to_agent") || !strings.Contains(block, "移交任务") {
+		t.Fatalf("roster must teach handoff via send_to_agent: %s", block)
+	}
+	if !strings.Contains(block, "问答咨询") {
+		t.Fatalf("roster must distinguish consult vs handoff: %s", block)
+	}
 }
 
 func TestPeerRosterCapsAtTwelve(t *testing.T) {

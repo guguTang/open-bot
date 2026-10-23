@@ -253,6 +253,13 @@ def format_tools_routing_block(*, tools_enabled: bool, available_tool_names: lis
             "默认会复制本助手专属记忆（copy_memory 默认 true）；当新任务与过去工作相关或设置了 follow_up 时必定复制记忆，"
             "以便副本承接旧上下文；例行任务只在用户要求时复制；完成后告诉用户新助手名称，它已出现在左侧助手列表。群聊里不要复制。"
         )
+    if "send_to_agent" in names or "ask_agent" in names:
+        lines.append(
+            "同事协作：ask_agent = 同步问答咨询（你仍负责回用户）；"
+            "send_to_agent(priority=true) = 移交任务所有权让对方接手。"
+            "用户要对方接管/继续做时用 send_to_agent，不要用 ask_agent 代替；"
+            "只需对方意见、你继续主导时用 ask_agent。"
+        )
     lines.append(
         "Skills：目录有匹配技能时，动手（工具/本机命令）前必须 load_skill(name)，读完自己执行；"
         "无匹配则不必 load；禁止每条回复无条件 load；load_skill 不会自动跑脚本。"

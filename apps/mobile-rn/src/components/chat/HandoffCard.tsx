@@ -99,6 +99,12 @@ export function HandoffCard({
         </Typography.Paragraph>
       ) : null}
 
+      {status === "failed" && payload.error ? (
+        <Typography.Paragraph className="text-xs text-danger">
+          {payload.error}
+        </Typography.Paragraph>
+      ) : null}
+
       {payload.agent_message_id ? (
         <Pressable
           accessibilityRole="button"
@@ -120,6 +126,7 @@ export function HandoffCard({
             `status: ${status}`,
             `from: ${payload.from_bot || "?"}`,
             `to: ${payload.to_bot || "?"}`,
+            ...(payload.error ? [`error: ${payload.error}`] : []),
           ].map((line) => (
             <Typography.Paragraph
               key={line}

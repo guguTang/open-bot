@@ -2681,6 +2681,14 @@ dialog.thread-panel:not([open]) {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.handoff-error {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger, #c0392b);
+  word-break: break-word;
+}
 .handoff-detail-btn {
   margin-top: 8px;
   border: none;

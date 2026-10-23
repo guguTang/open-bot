@@ -585,6 +585,8 @@ type HandoffPayload struct {
 	Purpose        string `json:"purpose"`
 	Status         string `json:"status"` // running|done|failed|rejected|awaiting_approval
 	AgentMessageID string `json:"agent_message_id"`
+	// Error is a short failure detail when Status=failed (upstream/timeout); omitempty.
+	Error string `json:"error,omitempty"`
 }
 
 // AddMessageOpts carries optional thread fields when inserting a message.
@@ -1462,8 +1464,17 @@ func (d *DB) HasHandoffForAgentMessage(agentMessageID string) (bool, error) {
 
 // UpdateHandoffStatus rewrites status inside an existing handoff note (by agent_message_id).
 func (d *DB) UpdateHandoffStatus(agentMessageID, status string) (*Message, error) {
+	return d.UpdateHandoffStatusDetail(agentMessageID, status, "")
+}
+
+// UpdateHandoffStatusDetail sets status and optional failure detail on a handoff note.
+// When status is not "failed", Error is cleared. Empty detail leaves Error unchanged
+// only if status stays failed and detail is intentionally blank-clear — callers pass
+// detail on failure; success clears it.
+func (d *DB) UpdateHandoffStatusDetail(agentMessageID, status, detail string) (*Message, error) {
 	agentMessageID = strings.TrimSpace(agentMessageID)
 	status = strings.TrimSpace(status)
+	detail = strings.TrimSpace(detail)
 	row := d.SQL.QueryRow(
 		`SELECT id, conversation_id, role, content, COALESCE(agent_id,''),
 		        COALESCE(reply_to_id,''), COALESCE(thread_root_id,''), created_at,
@@ -1483,6 +1494,18 @@ func (d *DB) UpdateHandoffStatus(agentMessageID, status string) (*Message, error
 		return nil, err
 	}
 	hp.Status = status
+	if status == "failed" {
+		if detail != "" {
+			// Cap for card readability.
+			runes := []rune(detail)
+			if len(runes) > 240 {
+				detail = string(runes[:240]) + "…"
+			}
+			hp.Error = detail
+		}
+	} else {
+		hp.Error = ""
+	}
 	content, err := FormatHandoffContent(*hp)
 	if err != nil {
 		return nil, err

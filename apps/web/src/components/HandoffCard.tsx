@@ -45,6 +45,9 @@ export function HandoffCard({ handoff, contentFallback }: Props) {
         <span className="handoff-bot">{data.to_bot || "?"}</span>
       </div>
       {data.purpose ? <div className="handoff-purpose">{data.purpose}</div> : null}
+      {status === "failed" && data.error ? (
+        <div className="handoff-error">{data.error}</div>
+      ) : null}
       {data.agent_message_id ? (
         <button
           type="button"
@@ -60,7 +63,10 @@ export function HandoffCard({ handoff, contentFallback }: Props) {
           `status: ${status}`,
           `from: ${data.from_bot}`,
           `to: ${data.to_bot}`,
-        ].join("\n")}</pre>
+          data.error ? `error: ${data.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")}</pre>
       ) : null}
     </div>
   );

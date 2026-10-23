@@ -714,9 +714,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "send_to_agent",
             "description": (
-                "Send a message to another agent (or channel) via the agent bus. "
-                "This returns immediately and does not wait for a reply. "
-                "To get another assistant's answer in this same turn, use ask_agent."
+                "Hand off work to another agent (or channel) via the agent bus — "
+                "transfer ownership so they take over the task. "
+                "Returns immediately; does not wait for their answer in this turn. "
+                "When the user wants a colleague to take over / continue the work, "
+                "call this with to_agent_id from the roster (or channel peers) and "
+                "priority=true so they are woken to act; put a clear task brief in body. "
+                "Do not use this for a quick consult where you keep ownership — use ask_agent. "
+                "Do not use ask_agent as a substitute for handoff."
             ),
             "parameters": {
                 "type": "object",
@@ -729,8 +734,14 @@ TOOL_DEFS: list[dict[str, Any]] = [
                         "type": "string",
                         "description": "Target channel id (optional if to_agent_id set)",
                     },
-                    "body": {"type": "string", "description": "Message body"},
-                    "priority": {"type": "boolean"},
+                    "body": {
+                        "type": "string",
+                        "description": "Task brief for the recipient (what to do / context)",
+                    },
+                    "priority": {
+                        "type": "boolean",
+                        "description": "True to wake the recipient now to take over (typical for handoff)",
+                    },
                 },
                 "required": ["body"],
             },
@@ -741,9 +752,12 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "function": {
             "name": "ask_agent",
             "description": (
-                "Ask one other assistant in this account and wait for their answer in this turn. "
-                "Use only when the user names them, or the question fits a colleague's job description "
-                "in the system roster and not yours. Ask one colleague, once. "
+                "Ask one other assistant a question and wait for their answer in this turn "
+                "(consult / Q&A). You keep ownership of the user task. "
+                "Use only when the user names them, or the question fits a colleague's job "
+                "description in the system roster and not yours. Ask one colleague, once. "
+                "Not for transferring ownership or asking them to take over the work — "
+                "use send_to_agent(priority=true) for handoff. "
                 "The colleague reply is already shown in this chat; do not paste or restate it. "
                 "If the result has needs_user, stop and wait for the user; "
                 "do not invent the missing details, restate the questions, or call ask_agent again. "

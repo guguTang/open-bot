@@ -114,3 +114,114 @@ func TestFormatGroupMemberRosterIncludesIDs(t *testing.T) {
 		t.Fatalf("group prompt should forbid ask_agent for peers: %q", prompt)
 	}
 }
+
+func TestUpdateHandoffStatusDetailSetsError(t *testing.T) {
+	d, err := db.Open("")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer d.Close()
+	org, err := d.EnsureDefaultOrg()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid := uuid.NewString()
+	if _, err := d.SQL.Exec(`INSERT INTO users (id, username, password_hash, org_id, role, created_at)
+VALUES ($1,$2,'x',$3,$4,$5)`, uid, "handoff-err-"+uid[:8], org.ID, db.RoleMember, db.Now()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = d.SQL.Exec(`DELETE FROM users WHERE id=$1`, uid) })
+
+	from, err := d.CreateAgent(uid, "产品经理", "需求", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := d.CreateAgent(uid, "文案编辑", "写文案", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conv, err := d.GetOrCreatePrimaryConversation(uid, from.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentMsgID := uuid.NewString()
+	_, _, err = d.AddHandoffNote(conv.ID, "", db.HandoffPayload{
+		FromBot: from.Name, ToBot: to.Name, Purpose: "probe", Status: "running", AgentMessageID: agentMsgID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := d.UpdateHandoffStatusDetail(agentMsgID, "failed", "upstream HTTP 400: flagged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Handoff == nil || updated.Handoff.Status != "failed" || updated.Handoff.Error != "upstream HTTP 400: flagged" {
+		t.Fatalf("want failed+error, got %#v", updated.Handoff)
+	}
+	cleared, err := d.UpdateHandoffStatusDetail(agentMsgID, "done", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Handoff.Status != "done" || cleared.Handoff.Error != "" {
+		t.Fatalf("done should clear error: %#v", cleared.Handoff)
+	}
+}
+
+func TestProjectHandoffReplyPrefersCardConversation(t *testing.T) {
+	d, err := db.Open("")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer d.Close()
+	org, err := d.EnsureDefaultOrg()
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid := uuid.NewString()
+	if _, err := d.SQL.Exec(`INSERT INTO users (id, username, password_hash, org_id, role, created_at)
+VALUES ($1,$2,'x',$3,$4,$5)`, uid, "handoff-reply-"+uid[:8], org.ID, db.RoleMember, db.Now()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = d.SQL.Exec(`DELETE FROM users WHERE id=$1`, uid) })
+
+	from, err := d.CreateAgent(uid, "编程工程师", "写代码", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := d.CreateAgent(uid, "文案编辑", "写文案", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	primary, err := d.GetOrCreatePrimaryConversation(uid, from.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, err := d.CreateConversation(uid, from.ID, "side-dm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentMsgID := uuid.NewString()
+	_, _, err = d.AddHandoffNote(side.ID, "", db.HandoffPayload{
+		FromBot: from.Name, ToBot: to.Name, Purpose: "title", Status: "running", AgentMessageID: agentMsgID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	toID := to.ID
+	msg := &db.AgentBusMessage{ID: agentMsgID, UserID: uid, FromAgentID: from.ID, ToAgentID: &toID, Body: "title", Priority: true}
+	s := &Server{db: d}
+	s.projectHandoffReply(uid, msg, "智能协作，一触即达")
+	sideMsgs, err := d.ListMessages(uid, side.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range sideMsgs {
+		if m.Role == "assistant" && m.AgentID == to.ID && strings.Contains(m.Content, "智能协作") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reply must land on card conversation %s, not primary %s", side.ID, primary.ID)
+	}
+}

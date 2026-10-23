@@ -79,6 +79,12 @@ func (s *Server) resolveHandoffConversation(userID, conversationID, channelID, v
 // projectHandoffAfterBusWrite inserts a timeline handoff note after agent-bus success.
 // Idempotent on agent_message_id; skips if that id already appears on the user timeline (@ dedup).
 func (s *Server) projectHandoffAfterBusWrite(userID string, msg *db.AgentBusMessage) {
+	s.projectHandoffAfterBusWriteAt(userID, msg, "")
+}
+
+// projectHandoffAfterBusWriteAt is like projectHandoffAfterBusWrite but pins the card
+// to an explicit conversation when the sender's live session is known.
+func (s *Server) projectHandoffAfterBusWriteAt(userID string, msg *db.AgentBusMessage, conversationID string) {
 	if !shouldProjectHandoff(msg) {
 		return
 	}
@@ -89,11 +95,16 @@ func (s *Server) projectHandoffAfterBusWrite(userID string, msg *db.AgentBusMess
 		// mark done immediately (no wake lifecycle).
 		status = "done"
 	}
-	s.writeHandoffProjection(userID, msg, to, status, true, "", "")
+	s.writeHandoffProjection(userID, msg, to, status, true, conversationID, "", "")
 }
 
 // projectHandoffStatus updates / inserts projection after priority wake completes or fails.
 func (s *Server) projectHandoffStatus(userID string, msg *db.AgentBusMessage, status string) {
+	s.projectHandoffStatusDetail(userID, msg, status, "")
+}
+
+// projectHandoffStatusDetail sets status and optional failure detail on the card.
+func (s *Server) projectHandoffStatusDetail(userID string, msg *db.AgentBusMessage, status, detail string) {
 	if msg == nil || msg.ToAgentID == nil {
 		return
 	}
@@ -101,7 +112,7 @@ func (s *Server) projectHandoffStatus(userID string, msg *db.AgentBusMessage, st
 	if to == "" {
 		return
 	}
-	s.writeHandoffProjection(userID, msg, to, status, false, "", "")
+	s.writeHandoffProjection(userID, msg, to, status, false, "", "", detail)
 }
 
 // projectHandoffReply inserts the woken bot's answer into the same timeline as the HandoffCard.
@@ -118,30 +129,33 @@ func (s *Server) projectHandoffReply(userID string, msg *db.AgentBusMessage, rep
 	if to == "" || agentMsgID == "" {
 		return
 	}
-	chID := ""
-	if msg.ChannelID != nil {
-		chID = strings.TrimSpace(*msg.ChannelID)
-	}
-	viewer := strings.TrimSpace(msg.FromAgentID)
-	conv, err := s.resolveHandoffConversation(userID, "", chID, viewer)
-	if err != nil || conv == nil {
-		// Prefer conversation already holding the handoff note.
-		if noteConv, nerr := s.db.ConversationIDForHandoff(agentMsgID); nerr == nil && noteConv != "" {
-			if c2, gerr := s.db.GetConversation(userID, noteConv); gerr == nil {
-				conv = c2
-			}
+	var conv *db.Conversation
+	// Prefer the conversation that already shows the HandoffCard (may be a non-primary
+	// DM pinned via conversation_id). Falling back to primary first used to orphan replies.
+	if noteConv, nerr := s.db.ConversationIDForHandoff(agentMsgID); nerr == nil && noteConv != "" {
+		if c2, gerr := s.db.GetConversation(userID, noteConv); gerr == nil && c2 != nil {
+			conv = c2
 		}
 	}
 	if conv == nil {
-		log.Printf("handoff reply project find conv user=%s msg=%s: %v", userID, agentMsgID, err)
-		return
+		chID := ""
+		if msg.ChannelID != nil {
+			chID = strings.TrimSpace(*msg.ChannelID)
+		}
+		viewer := strings.TrimSpace(msg.FromAgentID)
+		c2, err := s.resolveHandoffConversation(userID, "", chID, viewer)
+		if err != nil || c2 == nil {
+			log.Printf("handoff reply project find conv user=%s msg=%s: %v", userID, agentMsgID, err)
+			return
+		}
+		conv = c2
 	}
 	if _, err := s.db.AddMessageWithAgent(conv.ID, "assistant", reply, to); err != nil {
 		log.Printf("handoff reply project insert msg=%s: %v", agentMsgID, err)
 	}
 }
 
-func (s *Server) writeHandoffProjection(userID string, msg *db.AgentBusMessage, toBot, status string, skipIfProjected bool, conversationID, channelID string) {
+func (s *Server) writeHandoffProjection(userID string, msg *db.AgentBusMessage, toBot, status string, skipIfProjected bool, conversationID, channelID, detail string) {
 	if s == nil || s.db == nil || msg == nil {
 		return
 	}
@@ -180,14 +194,15 @@ func (s *Server) writeHandoffProjection(userID string, msg *db.AgentBusMessage, 
 		Purpose:        purposeFromBody(msg.Body),
 		Status:         status,
 		AgentMessageID: agentMsgID,
+		Error:          strings.TrimSpace(detail),
 	}
 	note, created, err := s.db.AddHandoffNote(conv.ID, "", hp)
 	if err != nil {
 		log.Printf("handoff project insert msg=%s: %v", agentMsgID, err)
 		return
 	}
-	if !created && note != nil && note.Handoff != nil && note.Handoff.Status != status {
-		if _, uerr := s.db.UpdateHandoffStatus(agentMsgID, status); uerr != nil {
+	if !created && note != nil && note.Handoff != nil && (note.Handoff.Status != status || strings.TrimSpace(detail) != "") {
+		if _, uerr := s.db.UpdateHandoffStatusDetail(agentMsgID, status, detail); uerr != nil {
 			log.Printf("handoff project status update msg=%s: %v", agentMsgID, uerr)
 		}
 	}
