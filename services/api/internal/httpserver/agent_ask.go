@@ -325,9 +325,46 @@ func (s *Server) ensureAskReplyOnParent(userID, parentConvID, toAgentID, reply, 
 	s.publishConversationMessage(userID, msg)
 }
 
+// agentInParentChannel reports that toAgentID is already a member of the parent
+// conversation's channel (group). Used to skip DM-style ask_notice noise when the
+// colleague's reply will already appear as a normal group bubble.
+func (s *Server) agentInParentChannel(userID, parentConvID, toAgentID string) bool {
+	if s == nil || s.db == nil {
+		return false
+	}
+	parentConvID = strings.TrimSpace(parentConvID)
+	toAgentID = strings.TrimSpace(toAgentID)
+	if parentConvID == "" || toAgentID == "" {
+		return false
+	}
+	parent, err := s.db.GetConversation(userID, parentConvID)
+	if err != nil || parent == nil {
+		return false
+	}
+	chID := strings.TrimSpace(parent.ChannelID)
+	if chID == "" {
+		return false // DM / primary: keep ask_notice
+	}
+	ch, err := s.db.GetChannel(userID, chID)
+	if err != nil || ch == nil {
+		return false
+	}
+	for _, m := range ch.Members {
+		if strings.TrimSpace(m) == toAgentID {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) ensureAskNoticeOnParent(userID, parentConvID, toAgentID, toName, key string) {
 	parentConvID = strings.TrimSpace(parentConvID)
 	if parentConvID == "" || strings.TrimSpace(key) == "" {
+		return
+	}
+	// Same-group colleague: ensureAskReplyOnParent already shows their answer as a
+	// normal assistant bubble — a gray 「消息通知了 X」 line is redundant noise.
+	if s.agentInParentChannel(userID, parentConvID, toAgentID) {
 		return
 	}
 	noticeID := key + ":notice"

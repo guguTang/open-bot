@@ -23,8 +23,8 @@ func TestPeerRosterSkipsSelfAndBlankDescription(t *testing.T) {
 	if !strings.Contains(block, "码农助手（coder）：负责写代码与排障") {
 		t.Fatalf("missing peer: %s", block)
 	}
-	if !strings.Contains(block, "不必在同一个群") {
-		t.Fatalf("roster should not require a group: %s", block)
+	if !strings.Contains(block, "不在当前群里") {
+		t.Fatalf("roster should describe out-of-group peers: %s", block)
 	}
 }
 
@@ -54,5 +54,27 @@ func TestPeerRosterDepthDisablesAsk(t *testing.T) {
 	}
 	if system != "人设" {
 		t.Fatalf("child system changed: %s", system)
+	}
+}
+
+func TestPeerRosterExcludesSameChannelMembers(t *testing.T) {
+	agents := []*db.Agent{
+		{ID: "self", Name: "我", Description: "负责统筹"},
+		{ID: "coder", Name: "代码", Description: "写代码"},
+		{ID: "outsider", Name: "外人", Description: "查资料"},
+	}
+	block, allow := peerRosterBlock("self", agents, "coder")
+	if !allow {
+		t.Fatal("outsider should keep the roster alive")
+	}
+	if strings.Contains(block, "代码（coder）") {
+		t.Fatalf("same-channel peer must be excluded: %s", block)
+	}
+	if !strings.Contains(block, "外人（outsider）") {
+		t.Fatalf("out-of-group peer must remain: %s", block)
+	}
+	_, allowAllIn := peerRosterBlock("self", agents, "coder", "outsider")
+	if allowAllIn {
+		t.Fatal("excluding every peer must disable ask_agent")
 	}
 }
