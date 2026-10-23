@@ -197,8 +197,8 @@ func addTurnIntentQuestions(questions map[string]any, b *strings.Builder, tc *au
 	hasTask := tc != nil && tc.OpenTask != nil && strings.TrimSpace(tc.OpenTask.AgentID) != ""
 	hasTurns := tc != nil && (len(tc.Turns) > 0 || hasTask)
 	intentCriteria := map[string]string{
-		autoPickIntentFollowUp: "Asks the bot(s) that answered a listed turn to keep going on the SAME work: a why/how question about that answer, a tweak (shorter, change X, another version), a go-ahead (好/继续/next), or the next move in a game/story that bot is hosting. e.g. 「为什么不能…」「再改短一点」「继续」「我选择往左走」「换成 MySQL 呢」",
-		autoPickIntentNewAsk:   "A new request or question that stands on its own — including a DIFFERENT kind of work about an earlier result (copywriting, design, research, planning for something built before) or an unrelated question. e.g. 「今天天气怎么样」「给这个功能写篇推广文案」「帮我查一下…」",
+		autoPickIntentFollowUp: "Asks the bot(s) that answered a listed turn to keep going on the SAME work: a why/how question about that answer, a tweak (shorter, change X, another version), a go-ahead (好/继续/next), or the next in-character move in a game/story that bot is hosting — including fictional look/read/pick-up actions inside that world (「我选择往左走」「我拿起火把看看墙上写了什么」「我打开箱子」). Those are NOT real-world research. e.g. 「为什么不能…」「再改短一点」「继续」「换成 MySQL 呢」",
+		autoPickIntentNewAsk:   "A new real-world request that stands on its own — including a DIFFERENT kind of work about an earlier result (copywriting, design, research, planning for something built before) or an unrelated out-of-story question. e.g. 「今天天气怎么样」「给这个功能写篇推广文案」「帮我查一下2024年诺贝尔…」. Do NOT use new_ask for in-world adventure actions just because they mention reading or looking.",
 		autoPickIntentAllHands: "The User message ITSELF explicitly asks EVERY member to speak (大家/各位/你们都/everyone): open call for everyone's views, self-intro round. e.g. 「大家都说说…」「你们都能干啥」「都介绍下自己」「everyone share your thoughts」. Judge only this message — a request for one piece of work or one host (「帮我想想下个版本做什么」「你来当主持人」) is NOT all_hands, even right after an all-hands turn.",
 		autoPickIntentWhoCan:   "Asks WHICH member(s) can do one specific skill (capability census). e.g. 「谁会写代码」「谁能做设计」「who can write SQL」",
 	}
@@ -212,8 +212,9 @@ func addTurnIntentQuestions(questions map[string]any, b *strings.Builder, tc *au
 	questions[autoPickIntentQKey] = map[string]any{
 		"type": "choice",
 		"instructions": "Classify the User message relative to Recent turns. Judge meaning, not keywords: " +
-			"a message that only makes sense as more of the same bot's work is follow_up; " +
-			"a self-contained ask, or a different kind of work about an earlier result, is new_ask; " +
+			"a message that only makes sense as more of the same bot's work is follow_up " +
+			"(including the player's next move while a member is hosting a game/story — even if that move says 看看/读/查 inside the fiction); " +
+			"a self-contained real-world ask, or a different kind of work about an earlier result, is new_ask; " +
 			"an open call for everyone to speak is all_hands; asking who can do a skill is who_can.",
 		"criteria": intentCriteria,
 	}

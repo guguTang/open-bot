@@ -325,17 +325,23 @@ func buildAutoPickDecisionPayloadWithTurns(userText string, members []string, ag
 	instr := "Who should reply this turn? Classify the User message into exactly one task type, then pick opaque keys.\n" +
 		"1) ALL-HANDS: addresses the whole room (self-intro, round-robin, address-everyone, roast-everyone; " +
 		"e.g. 「都介绍下自己」「大家都介绍一下」「在座的各位都是辣鸡」「introduce yourselves」). " +
+		"NOT all_hands: asking one host to run a game/story, or a single specialty deliverable. " +
 		"choice MUST be \"all\", count = full roster (noul near 1), HIGH probability on \"all\", even mass on every mN — never a single mN as primary.\n" +
 		"2) WHO-CAN: asks who among members can do X (「谁会写代码」「谁会查资料」「who can code」「who can coding」). " +
 		"Match X ONLY to Member capability profiles / criteria role labels — not Recent-context chat. " +
 		"coding/写代码/排障/debug ≠ writing/文案/写东西/改稿 — never pick a writer profile for a coding census. " +
 		"choice = a capable mN; count = how many profiles share that capability; HIGH probs on every capable mN; " +
 		"NEAR-ZERO on incapable mNs and on \"all\" unless EVERY profile can do X.\n" +
-		"3) SPECIALTY: asks bots to perform work (lookup/research, coding/debug, writing, translate, …). " +
-		"Match the task to Member capability profiles — never park on \"all\", never pick an unrelated role. " +
+		"3) SPECIALTY: asks bots to perform work (lookup/research, coding/debug, writing, translate, host a game/story, …). " +
+		"Match the DELIVERABLE / speech-act to Member capability profiles — never park on \"all\", never pick an unrelated role. " +
+		"The work type wins over topic residue from Recent turns: writing/推广文案/公众号文章 about a coding tool → writer/文案 profiles ONLY " +
+		"(NEAR-ZERO on the coder who built the tool; count near 0 / one specialist); a layout/配色 ask about an app → design only; a real-world lookup → research only. " +
 		"Research/lookup → research/资料/搜索 profiles; coding/debug/implementation → coding/写代码/排障 profiles only; " +
-		"writing/文案 → writer profiles only. Set count to how many matching profiles should reply.\n" +
+		"writing/文案 → writer profiles only; 「你来当主持人」/start a text adventure → ONE host (generalist or storyteller), NEVER choice=\"all\". " +
+		"Set count to how many matching profiles should reply (usually one).\n" +
 		"4) FOLLOW-UP: the User message continues a prior turn's task (judge by meaning with Recent context). " +
+		"Includes the player's next in-world move while a member is hosting a game/story (「我选择…」「我拿起火把看看…」) — stick to that host mN; " +
+		"do NOT reclassify fiction look/read as research SPECIALTY. " +
 		"Pick the bot that answered that turn (same mN) unless its role is a hard mismatch; count near one specialist; NEVER choice=\"all\".\n" +
 		"INTERRUPT: a new self-contained ask (new SPECIALTY / WHO-CAN / ALL-HANDS) — newest wins; ignore unfinished prior asks.\n" +
 		"SINGLE / vague: one best-matching profile, or the generalist. When several specialists fit, set count and probabilities for a multi subset (not only all-or-one). " +
