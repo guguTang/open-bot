@@ -106,5 +106,8 @@ func (s *Server) wakeOneAgent(ctx context.Context, userID string, msg *db.AgentB
 		return err
 	}
 	s.projectHandoffStatus(userID, msg, "done")
+	// Surface the woken bot's answer on the same timeline as the HandoffCard
+	// so the user sees ownership (to_bot) without opening the wake side-thread.
+	s.projectHandoffReply(userID, msg, reply)
 	return nil
 }

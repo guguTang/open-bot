@@ -1161,13 +1161,19 @@ async def openai_path(
             from . import agent_bus
 
             try:
+                # Prefer explicit tool channel_id; else inherit this turn's channel so
+                # HandoffCard projects onto the group timeline (not a wake DM).
+                ch = (str(args["channel_id"]) if args.get("channel_id") else None) or (
+                    str(channel_id) if channel_id else None
+                )
                 result = agent_bus.send_agent_message(
                     user_id=str(user_id or ""),
                     from_agent_id=str(agent_id or "open-bot"),
                     body=str(args.get("body") or ""),
                     to_agent_id=(str(args["to_agent_id"]) if args.get("to_agent_id") else None),
-                    channel_id=(str(args["channel_id"]) if args.get("channel_id") else None),
+                    channel_id=ch,
                     priority=bool(args.get("priority") or False),
+                    conversation_id=str(conversation_id or "") or None,
                 )
                 return json.dumps(result, ensure_ascii=False)
             except Exception as e:  # noqa: BLE001

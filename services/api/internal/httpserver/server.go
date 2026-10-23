@@ -1316,6 +1316,9 @@ func (s *Server) handleListMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	taskActive, _ := s.db.ConversationHasOpenTask(id)
+	if msgs == nil {
+		msgs = []db.Message{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"messages":    msgs,
 		"run_active":  s.runs.isActive(id),

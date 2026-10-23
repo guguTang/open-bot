@@ -201,6 +201,7 @@ def send_agent_message(
     to_agent_id: str | None = None,
     channel_id: str | None = None,
     priority: bool = False,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     body = (body or "").strip()
     if not body:
@@ -234,6 +235,8 @@ def send_agent_message(
                 status=status,
                 agent_message_id=str(out["id"]),
                 viewer_agent_id=from_agent_id,
+                conversation_id=conversation_id,
+                channel_id=channel_id,
                 skip_if_projected=True,
             )
             if proj:
@@ -268,6 +271,8 @@ def send_agent_message(
                 status=status,
                 agent_message_id=str(out["id"]),
                 viewer_agent_id=from_agent_id,
+                conversation_id=conversation_id,
+                channel_id=channel_id,
                 skip_if_projected=True,
             )
             if proj:

@@ -1211,7 +1211,9 @@ func (d *DB) GetOrCreatePrimaryConversation(userID, agentID string) (*Conversati
 	row := d.SQL.QueryRow(
 		`SELECT id, user_id, agent_id, title, COALESCE(channel_id,''), created_at, updated_at
 		 FROM conversations
-		 WHERE user_id = $1 AND agent_id = $2 AND (channel_id IS NULL OR channel_id = '')
+		 WHERE user_id = $1 AND agent_id = $2
+		   AND (channel_id IS NULL OR channel_id = '')
+		   AND title NOT LIKE '协作唤醒%'
 		 ORDER BY updated_at DESC
 		 LIMIT 1`,
 		userID, agentID,
@@ -1422,6 +1424,26 @@ func (d *DB) FindConversationForUserAgent(userID, agentID string) (*Conversation
 		return nil, err
 	}
 	return &c, nil
+}
+
+// ConversationIDForHandoff returns the conversation that already holds a handoff note.
+func (d *DB) ConversationIDForHandoff(agentMessageID string) (string, error) {
+	agentMessageID = strings.TrimSpace(agentMessageID)
+	if agentMessageID == "" {
+		return "", ErrNotFound
+	}
+	var id string
+	err := d.SQL.QueryRow(
+		`SELECT conversation_id FROM messages WHERE agent_message_id = $1 AND role = 'handoff' LIMIT 1`,
+		agentMessageID,
+	).Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return id, nil
 }
 
 // HasHandoffForAgentMessage reports whether a projection already exists.

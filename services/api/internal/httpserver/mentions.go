@@ -233,7 +233,9 @@ func groupParticipationRoleHint(a *db.Agent) string {
 	return line
 }
 
-// formatGroupMemberRoster lists channel peers (name + role) for participation prompts.
+// formatGroupMemberRoster lists channel peers (name + id + role) for participation prompts.
+// Ids are required so a bot can call send_to_agent for same-group handoff; ask_agent
+// remains disabled for these peers via peer roster exclusion.
 func formatGroupMemberRoster(members []string, agents []*db.Agent, selfID string) string {
 	byID := map[string]*db.Agent{}
 	for _, a := range agents {
@@ -257,9 +259,9 @@ func formatGroupMemberRoster(members []string, agents []*db.Agent, selfID string
 			tag = "（你）"
 		}
 		if role != "" {
-			lines = append(lines, fmt.Sprintf("- %s%s：%s", name, tag, role))
+			lines = append(lines, fmt.Sprintf("- %s%s（%s）：%s", name, tag, id, role))
 		} else {
-			lines = append(lines, fmt.Sprintf("- %s%s", name, tag))
+			lines = append(lines, fmt.Sprintf("- %s%s（%s）", name, tag, id))
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -308,6 +310,7 @@ func groupParticipationExtraSystemMode(forced, leadFallback bool, self *db.Agent
 		roleLine
 	if roster != "" {
 		body += "群成员：\n" + roster + "\n"
+		body += "群内交接：若用户请求明显超出你的职责、更适合另一位成员，可用 send_to_agent（to_agent_id=上列 id，priority=true，body 写清任务）把工作交给对方；不要对他们调用 ask_agent（群内由 Auto选人 / @ 调度）。\n"
 	}
 	body += "决策规则（严格执行）：\n" +
 		"- 仅当用户请求明显属于你的职责/专长，或需要每位成员表态（如自我介绍、轮流发言），才正常回复。\n" +
