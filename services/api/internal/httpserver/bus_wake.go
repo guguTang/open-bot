@@ -83,13 +83,27 @@ func (s *Server) priorityWakeTargets(userID string, msg *db.AgentBusMessage) []s
 	return out
 }
 
-func (s *Server) wakeOneAgent(ctx context.Context, userID string, msg *db.AgentBusMessage, targetAgentID string) error {
-	fromLabel := agentDisplayName(s.db, userID, msg.FromAgentID)
-	notice := fmt.Sprintf(
-		"你收到来自助手「%s」的协作交接（priority 唤醒）。请直接完成下列任务并给出可交付的答复；"+
-			"你的回复会回传给对方并展示给用户。不要只确认收到。",
+// priorityWakeNotice is the system fragment injected into the woken bot's run.
+// Prompt-only: ownership + deliver now; no reply keyword filters.
+func priorityWakeNotice(fromLabel string) string {
+	fromLabel = strings.TrimSpace(fromLabel)
+	if fromLabel == "" {
+		fromLabel = "同事"
+	}
+	return fmt.Sprintf(
+		"【任务交接 / priority 唤醒】助手「%s」已把下列任务的所有权移交给你。"+
+			"用户正在钉住的会话里等待你的交付结果；你的本回合回复会回传给交接方，并投影到该会话展示给用户。\n"+
+			"请立刻产出任务本身的可交付内容（答案、文案、代码、结论、设计建议等）。"+
+			"不要只确认已收到、不要只说你会处理或稍后再做。"+
+			"若完成任务需要工具，先调用工具做完工作，再给出实质答复；简短收尾只能放在实质内容之后。"+
+			"下列用户消息即任务说明（purpose），按它交付。",
 		fromLabel,
 	)
+}
+
+func (s *Server) wakeOneAgent(ctx context.Context, userID string, msg *db.AgentBusMessage, targetAgentID string) error {
+	fromLabel := agentDisplayName(s.db, userID, msg.FromAgentID)
+	notice := priorityWakeNotice(fromLabel)
 	title := fmt.Sprintf("协作唤醒 ← %s", fromLabel)
 	res, err := s.runAgentOnce(ctx, userID, targetAgentID, msg.Body, title, "", notice)
 	if err != nil {
