@@ -8,10 +8,8 @@ import (
 )
 
 func TestAutoPickDecisionWhoCanWriteCodeOnlyCoder(t *testing.T) {
-	// Production 2026-10-12 11:41 CST needed only coder 33. Prompt now teaches SystemOne
-	// to pick that mN (not choice=all). Mock the desired model output; mapping must trust
-	// choice+count+probs (no role-match remap). Capable picks: LeadFallback (forbid PASS)
-	// + AllowSecondFailOpen=false so a [PASS] cannot silence or second-wave dump 22+44.
+	// Model intent=who_can + pick=coder. No phrase tables / synonym rematch —
+	// LeadFallback + closed second-wave come from the intent head.
 	coder := "635d1077-5611-41bb-9fcf-2a4454d43d5a"
 	r22 := "bfcea5bc-91b6-4bf7-b31a-ea45f2fcb0bf"
 	r44 := "f634df70-8e30-4f71-9415-c7f80a8c0ec3"
@@ -34,7 +32,9 @@ func TestAutoPickDecisionWhoCanWriteCodeOnlyCoder(t *testing.T) {
 					},
 					"confidence": 0.82,
 				},
-				"count": map[string]any{"type": "noul", "noul": 0.05},
+				"count":  map[string]any{"type": "noul", "noul": 0.05},
+				"intent": map[string]any{"type": "choice", "choice": "who_can", "probabilities": map[string]any{"who_can": 0.9, "new_ask": 0.1}, "confidence": 0.9},
+				"bound":  map[string]any{"type": "choice", "choice": "none", "probabilities": map[string]any{"none": 0.95}},
 			}, nil
 		},
 	}
@@ -59,27 +59,10 @@ func TestAutoPickDecisionWhoCanWriteCodeOnlyCoder(t *testing.T) {
 	}
 }
 
-func TestIsWhoCanIntentWriteCode(t *testing.T) {
-	if !isWhoCanIntent("谁会写代码") {
-		t.Fatal(`want who-can for "谁会写代码"`)
-	}
-}
-
-func TestIsWhoCanIntentWhoCanCoding(t *testing.T) {
-	if !isWhoCanIntent("who can coding") {
-		t.Fatal(`want who-can for "who can coding"`)
-	}
-	if !userTextHitsRoleSynonym("who can coding") {
-		t.Fatal(`"coding" must hit coding role synonym bucket (not only substring "code")`)
-	}
-}
-
-// Channel 333 17:38 CST: members ORDER BY agent_id → 文章=m0, 代码=m1.
-// SystemOne chose writer m0 @0.53 for 「who can coding」; must rematch to coder via
-// Member capability profiles (who_can_profile_match), not accept the wrong mN.
-func TestAutoPickDecisionWhoCanCodingRejectsWriter(t *testing.T) {
-	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6" // sorts before coder → m0
-	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"  // m1
+// Wrong model pick is trusted — no synonym / profile rematch correction path.
+func TestAutoPickDecisionWhoCanTrustsModelPick(t *testing.T) {
+	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
+	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
 	members := []string{writer, coder}
 	agents := []*db.Agent{
 		{ID: writer, Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。"},
@@ -88,77 +71,35 @@ func TestAutoPickDecisionWhoCanCodingRejectsWriter(t *testing.T) {
 	deps := &autoPickDecisionDeps{
 		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
-			// Production 17:38 shape: primary writer, weak mass on coder, conf above floor.
 			return map[string]any{
 				"pick": map[string]any{
 					"type":   "choice",
-					"choice": "m0",
+					"choice": "m1",
 					"probabilities": map[string]any{
-						"all": 0.3096, "m0": 0.5318, "m1": 0.1586,
+						"all": 0.1, "m0": 0.15, "m1": 0.75,
 					},
-					"confidence": 0.53,
+					"confidence": 0.75,
 				},
-				"count": map[string]any{"type": "noul", "noul": 1.0}, // model said count=2
+				"count":  map[string]any{"type": "noul", "noul": 0.0},
+				"intent": map[string]any{"type": "choice", "choice": "who_can", "probabilities": map[string]any{"who_can": 0.85}, "confidence": 0.85},
+				"bound":  map[string]any{"type": "choice", "choice": "none", "probabilities": map[string]any{"none": 0.9}},
 			}, nil
 		},
 	}
 	got := runAutoPickByMode(db.AutoPickDecision, "who can coding", members, agents, writer, 1, "", deps)
 	if got.Method != "decision" {
-		t.Fatalf("method=%s want decision (profile rematch, not fail-open)", got.Method)
+		t.Fatalf("method=%s want decision", got.Method)
 	}
 	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != coder {
-		t.Fatalf("want only coder 代码, got %#v", got.AgentIDs)
+		t.Fatalf("want coder from model pick m1, got %#v", got.AgentIDs)
 	}
-	if got.AllowSecondFailOpen {
-		t.Fatalf("who-can capable pick must not AllowSecondFailOpen")
-	}
-	if !got.LeadFallback[coder] {
-		t.Fatalf("coder must be LeadFallback after rematch, got %#v", got.LeadFallback)
-	}
-	if got.LeadFallback[writer] {
-		t.Fatalf("writer must not be LeadFallback after rematch, got %#v", got.LeadFallback)
+	if got.AllowSecondFailOpen || !got.LeadFallback[coder] {
+		t.Fatalf("who-can intent must close second-wave + LeadFallback, got %#v", got)
 	}
 }
 
-func TestCapableIDsFromRoleMatchWhoCanCoding(t *testing.T) {
-	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
-	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
-	members := []string{writer, coder}
-	agents := []*db.Agent{
-		{ID: writer, Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。"},
-		{ID: coder, Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。"},
-	}
-	got := capableIDsFromRoleMatch("who can coding", members, agents, "")
-	if len(got) != 1 || got[0] != coder {
-		t.Fatalf("want only coder, got %#v", got)
-	}
-}
-
-// Writer blurb contains 「先给草稿」; ask 「…先给骨架…html/canvas」 used to score both
-// bots via generic bigram 「先给」, so specialty_mismatch never fired and wrong m0(文章)
-// stuck. Synonym-bucket filter keeps only the coding profile.
-func TestCapableIDsHTMLCanvasIgnoresXianGeiResidue(t *testing.T) {
-	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
-	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
-	members := []string{writer, coder}
-	agents := []*db.Agent{
-		{ID: writer, Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。"},
-		{ID: coder, Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。"},
-	}
-	ut := "给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。先给骨架即可，别太长。"
-	if !userTextHitsRoleSynonym(ut) {
-		t.Fatal("html/canvas ask must hit coding synonym")
-	}
-	got := capableIDsFromRoleMatch(ut, members, agents, "")
-	if len(got) != 1 || got[0] != coder {
-		t.Fatalf("want only coder (ignore 先给 residue on writer), got %#v", got)
-	}
-	if !specialtyPicksIncapable([]string{writer}, got) {
-		t.Fatal("writer-only map must be specialty-incapable vs coder capable set")
-	}
-}
-
-func TestSpecialtyMismatchHTMLCanvasWrongM0WithXianGei(t *testing.T) {
+// Specialty trusts the model pick — no synonym_mismatch rematch.
+func TestSpecialtyTrustsModelPickHTMLCanvas(t *testing.T) {
 	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
 	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
 	members := []string{writer, coder}
@@ -171,30 +112,25 @@ func TestSpecialtyMismatchHTMLCanvasWrongM0WithXianGei(t *testing.T) {
 		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
-				"count": map[string]any{"type": "noul", "noul": "0.99"},
+				"count": map[string]any{"type": "noul", "noul": "0.0"},
 				"pick": map[string]any{
-					"type": "choice", "choice": "m0",
-					"probabilities": map[string]any{"all": "0.2373", "m0": "0.4288", "m1": "0.3339"},
-					"confidence": "0.43",
+					"type": "choice", "choice": "m1",
+					"probabilities": map[string]any{"all": "0.1", "m0": "0.2", "m1": "0.7"},
+					"confidence":    "0.7",
 				},
+				"intent": map[string]any{"type": "choice", "choice": "new_ask", "probabilities": map[string]any{"new_ask": 0.8}, "confidence": 0.8},
+				"bound":  map[string]any{"type": "choice", "choice": "none", "probabilities": map[string]any{"none": 0.9}},
 			}, nil
 		},
 	}
 	got := runAutoPickByMode(db.AutoPickDecision, ut, members, agents, writer, 1, "", deps)
 	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != coder {
-		t.Fatalf("wrong m0 must specialty-mismatch fail-open to coder, got %#v", got)
-	}
-	if got.Fallback == "all" || got.LeadFallback[writer] || got.LeadFallback[coder] {
-		t.Fatalf("specialty recover must not LeadFallback/all, got %#v", got)
-	}
-	if got.AllowSecondFailOpen {
-		t.Fatal("specialty path must close second-wave")
+		t.Fatalf("want model pick coder m1, got %#v", got)
 	}
 }
 
-// peek c5c3d672 shape: short follow-up has no coding needles; intent join binds html/canvas
-// prior. Wrong choice=m0(文章) must specialty_mismatch_profile_match → coder.
-func TestSpecialtyMismatchFollowUpUsesJoinedIntent(t *testing.T) {
+// peek c5c3d672 shape: short follow-up after the coder answered an html/canvas ask.
+func TestFollowUpIntentKeepsCoderOverWrongPick(t *testing.T) {
 	writer := "b82b2fbe-c621-4943-aff0-f59e7fc075b6"
 	coder := "cb6df594-f972-4a7c-8efd-daeb6dcb7ece"
 	members := []string{writer, coder}
@@ -202,33 +138,28 @@ func TestSpecialtyMismatchFollowUpUsesJoinedIntent(t *testing.T) {
 		{ID: writer, Name: "文章", Description: "负责写东西与改稿：邮件、文档、文案。尊重用户语气；定稿外发前先给草稿。"},
 		{ID: coder, Name: "代码", Description: "负责写代码与排障：改项目、查 bug、联调。小步验证；危险操作需确认。"},
 	}
-	ut := "修改下，换成动物的表情"
-	syn := "User: 给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。先给骨架即可，别太长。 | Last answered by: 代码 — 写代码与排障…"
-	if userTextHitsRoleSynonym(ut) {
-		t.Fatal("raw follow-up must not hit specialty synonym (no needle spam on short ask)")
+	msgs := []db.Message{
+		{ID: "u1", Role: "user", Content: "给我写个html页面，选择不同的心情。生成不同的表情，用canvas，不要用svg。"},
+		{ID: "a1", Role: "assistant", AgentID: coder, Content: "<html>…</html>"},
+		{ID: "u2", Role: "user", Content: "修改下，换成动物的表情"},
 	}
-	probe := specialtyProbeText(ut, syn)
-	if !userTextHitsRoleSynonym(probe) {
-		t.Fatalf("joined intent probe must hit coding synonym, got %q", probe)
-	}
+	tc := buildAutoPickTurnContext(msgs, nil, members, autoPickTurnContextMax)
 	deps := &autoPickDecisionDeps{
 		Provider: "laya",
 		Decide: func(ctx context.Context, state any, questions map[string]any) (map[string]any, error) {
 			return map[string]any{
-				"count": map[string]any{"type": "noul", "noul": "0.99"},
-				"pick": map[string]any{
-					"type": "choice", "choice": "m0",
-					"probabilities": map[string]any{"all": "0.15", "m0": "0.48", "m1": "0.37"},
-					"confidence": "0.48",
-				},
+				"count":  map[string]any{"type": "noul", "noul": "0.99"},
+				"pick":   map[string]any{"type": "choice", "choice": "m0", "probabilities": map[string]any{"all": "0.15", "m0": "0.48", "m1": "0.37"}, "confidence": "0.48"},
+				"intent": map[string]any{"type": "choice", "choice": "follow_up", "probabilities": map[string]any{"follow_up": "0.8", "new_ask": "0.2"}},
+				"bound":  map[string]any{"type": "choice", "choice": "t1", "probabilities": map[string]any{"t1": "0.9", "none": "0.1"}},
 			}, nil
 		},
 	}
-	got := runAutoPickByMode(db.AutoPickDecision, ut, members, agents, writer, 1, syn, deps)
+	got := runAutoPickByModeWithTurns(db.AutoPickDecision, "修改下，换成动物的表情", members, agents, writer, 1, "", deps, tc)
 	if len(got.AgentIDs) != 1 || got.AgentIDs[0] != coder {
-		t.Fatalf("follow-up wrong m0 must rematch to coder via joined intent, got %#v", got)
+		t.Fatalf("follow-up bound to coder turn must stay on coder, got %#v", got)
 	}
-	if got.AllowSecondFailOpen {
-		t.Fatal("follow-up specialty rematch must close second-wave")
+	if got.AllowSecondFailOpen || !got.LeadFallback[coder] {
+		t.Fatalf("sticky follow-up must close second-wave and forbid [PASS], got %#v", got)
 	}
 }

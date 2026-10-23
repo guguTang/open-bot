@@ -221,6 +221,9 @@ func sourceHint(title string) string {
 	if strings.HasPrefix(title, "A2A ") {
 		return "a2a"
 	}
+	if strings.HasPrefix(title, "协作唤醒") {
+		return "handoff_wake"
+	}
 	if strings.Contains(title, "例行") || strings.Contains(strings.ToLower(title), "routine") {
 		return "routine"
 	}

@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -19,6 +18,7 @@ type handoffNoteBody struct {
 	Status          string `json:"status"`
 	AgentMessageID  string `json:"agent_message_id"`
 	ViewerAgentID   string `json:"viewer_agent_id"` // resolve conversation if conversation_id empty
+	ChannelID       string `json:"channel_id"`
 	SkipIfProjected bool   `json:"skip_if_projected"`
 }
 
@@ -64,36 +64,30 @@ func (s *Server) handleInternalHandoffNote(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	convID := strings.TrimSpace(body.ConversationID)
-	if convID == "" {
-		viewer := strings.TrimSpace(body.ViewerAgentID)
-		if viewer == "" {
-			viewer = strings.TrimSpace(body.FromBot)
-		}
-		c, err := s.db.FindConversationForUserAgent(uid, viewer)
-		if err != nil {
-			if errors.Is(err, db.ErrNotFound) {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "conversation not found"})
-				return
-			}
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		convID = c.ID
-	} else {
-		if _, err := s.db.GetConversation(uid, convID); err != nil {
-			if errors.Is(err, db.ErrNotFound) {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": "conversation not found"})
-				return
-			}
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+	viewer := strings.TrimSpace(body.ViewerAgentID)
+	if viewer == "" {
+		viewer = strings.TrimSpace(body.FromBot)
+	}
+	conv, err := s.resolveHandoffConversation(uid, body.ConversationID, body.ChannelID, viewer)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "conversation not found"})
+		return
+	}
+	convID := conv.ID
+
+	fromLabel := strings.TrimSpace(body.FromBot)
+	toLabel := strings.TrimSpace(body.ToBot)
+	// Prefer display names when callers pass agent ids.
+	if fromLabel != "" {
+		fromLabel = agentDisplayName(s.db, uid, fromLabel)
+	}
+	if toLabel != "" {
+		toLabel = agentDisplayName(s.db, uid, toLabel)
 	}
 
 	hp := db.HandoffPayload{
-		FromBot:        body.FromBot,
-		ToBot:          body.ToBot,
+		FromBot:        fromLabel,
+		ToBot:          toLabel,
 		Purpose:        body.Purpose,
 		Status:         status,
 		AgentMessageID: agentMsgID,

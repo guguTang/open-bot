@@ -1316,6 +1316,9 @@ func (s *Server) handleListMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	taskActive, _ := s.db.ConversationHasOpenTask(id)
+	if msgs == nil {
+		msgs = []db.Message{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"messages":    msgs,
 		"run_active":  s.runs.isActive(id),
@@ -1619,7 +1622,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		"thread_root_id":  userMsg.ThreadRootID,
 	})
 
-	if s.tryShortcutTurn(uid, conv, userMsg.ID, storedContent, targetAgents[0], emit) {
+	if s.tryShortcutTurn(uid, conv, userMsg.ID, storedContent, targetAgents, sendPlan.AutoPick, emit) {
 		emit("done", map[string]any{"ok": true})
 		return
 	}
@@ -2163,15 +2166,22 @@ func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []s
 	// Pending background task owns the turn (product: check open task before
 	// selecting who answers). Skip Auto选人 / decision; pin to the same bot.
 	// Structured: conversation_tasks row. Fallback: host continuation prompt.
+	// Group + decision mode: the open task is structured decide context instead — the
+	// model classifies whether this turn continues that task (→ owner, queued) or is a
+	// new ask / explicit @ for other members (they answer now; the task keeps running).
+	var openTask *autoPickOpenTask
 	if s.db != nil && conv != nil {
 		if open, err := s.db.OpenConversationTask(conv.ID); err == nil && open != nil {
 			agentID := strings.TrimSpace(open.AgentID)
 			if agentID == "" {
 				agentID = conv.AgentID
 			}
-			out := openTaskSendPlan(agentID)
-			log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)
-			return out, nil
+			openTask = &autoPickOpenTask{AgentID: agentID, Goal: open.Goal, Status: open.Status}
+			if conv.ChannelID == "" {
+				out := openTaskSendPlan(agentID)
+				log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)
+				return out, nil
+			}
 		}
 	}
 	if isPendingTaskContinuationPrompt(content) {
@@ -2209,7 +2219,14 @@ func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []s
 
 	// Never replace @ / @everyone / subset agent_ids. Full-member agent_ids is legacy (AutoPick still runs).
 	// Mode off → all members (status quo).
-	if groupHasExplicitAddressing(content, explicit, members, agents) || mode == db.AutoPickOff {
+	explicitAddr := groupHasExplicitAddressing(content, explicit, members, agents)
+	if openTask != nil && !explicitAddr && mode != db.AutoPickDecision {
+		// No decide model to classify the turn: keep 后台续跑 pinned to the owner.
+		out := openTaskSendPlan(openTask.AgentID)
+		log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (skip decision; pending background task)", out.Targets)
+		return out, nil
+	}
+	if explicitAddr || mode == db.AutoPickOff {
 		plan.Targets = base
 		if plan.ShowReplyCandidates {
 			plan.DebugNames = displayNamesForAgents(plan.Targets, agents)
@@ -2218,15 +2235,29 @@ func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []s
 	}
 
 	synopsis := ""
+	var turnCtx *autoPickTurnContext
 	if msgs, lerr := s.db.ListMessages(uid, conv.ID); lerr == nil {
-		// Exclude the user message just saved if present as last; still useful as soft signal.
+		// Heuristic fail-open still uses the text synopsis; decide gets structured turns.
 		synopsis = recentMessagesSynopsis(msgs, 2, agents)
+		turnCtx = buildAutoPickTurnContext(msgs, replyParent, members, autoPickTurnContextMax)
+	}
+	if openTask != nil {
+		if turnCtx == nil {
+			turnCtx = &autoPickTurnContext{}
+		}
+		turnCtx.OpenTask = openTask
 	}
 	var decisionDeps *autoPickDecisionDeps
 	if mode == db.AutoPickDecision {
 		decisionDeps = s.decisionDepsForUser(uid, conv.ID)
 	}
-	pick := runAutoPickByMode(mode, content, members, agents, conv.AgentID, ch.Settings.AutoPickK, synopsis, decisionDeps)
+	pick := runAutoPickByModeWithTurns(mode, content, members, agents, conv.AgentID, ch.Settings.AutoPickK, synopsis, decisionDeps, turnCtx)
+	if openTask != nil && pick.Method != "decision" {
+		// Decide failed open: cannot tell continuation from new ask — keep the owner.
+		out := openTaskSendPlan(openTask.AgentID)
+		log.Printf("auto_pick=open_task ids=%v conf=1.00 fallback= (decide fail-open; pending background task)", out.Targets)
+		return out, nil
+	}
 	plan.AutoPick = &pick
 	plan.Targets = pick.AgentIDs
 	if len(plan.Targets) == 0 {
@@ -2902,7 +2933,7 @@ func (s *Server) handlePostAgentBusMessage(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, nil)
+	m, err := s.deliverAgentMessage(uid, from, toPtr, chPtr, body.Priority, body.Body, nil, "")
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})

@@ -508,14 +508,32 @@ func (s *Server) cancelTasksAndNotify(userID string, conv *db.Conversation, emit
 
 // tryShortcutTurn does not call the model when a backend agent is already
 // running. The new text is queued as-is. Wording is not interpreted.
-func (s *Server) tryShortcutTurn(userID string, conv *db.Conversation, sourceMessageID, content, agentID string, emit func(event string, data any)) bool {
+//
+// Group channels: only queue when this turn is planned for the task owner alone. When
+// Auto选人 / explicit @ planned other members (a new ask while the owner works in the
+// background), they answer now and the task keeps running.
+func (s *Server) tryShortcutTurn(userID string, conv *db.Conversation, sourceMessageID, content string, targets []string, pick *groupAutoPickResult, emit func(event string, data any)) bool {
+	agentID := ""
+	if len(targets) > 0 {
+		agentID = targets[0]
+	}
 	open, err := s.db.OpenConversationTask(conv.ID)
 	if err != nil {
 		log.Printf("open conversation task conv=%s: %v", conv.ID, err)
 		return false
 	}
 	kind := classifySend(content, open != nil)
+	if open != nil && pick != nil && pick.TaskIntentJudged {
+		// Group decide already classified this turn against the open task.
+		kind = gateFollowUp
+		if pick.CancelOpenTask {
+			kind = gateCancel
+		}
+	}
 	if kind == gateNone {
+		return false
+	}
+	if kind != gateCancel && conv.ChannelID != "" && !targetsOnlyTaskOwner(targets, open.AgentID, conv.AgentID) {
 		return false
 	}
 	if kind == gateCancel {
@@ -564,4 +582,13 @@ func (s *Server) speakShortcut(userID string, conv *db.Conversation, agentID, te
 		"agent_id": agentID,
 		"index":    0,
 	})
+}
+
+// targetsOnlyTaskOwner is true when the planned targets are exactly the open task's owner.
+func targetsOnlyTaskOwner(targets []string, taskAgentID, convAgentID string) bool {
+	owner := strings.TrimSpace(taskAgentID)
+	if owner == "" {
+		owner = strings.TrimSpace(convAgentID)
+	}
+	return len(targets) == 1 && strings.TrimSpace(targets[0]) == owner
 }

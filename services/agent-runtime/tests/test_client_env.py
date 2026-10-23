@@ -187,3 +187,16 @@ if __name__ == "__main__":
     test_app_lookup_prefers_host_open()
     test_host_ls_tool_is_shallow_browse()
     print("all passed")
+
+
+def test_tools_routing_distinguishes_ask_vs_send():
+    from app.client_env import format_tools_routing_block
+
+    block = format_tools_routing_block(
+        tools_enabled=True,
+        available_tool_names=["ask_agent", "send_to_agent", "get_current_time"],
+    )
+    assert "ask_agent" in block and "send_to_agent" in block
+    assert "移交" in block or "接手" in block
+    assert "咨询" in block or "问答" in block
+

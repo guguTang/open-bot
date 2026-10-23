@@ -126,6 +126,8 @@ export type HandoffPayload = {
   purpose: string;
   status: "running" | "done" | "failed" | "rejected" | "awaiting_approval" | string;
   agent_message_id: string;
+  /** Short failure detail when status=failed (upstream/timeout). */
+  error?: string;
 };
 
 export type ReactionUpdatedEvent = {
