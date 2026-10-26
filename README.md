@@ -24,7 +24,9 @@
 
 ```bash
 cp .env.example .env   # 填入 OPENAI_*、DATABASE_URL、JWT_SECRET
-make compose-postgres  # 或 make compose-up / make compose-all
+make compose-postgres  # 日常最小：只要 Postgres
+# make compose-up      # core：Postgres + Redis + MinIO + 文档解析（:8010）
+# make compose-all     # core + Casdoor + Langfuse（一次全起）
 make dev-runtime       # :8001
 make dev-api           # :18080
 make dev-web           # :5173
