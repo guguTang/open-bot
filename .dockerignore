@@ -1,0 +1,22 @@
+# Context for `docker build -f services/api/Dockerfile .` and the runtime image.
+# Sandbox and markitdown use their own directories and are unaffected.
+.git
+.github
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/dist
+**/src-tauri/target
+data
+e2e
+apps
+docs
+**/.DS_Store
+*.log
+.env
+.env.*
+skills/users
+services/agent-runtime/tests
+services/api/tmp
+services/api/api

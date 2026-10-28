@@ -8,6 +8,8 @@ export API_ADDR=:18080
 go run ./cmd/api
 ```
 
+生产镜像（含 `openbot-worker`）从仓库根构建：`make image-api`。发布到 GHCR 的 tag 见 [docs/release.md](../../docs/release.md)。
+
 主要路由：
 
 - `GET /healthz`

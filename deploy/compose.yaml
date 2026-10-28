@@ -17,3 +17,4 @@ include:
   - path: compose/core.yaml
   - path: compose/casdoor.yaml
   - path: compose/langfuse.yaml
+  - path: compose/app.yaml

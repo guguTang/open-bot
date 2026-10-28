@@ -1,0 +1,73 @@
+# Optional application profile. Not started by `make compose-up`.
+#
+# Images are published by .github/workflows/release.yml. Set the prefix to the
+# GHCR owner (lowercase), for example:
+#
+#   OPENBOT_IMAGE_PREFIX=ghcr.io/my-user \
+#   OPENBOT_IMAGE_TAG=1.2.3 \
+#   docker compose -f deploy/compose.yaml --project-directory deploy --profile app up -d
+#
+# Host .env DATABASE_URL points at 127.0.0.1. This file sets the in-network URL
+# itself so that value is not reused inside the containers.
+#
+# Sandbox is off. The API image includes the docker CLI, but the process user
+# is `openbot` and cannot use the host socket. To turn the sandbox on, set
+# SANDBOX_ENABLED=1, publish the socket, and run the api service as root:
+#
+#   user: "0:0"
+#   volumes:
+#     - /var/run/docker.sock:/var/run/docker.sock
+
+services:
+  agent-runtime:
+    profiles: ["app"]
+    image: ${OPENBOT_IMAGE_PREFIX:-ghcr.io/OWNER}/openbot-agent-runtime:${OPENBOT_IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: postgres://openbot:openbot@postgres:5432/openbot?sslmode=disable
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      MEM0_ENABLED: ${MEM0_ENABLED:-0}
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      - postgres
+
+  api:
+    profiles: ["app"]
+    image: ${OPENBOT_IMAGE_PREFIX:-ghcr.io/OWNER}/openbot-api:${OPENBOT_IMAGE_TAG:-latest}
+    environment:
+      API_ADDR: ":18080"
+      AGENT_RUNTIME_URL: http://agent-runtime:8001
+      DATABASE_URL: postgres://openbot:openbot@postgres:5432/openbot?sslmode=disable
+      DOC_PARSE_URL: http://markitdown:8010
+      JWT_SECRET: ${JWT_SECRET:-open-bot-dev-jwt-secret-change-me}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-open-bot-dev-internal}
+      # The worker service below owns routine scheduling.
+      ROUTINES_INPROCESS: "0"
+      SANDBOX_ENABLED: ${SANDBOX_ENABLED:-0}
+      SANDBOX_IMAGE: ${OPENBOT_IMAGE_PREFIX:-ghcr.io/OWNER}/openbot-sandbox:${OPENBOT_IMAGE_TAG:-latest}
+      SANDBOX_DESKTOP_IMAGE: ${OPENBOT_IMAGE_PREFIX:-ghcr.io/OWNER}/openbot-sandbox-desktop:${OPENBOT_IMAGE_TAG:-latest}
+    ports:
+      - "127.0.0.1:18080:18080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:18080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - postgres
+      - agent-runtime
+      - markitdown
+
+  worker:
+    profiles: ["app"]
+    image: ${OPENBOT_IMAGE_PREFIX:-ghcr.io/OWNER}/openbot-api:${OPENBOT_IMAGE_TAG:-latest}
+    command: ["openbot-worker"]
+    environment:
+      DATABASE_URL: postgres://openbot:openbot@postgres:5432/openbot?sslmode=disable
+      OPENBOT_API_URL: http://api:18080
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-open-bot-dev-internal}
+    depends_on:
+      - api
