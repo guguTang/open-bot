@@ -29,7 +29,8 @@ services:
     volumes:
       - openbot_minio:/data
 
-  # PDF/DOCX/XLSX/XLS/PPTX → Markdown. API is not in this stack:
+  # PDF/DOCX/XLSX/XLS/PPTX → Markdown. Release CI also pushes this Dockerfile
+  # to ghcr.io/<owner>/openbot-markitdown (see docs/release.md). API is not in this stack:
   #   make dev-api uses the published port (DOC_PARSE_URL=http://127.0.0.1:8010).
   #   An API container on this network would use http://markitdown:8010.
   # Host port 8010 avoids the agent runtime on :8001.

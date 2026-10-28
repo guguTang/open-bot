@@ -1,247 +1,126 @@
-# open-bot
+# Open Bot
 
-接近 Grok Bot 体验的多端 AI 助手（Web / 桌面 / 移动）。
+多端 AI 助手：Web / 桌面 / 移动，多 Bot 协作，技能、记忆、本机能力与微应用工具。
 
-## 已拍板架构
+面向想自己掌控助手体验的个人与小团队——聊天、长任务、例行提醒、接本机与运行环境，以及可固定复用的「我的工具」。
 
-- **前端**：React + TypeScript + Vite；桌面 Tauri 2；移动两条路线并行——`apps/mobile` 为 Capacitor 壳（复用 web），`apps/mobile-rn` 为 React Native + Expo + HeroUI Native 原生实现
-- **产品 API**：Go（鉴权、会话、SSE、多助手、LLM 连接）
-- **Agent 运行时**：Python（Skills、Memory、Compaction、OpenAI 兼容）
-- **存储**：PostgreSQL（用户 / LLM 连接 / 会话消息 / 助手人设）
-- **协议**：MCP Client（stdio/sse/http）；技能格式 [Agent Skills](https://agentskills.io)
+> 开发、架构、环境变量与验收命令见 **[docs/技术架构与开发.md](docs/技术架构与开发.md)**。  
+> 日常起服务见 **[docs/本地启动.md](docs/本地启动.md)**。
 
-详情见 [docs/技术方案.md](docs/技术方案.md)、[docs/目录说明.md](docs/目录说明.md)。微应用（Phase 0–6 + 授权 park/resume 抗重启 + 统一 Grant UI）见 [docs/micro-app-architecture-v1.md](docs/micro-app-architecture-v1.md)。
+## 主要功能
 
-## E2E 测试
+### 对话与协作
 
-用户端 + 管理端 Playwright 套件：见 **[docs/e2e.md](docs/e2e.md)**。
+- 流式对话：多会话、打断/停止、刷新后继续上看流
+- 群聊 `@` 与多助手协作；对话线程（回复）
+- 长任务：先确认再后台执行，结果仍交回同一会话
 
-```bash
-make e2e-install   # 一次性
-make e2e           # 需 API/web/admin/runtime 已起；默认 mock LLM
-```
+### Agent 智能
 
-## Phase 1 本地启动
+- **Skills**：遵循 [Agent Skills](https://agentskills.io) 格式；可启用、上传自定义技能
+- **记忆**：自研 MemoryStore（profile / log / note + pgvector）+ [Mem0](https://github.com/mem0ai/mem0) OSS 自动抽取与召回
+- **上下文压缩（Compaction）**：运行时自研摘要压缩，近轮原文保留
+- **MCP**：可配 stdio / SSE / HTTP 工具服务器（官方 Python SDK）
+- 人设可配；岗位引导与复制助手
 
-> 完整步骤、端口、冒烟与常见问题见 **[docs/本地启动.md](docs/本地启动.md)**。
+### 多端客户端
 
-依赖：Go 1.22+、Python 3.11+、Node/pnpm、Docker（Postgres）；桌面另需 Rust（rustup）+ Xcode CLT；移动另需 Xcode（iOS）/ Android Studio（可选）。
+- Web（日常开发主界面）
+- 桌面：[Tauri 2](https://github.com/tauri-apps/tauri)，复用 Web
+- 移动壳：[Capacitor](https://github.com/ionic-team/capacitor)，复用 Web 构建产物
+- 移动原生：Expo + HeroUI Native（独立 UI 路线）
 
-```bash
-# 1) Docker 依赖
-make compose-postgres   # 最小：只要 Postgres
-# 或：make compose-up     # core：Postgres / Redis / MinIO / MarkItDown（:8010）
-# 或：make compose-all    # core + Casdoor + Langfuse（一次全起）
-# 入口：deploy/compose.yaml（详见 deploy/README.md、docs/本地启动.md）
-# 镜像：pgvector/pgvector:pg16（含 vector 扩展）
-# 若从官方 postgres 升级：开发环境可 make compose-down && docker volume rm deploy_openbot_pg
-# 默认连接串：postgres://openbot:openbot@127.0.0.1:5432/openbot?sslmode=disable
+### 我的工具（微应用）
 
-# 2) 环境变量
-cp .env.example .env
-# 编辑 .env：OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL
-# 以及 DATABASE_URL、JWT_SECRET
-# 可选：COMPACT_*（上下文压缩：token 预算为主，消息/字符数为兜底；见 .env.example）
+- 对话里生成 / 保存 UI 小工具，固定到「我的工具」与可选聊天快捷
+- 能力授权与 park / resume；修改走同 id 覆盖
 
-# 3) 三个进程
-make dev-runtime   # http://127.0.0.1:8001
-make dev-api       # http://127.0.0.1:18080
-make dev-web       # http://127.0.0.1:5173（桌面/ Tauri 要求固定 5173）
-make dev-admin     # http://127.0.0.1:5174（业务管理端，与 web 分离）
-```
+### 例行任务
 
-### 桌面端（Tauri 2，复用 apps/web）
+- cron Routines：到点在会话里交付；支持时区、重试、暂停/恢复
+- 产品调度逻辑自研；cron 表达式解析使用 [robfig/cron](https://github.com/robfig/cron)
 
-先确保 Postgres + `make dev-runtime` + `make dev-api` 已启动，再：
+### 本机与运行环境
 
-```bash
-make dev-desktop
-# 或：pnpm --dir apps/desktop tauri dev
-```
+- 经确认操作本机（列表机器、执行命令等）
+- 另有隔离的**运行环境**供助手执行（对用户文案称「运行环境」）
+- 附件文档解析（compose core）：[MarkItDown](https://github.com/microsoft/markitdown)
 
-- 窗口：标题 Open Bot，默认约 1200×800，深色背景
-- API：与 Web 相同，默认 `http://127.0.0.1:18080`；用 `.env` 的 `VITE_API_BASE` 覆盖
-- 构建：`make build-desktop`（macOS 得到 `.app` 和安装 DMG）或 `make check-desktop`
-- 说明见 [apps/desktop/README.md](apps/desktop/README.md)。没有 Developer ID 时用 ad-hoc 签名；公证密钥是可选的
+### 账号与管理
 
+- 登录鉴权；可选多用户 / 组织与业务管理端
+- 可选身份：[Casdoor](https://github.com/casdoor/casdoor)（`compose-all`）
 
+### 开放接口
 
+- OpenAI 兼容模型连接（含本地 / 网关）；设置里可配多条
+- MCP 工具接入
+- A2A：演示级协议适配（非完整官方栈）
 
-### 移动端（Capacitor 7，复用 apps/web/dist）
+## 关键开源组件
 
-先确保 Postgres + `make dev-runtime` + `make dev-api` 已启动。
+事实以仓库已用依赖为准。部分能力为「自研 + 开源」组合，见备注。
 
-```bash
-make build-web       # 产出 apps/web/dist
-make sync-mobile     # cap sync → ios/ & android/
-make dev-mobile-ios  # 打开 Xcode（需本机 Xcode + CocoaPods）
-# Android：make open-mobile-android（需 Android Studio）
-```
+| 能力 | 项目 | 仓库 / 文档 |
+|------|------|-------------|
+| Agent 编排 | LangGraph（含 langgraph-checkpoint-postgres） | https://github.com/langchain-ai/langgraph |
+| 长期记忆 | MemoryStore（自研）+ Mem0 OSS（mem0ai） | https://github.com/mem0ai/mem0 |
+| 技能格式 | Agent Skills | https://agentskills.io |
+| MCP | 官方 Python SDK `mcp` | https://github.com/modelcontextprotocol/python-sdk |
+| 例行任务 cron 解析 | robfig/cron（产品调度逻辑自研） | https://github.com/robfig/cron |
+| 可观测（可选 compose） | Langfuse | https://github.com/langfuse/langfuse |
+| 可选登录 | Casdoor | https://github.com/casdoor/casdoor |
+| 文档解析（compose core） | MarkItDown | https://github.com/microsoft/markitdown |
+| 桌面 | Tauri 2 | https://github.com/tauri-apps/tauri |
+| 移动壳 | Capacitor | https://github.com/ionic-team/capacitor |
 
-- **不复制 UI**：`capacitor.config.ts` 的 `webDir` 指向 `../web/dist`
-- API：默认 `http://127.0.0.1:18080`；**模拟器**可直连宿主机；**真机**请把 `VITE_API_BASE` 改成电脑局域网 IP 后重新 build + sync
-- Live reload（仅模拟器）：`CAP_LIVE_RELOAD=1 make sync-mobile`（`server.url` → `http://127.0.0.1:5173`；真机改 `CAP_SERVER_URL`）
-- 说明见 [apps/mobile/README.md](apps/mobile/README.md)；本轮不做上架、推送证书、原生插件大集合
+> **记忆** = 自研 MemoryStore + Mem0；**例行任务** = 产品自研调度 + robfig/cron 表达式解析；**上下文压缩**为运行时自研，未绑定第三方压缩框架。
 
+## 快速开始
 
-### 移动端（React Native / Expo + HeroUI Native，`apps/mobile-rn`）
-
-与上面的 Capacitor 壳并存的两条路线：这条是原生实现，自己写 UI，只复用后端契约。
+完整步骤、端口与排障见 **[docs/本地启动.md](docs/本地启动.md)**。最短路径：
 
 ```bash
-make dev-mobile-rn      # 等价于 cd apps/mobile-rn && pnpm start
-# 启动脚本自动探测本机局域网 IP 注入 EXPO_PUBLIC_OPENBOT_API_BASE（真机可连）
+cp .env.example .env   # 填入 OPENAI_*、DATABASE_URL、JWT_SECRET
+make compose-postgres  # 日常最小：只要 Postgres
+# make compose-up      # core：Postgres + Redis + MinIO + 文档解析（:8010）
+# make compose-all     # core + Casdoor + Langfuse（一次全起）
+make dev-runtime       # :8001
+make dev-api           # :18080
+make dev-web           # :5173
 ```
 
-- **流式**用 `expo/fetch`（RN 内置 fetch 拿不到 `response.body`），SSE 解析器逐行移植自 Web 端
-- Token 存 `expo-secure-store`（Keychain / Keystore）
-- iOS 模拟器需完整 Xcode；没装 Xcode 就用真机 + Expo Go
-- 说明见 [apps/mobile-rn/README.md](apps/mobile-rn/README.md)
+- 桌面：`make dev-desktop`（需先起 runtime + api）
+- 管理端：`make dev-admin`（:5174）
+- 移动与运行环境：见本地启动文档
 
+## 支持的客户端
 
-### 沙箱电脑（Phase 1）
-
-```bash
-make sandbox-image   # 构建 openbot-sandbox:dev
-# 设置 → 沙箱电脑；或 curl JWT /v1/sandbox/ensure + /exec
-```
-
-详见 [docs/沙箱电脑.md](docs/沙箱电脑.md)。环境变量：`SANDBOX_ENABLED` / `SANDBOX_IMAGE` / `SANDBOX_DATA_ROOT` / `SANDBOX_S3_ENDPOINT`（MinIO，不设则只用本地盘）/ `SANDBOX_MEMORY_MB` / `SANDBOX_CPUS`。
-
-### 环境变量要点
-
-| 变量 | 说明 |
+| 端 | 说明 |
 |------|------|
-| `DATABASE_URL` | Postgres 连接串 |
-| `JWT_SECRET` | HS256 密钥（开发可有默认值，生产必改） |
-| `API_ADDR` | 默认 `:18080`（避开本机 8080） |
-| `AGENT_RUNTIME_URL` | 默认 `http://127.0.0.1:8001` |
-| `OPENAI_*` | 注册用户时种子默认 LLM；也可在 Web「设置」里改 |
-| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` / `EMBEDDING_DIM` | 记忆语义召回（默认 bge-m3 @ `:30603`，dim=1024；与 enigma config_34 对齐） |
-| `A2A_TOKEN` | 可选；设置后 Agent Card / `/a2a/v1` 需 Bearer 或 `X-A2A-Token` |
-| `A2A_PUBLIC_BASE` | 可选；Agent Card 中的对外 base（默认从请求 Host 推断） |
-| `VITE_API_BASE` | Web/桌面/移动前端 API 地址，默认 `http://127.0.0.1:18080`；真机改为局域网 IP |
+| Web | `apps/web`，日常开发主界面 |
+| 桌面 | Tauri 2，复用 Web |
+| 移动（壳） | Capacitor，复用 Web 构建产物 |
+| 移动（原生） | Expo + HeroUI Native，独立 UI |
+| 管理端 | 运营向，与用户端登录分离 |
 
-### 已实现能力
+## 文档
 
-- 注册 / 登录（JWT Bearer）
-- 每用户多条 LLM 连接（脱敏列表、设默认、可选上下文窗口 tokens）；发消息时覆盖 runtime；压缩按 token 预算触发
-- 会话 / 消息持久化到 Postgres（重启 API 不丢）
-- 助手人设：用户可建可改可删（`system_prompt` 注入 runtime；无内置助手，启动时 purge `is_builtin`）
-- 记忆按 `user_id` 分文件隔离
-- Web：登录页、聊天、LLM 设置、会话列表、MCP 设置
-- MCP Client：用户可配置 servers；测试连接列出工具；手动 call-tool；tools 开启时注入 LLM tool loop
-- 自定义 Skill 上传（设置→Skills）；与全局技能合并，按启用集注入 runtime
-- 记忆语义召回：pgvector + embedding；不可用时关键词降级
-- A2A 适配层：Agent Card + JSON-RPC `message/send`（演示用，非完整协议栈）
-- Routines：cron 例行任务（API 内嵌调度 + Web 设置页）
-- 桌面壳：Tauri 2（`apps/desktop`，复用 `apps/web`；`make dev-desktop`）
-- 移动壳：Capacitor 7（`apps/mobile`，复用 `apps/web/dist`；`make sync-mobile` / `make dev-mobile-ios`）
-- 移动端（原生）：Expo + HeroUI Native（`apps/mobile-rn`）：登录、助手列表、SSE 流式聊天页
+| 文档 | 内容 |
+|------|------|
+| [本地启动](docs/本地启动.md) | 依赖、三进程、桌面/移动/运行环境、常见问题 |
+| [技术架构与开发](docs/技术架构与开发.md) | 栈、目录、环境变量、构建与验收（原根 README） |
+| [技术方案](docs/技术方案.md) | 选型与架构说明 |
+| [目录说明](docs/目录说明.md) | 仓库结构 |
+| [产品功能与完成度](docs/产品功能与完成度.md) | 功能对照表 |
+| [微应用架构](docs/micro-app-architecture-v1.md) | 微应用 Phase 与授权 |
+| [多用户与管理端](docs/多用户与管理端.md) | 组织与 Admin |
+| [缺口与下一批](docs/缺口与下一批.md) | 已知缺口 |
 
-### 快速验收
+## 参与贡献
 
-```bash
-# 未登录应 401
-curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/v1/agents
+欢迎 Issue / PR。较大功能请先开 Issue 对齐产品与范围。开发环境与代码边界见 [技术架构与开发](docs/技术架构与开发.md)、[目录说明](docs/目录说明.md)。
 
-# 注册并拿到 token
-REG=$(curl -s -X POST http://127.0.0.1:18080/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"demo1","password":"pass1234"}')
-TOKEN=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$REG")
+---
 
-curl -s http://127.0.0.1:18080/v1/llm-connections -H "Authorization: Bearer $TOKEN"
-
-AGENT=$(curl -s -X POST http://127.0.0.1:18080/v1/agents \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"demo","description":"验收助手","system_prompt":"你是助手，默认中文。"}')
-AID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$AGENT")
-
-CONV=$(curl -s -X POST http://127.0.0.1:18080/v1/conversations \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"agent_id\":\"$AID\",\"title\":\"demo\"}")
-CID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$CONV")
-
-curl -N -X POST http://127.0.0.1:18080/v1/conversations/$CID/messages \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"content":"你好"}'
-```
-
-### 添加示例 MCP（echo）
-
-```bash
-# 1) 确保 agent-runtime venv 已装 mcp（make / pip install -r requirements.txt）
-# 2) Web → 设置 → MCP →「填入 echo 示例」→ 新增 →「测试连接」
-#    或 API：
-TOKEN=...  # 登录后 JWT
-curl -s -X POST http://127.0.0.1:18080/v1/mcp-servers \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{
-    "name":"echo",
-    "transport":"stdio",
-    "command":"'"$(pwd)"'/services/agent-runtime/.venv/bin/python",
-    "args":["'"$(pwd)"'/services/agent-runtime/examples/mcp_echo_server.py"],
-    "enabled":true
-  }'
-```
-
-### 构建
-
-```bash
-cd services/api && go build -o /tmp/openbot-api ./cmd/api
-pnpm --dir apps/web build
-make check-desktop   # 完整 macOS 安装包：make build-desktop
-make sync-mobile     # Capacitor：build-web + cap sync
-```
-
-### 自定义 Skill 上传
-
-```bash
-TOKEN=...  # 登录 JWT
-curl -s -X POST http://127.0.0.1:18080/v1/skills/upload \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"tea-timer","description":"安排泡茶步骤与计时。","body_markdown":"## 步骤\n1. 烧水\n2. 温杯"}'
-# 仅可删除自建：
-curl -s -X DELETE http://127.0.0.1:18080/v1/skills/tea-timer -H "Authorization: Bearer $TOKEN"
-```
-
-Web：设置 → Skills → 填写 name/description/正文 → 上传并启用。
-
-### 记忆语义召回
-
-`.env` 配置 `EMBEDDING_*`（enigma config_34：`http://192.168.5.34:30603/v1` + `bge-m3`）。写入记忆时生成 `vector(1024)`；`GET /v1/memories?q=...` 优先余弦召回，失败则关键词。
-
-### A2A 适配层（演示）
-
-> 适配层：不是完整 A2A 认证与流式任务生命周期。
-
-```bash
-# Agent Card
-curl -s http://127.0.0.1:18080/.well-known/agent-card.json | head
-# ?agent_id= 需为 A2A 系统用户下已有助手 UUID；省略则取该用户第一个助手
-curl -s 'http://127.0.0.1:18080/.well-known/agent-card.json?agent_id=<AGENT_UUID>'
-
-# message/send（同步简化 Task；需本机 Qwen/LLM + runtime；可省略 agent_id）
-curl -s -X POST http://127.0.0.1:18080/a2a/v1   -H 'Content-Type: application/json'   -d '{
-    "jsonrpc":"2.0","id":1,"method":"message/send",
-    "params":{
-      "message":{"messageId":"m1","role":"user","parts":[{"kind":"text","text":"用一句话介绍你自己"}]}
-    }
-  }'
-```
-
-若配置了 `A2A_TOKEN`，加上 `-H "Authorization: Bearer $A2A_TOKEN"` 或 `-H "X-A2A-Token: $A2A_TOKEN"`。
-
-### Routines（例行任务）
-
-Web：设置 → Routines。或 API：
-
-```bash
-TOKEN=...  # 登录 JWT
-curl -s -X POST http://127.0.0.1:18080/v1/routines   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'   -d '{"name":"晨间简报","prompt":"用三句话给我今日简报","schedule_cron":"0 9 * * *","enabled":true}'
-
-curl -s -X POST http://127.0.0.1:18080/v1/routines/<id>/run   -H "Authorization: Bearer $TOKEN"
-```
-
-调度器仅在 **api 进程**内每分钟 tick；生产多副本需另行防重入。
+*陪伴与能力不必二选一：既能聊得下去，也能把事做完。*

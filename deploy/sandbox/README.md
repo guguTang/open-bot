@@ -53,7 +53,16 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 
 ## Publish
 
-`make sandbox-image` only tags locally. To publish:
+`make sandbox-image` only tags locally. A published GitHub Release pushes
+**linux/amd64** images to GHCR (see [docs/release.md](../../docs/release.md)):
+
+- `ghcr.io/<owner>/openbot-sandbox:<version>` and `:latest` (stable releases)
+- `ghcr.io/<owner>/openbot-sandbox-desktop:<version>` (built `FROM` that CLI tag)
+
+`<owner>` is the GitHub repository owner, lowercased. arm64 is not published by
+CI; build that on the machine that will run the containers.
+
+To push some other tag yourself:
 
 1. Tag for your registry, e.g. `ghcr.io/<org>/openbot-sandbox:dev`
 2. `docker login` to that registry
@@ -61,7 +70,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 4. Set `SANDBOX_IMAGE` / `SANDBOX_DESKTOP_IMAGE` in `.env` (or deploy config) to
    the pushed tags and restart the API
 
-No registry push is performed by default Makefile targets.
+No registry push is performed by the default Makefile targets.
 
 ## Related
 
