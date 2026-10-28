@@ -150,8 +150,8 @@ dev-desktop:
 
 # macOS：签名后的 Open Bot.app，以及不依赖 Finder AppleScript 的安装 DMG。
 # RELEASE_VERSION=1.2.3（不要带 v）会先写入 Tauri / Cargo 版本。未设置时不改文件。
-# 发布 CI 在各系统的原生 runner 上调用：macOS 用本目标（GitHub 托管机是 Apple Silicon），
-# 不用下面的 build-desktop-macos（那是 x86_64 交叉编译）。
+# 发布 CI：GitHub 托管 macOS 是 Apple Silicon。本目标打 aarch64 DMG，
+# 接着用 build-desktop-macos 在同一台机器上交叉编译 Intel。
 build-desktop:
 	set -a && [ -f .env ] && . ./.env; set +a && \
 	  node scripts/set-release-version.mjs && \
@@ -164,7 +164,8 @@ build-desktop-windows:
 	  node scripts/set-release-version.mjs && \
 	  pnpm --dir apps/desktop tauri build --bundles nsis --target x86_64-pc-windows-msvc
 
-# Intel macOS 交叉编译。Apple Silicon 与 GitHub 发布流程用 build-desktop。
+# Intel macOS（x86_64-apple-darwin）。在 Apple Silicon 上这是交叉编译。
+# 发布 CI 在 arm64 runner 上调用本目标；没有单独的 Intel GitHub runner。
 build-desktop-macos:
 	set -a && [ -f .env ] && . ./.env; set +a && \
 	  node scripts/set-release-version.mjs && \

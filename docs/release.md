@@ -68,11 +68,12 @@ OPENBOT_IMAGE_PREFIX=ghcr.io/<owner> OPENBOT_IMAGE_TAG=0.2.0 \
 | `open-bot-<version>-linux-amd64.deb` | `desktop-linux` | `make build-desktop-linux` |
 | `open-bot-<version>-linux-amd64.AppImage` | `desktop-linux` | 同上 |
 | `open-bot-<version>-windows-x64-setup.exe` | `desktop-windows` | `make build-desktop-windows`（NSIS）。未签名时 SmartScreen 会提示 |
-| `open-bot-<version>-macos-<arch>.dmg` | `desktop-macos` | `make build-desktop`。GitHub 托管的 macOS 是 Apple Silicon，所以是 `aarch64`。无证书时 Tauri 做 ad-hoc 签名（`signingIdentity: "-"`），可在本机安装，过不了 Gatekeeper 的「任意来源」以外的分发 |
+| `open-bot-<version>-macos-aarch64.dmg` | `desktop-macos` | `make build-desktop`。GitHub 托管的 macOS 是 Apple Silicon，这是本机架构。无证书时 Tauri 做 ad-hoc 签名（`signingIdentity: "-"`） |
+| `open-bot-<version>-macos-x64.dmg` | `desktop-macos` | 同一 job 里接着跑 `make build-desktop-macos`（`--target x86_64-apple-darwin`）。二进制是 Intel。签名与 aarch64 相同，不另要密钥 |
 | `open-bot-<version>-android-debug.apk` | `android` | 没有 keystore 时。debug 签名，可以装到测试机 |
 | `open-bot-<version>-android-release.apk` 与 `.aab` | `android` | 配了 keystore 才打。这时不再上传 debug APK |
 
-`make build-desktop-macos` 仍是 Intel 交叉编译，发布流程不用它。需要 x64 DMG 时在 Intel Mac 上本地打。
+GitHub 没有 Intel macOS runner。x64 DMG 在 Apple Silicon runner 上交叉编译：Xcode 自带的 macOS SDK 含 x86_64，`rustup target add x86_64-apple-darwin` 由 workflow 安装。DMG 文件名用 `x64`，和本地 `make build-desktop-macos` 的命名一致（不是 `x86_64`）。两个包都在 `desktop-macos` 成功后一起上传。
 
 Web 壳在打包时写死 API 地址。仓库 **Variables**（不是 Secrets）里的 `VITE_API_BASE` 会传给桌面和 Android。不设的话，应用默认 `http://127.0.0.1:18080`，适合桌面连本机 API。真机 Android 要连电脑时，发布前设成局域网或公网地址。
 
@@ -121,4 +122,4 @@ Android 的 `versionName` 跟着 release 版本走。`versionCode` 仍是工程�
 
 - **iOS IPA**：没有签名 job。`make build-ios` 仍是本机 `CODE_SIGNING_ALLOWED=NO` 的 debug 编译，产物不能装到设备上。以后若要接，需要分发证书和 provisioning profile（例如 `IOS_CERTIFICATE`、`IOS_CERTIFICATE_PASSWORD`、`IOS_PROVISIONING_PROFILE`）。现在配了也不会被读取。
 - **`apps/mobile-rn`（Expo）**：商店包要走 EAS 和另一套凭据，不在这条流水线里。
-- **linux/arm64 与 macOS x64 安装包**、**arm64 镜像**：CI 不打。沙箱镜像要在实际运行的机器架构上构建，见 `deploy/sandbox/README.md`。
+- **linux/arm64 桌面包与 arm64 镜像**：CI 不打。沙箱镜像要在实际运行的机器架构上构建，见 `deploy/sandbox/README.md`。

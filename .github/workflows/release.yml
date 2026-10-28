@@ -27,7 +27,9 @@
 #   VITE_API_BASE                  omitted → the app default http://127.0.0.1:18080
 #
 # Not built: iOS IPA, apps/mobile-rn (Expo). iOS secrets are not read.
-# Images are linux/amd64. The macOS package is the runner's native arch (Apple Silicon).
+# Images are linux/amd64. macOS DMGs are built on the Apple Silicon runner:
+# native aarch64 (`make build-desktop`) and Intel x86_64 cross-compile
+# (`make build-desktop-macos`). There is no GitHub-hosted Intel macOS runner.
 
 name: Release
 
@@ -406,7 +408,7 @@ jobs:
   desktop-macos:
     needs: meta
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: write
     env:
@@ -446,7 +448,10 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
           security list-keychain -d user -s "$keychain"
 
+      # Host target is aarch64-apple-darwin. x86_64-apple-darwin is the Intel cross target.
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
@@ -460,25 +465,43 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      # Native arch. GitHub-hosted macOS is Apple Silicon; build-desktop-macos is the Intel cross-compile.
-      - name: Build macOS desktop package
+      # GitHub-hosted macOS is Apple Silicon. Native DMG, then Intel via the Makefile cross target.
+      # Xcode on this runner ships the x86_64 macOS SDK, so no separate Intel runner is required.
+      # APPLE_* env above applies to both builds; unset keeps ad-hoc signing for both.
+      - name: Build Apple Silicon desktop package
         run: make build-desktop
 
-      - name: Collect DMG
+      - name: Build Intel desktop package
+        run: |
+          set -euo pipefail
+          SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+          export SDKROOT
+          make build-desktop-macos
+
+      - name: Collect DMGs
         run: |
           set -euo pipefail
           mkdir -p dist/release
-          dmg="$(find apps/desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' ! -name 'rw.*' -print | head -n 1 || true)"
-          if [ -z "$dmg" ]; then
-            echo "DMG not found" >&2
+          found_arm=0
+          found_intel=0
+          while IFS= read -r dmg; do
+            [ -n "$dmg" ] || continue
+            arch="$(basename "$dmg" | sed -n 's/.*_\([^_]*\)\.dmg$/\1/p')"
+            case "$arch" in
+              aarch64) found_arm=1 ;;
+              x64) found_intel=1 ;;
+              *)
+                echo "unexpected dmg name: $dmg" >&2
+                exit 1
+                ;;
+            esac
+            cp "$dmg" "dist/release/open-bot-${RELEASE_VERSION}-macos-${arch}.dmg"
+          done < <(find apps/desktop/src-tauri/target -path '*/bundle/dmg/*.dmg' ! -name 'rw.*' -print)
+          if [ "$found_arm" != 1 ] || [ "$found_intel" != 1 ]; then
+            echo "expected both aarch64 and x64 DMGs (arm=${found_arm} intel=${found_intel})" >&2
             find apps/desktop/src-tauri/target -type f -path '*/bundle/*' | head -n 50 >&2 || true
             exit 1
           fi
-          arch="$(basename "$dmg" | sed -n 's/.*_\([^_]*\)\.dmg$/\1/p')"
-          if [ -z "$arch" ]; then
-            arch="$(uname -m)"
-          fi
-          cp "$dmg" "dist/release/open-bot-${RELEASE_VERSION}-macos-${arch}.dmg"
           ls -lh dist/release
 
       - uses: softprops/action-gh-release@v2
