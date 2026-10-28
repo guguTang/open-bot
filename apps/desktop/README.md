@@ -36,7 +36,7 @@ pnpm --dir apps/desktop tauri build --debug
 make build-desktop
 ```
 
-在 macOS 上，`tauri build` / `make build-desktop` 会先让 Tauri 打出签名过的 `Open Bot.app`，再写安装 DMG。Windows / Linux 的 `app` 与 `dmg` 目标会被 Tauri 忽略，原有的 `--target` 交叉编译参数保持不变。
+在 macOS 上，`tauri build` / `make build-desktop` 会先让 Tauri 打出签名过的 `Open Bot.app`，再写安装 DMG。Windows / Linux 的 `app` 与 `dmg` 目标会被 Tauri 忽略，所以 `make build-desktop-windows` 打 NSIS，`make build-desktop-linux` 打 `.deb` 和 AppImage。GitHub Release 的打包流程、ad-hoc 与正式签名密钥见 [docs/release.md](../../docs/release.md)。托管 macOS runner 是 Apple Silicon，CI 调用 `make build-desktop`（本机架构）。`make build-desktop-macos` 仍是 Intel 交叉编译，发布流程不用它。
 
 | 构建 | 应用包 | DMG |
 |------|--------|-----|

@@ -22,7 +22,9 @@ env -u DATABASE_URL $COMPOSE --profile langfuse --env-file deploy/langfuse/.env 
 
 Fragments live under `compose/` (`core.yaml`, `casdoor.yaml`, `langfuse.yaml`); do not point `docker compose -f` at those alone unless debugging.
 
-Sandbox images (`sandbox/`, `sandbox-desktop/`) are Dockerfiles only — not part of this compose project. CLI image bakes node/python/micromamba/uv/pnpm/yarn/bun into `/usr/local` + `/opt/micromamba`; see `sandbox/README.md`. Build with `make sandbox-image` / `make sandbox-image-desktop`.
+Sandbox images (`sandbox/`, `sandbox-desktop/`) are Dockerfiles only — not part of the default compose project. CLI image bakes node/python/micromamba/uv/pnpm/yarn/bun into `/usr/local` + `/opt/micromamba`; see `sandbox/README.md`. Build with `make sandbox-image` / `make sandbox-image-desktop`.
+
+Profile `app` (`compose/app.yaml`) runs the published API, routines worker, and agent-runtime images next to core Postgres / MarkItDown. It stays off for `make compose-up`. Set `OPENBOT_IMAGE_PREFIX=ghcr.io/<owner>` (owner lowercased). Release tags and the unsigned client packages are described in [docs/release.md](../docs/release.md).
 
 ## Profiles & ports
 

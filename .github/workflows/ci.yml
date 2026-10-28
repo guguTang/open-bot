@@ -1,3 +1,7 @@
+# Pull requests and branch pushes. Release images and client packages are
+# .github/workflows/release.yml (see docs/release.md). This file stays on
+# pull_request / push so a release workflow cannot cancel or replace PR CI.
+
 name: CI
 
 on:

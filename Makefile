@@ -1,5 +1,5 @@
 # open-bot local dev helpers
-.PHONY: compose-up compose-all compose-postgres compose-down compose-langfuse compose-langfuse-down compose-casdoor compose-casdoor-down dev-api dev-api-air dev-runtime dev-backend dev-worker dev-web dev-admin dev-desktop build-desktop build-desktop-windows build-desktop-macos build-desktop-linux check-desktop \ sync-curated-builtins sandbox-image-verify
+.PHONY: compose-up compose-all compose-postgres compose-down compose-langfuse compose-langfuse-down compose-casdoor compose-casdoor-down dev-api dev-api-air dev-runtime dev-backend dev-worker dev-web dev-admin dev-desktop build-desktop build-desktop-windows build-desktop-macos build-desktop-linux check-desktop image-api image-runtime image-markitdown \ sync-curated-builtins sandbox-image-verify
 	build-web build-admin sync-mobile build-android build-android-debug build-android-release dev-mobile-ios open-mobile-android build-ios \
 	dev-mobile-rn dev-mobile-rn-clear check-mobile-rn \
 	sandbox-image sandbox-image-desktop \
@@ -149,22 +149,31 @@ dev-desktop:
 	  pnpm --dir apps/desktop tauri dev
 
 # macOS：签名后的 Open Bot.app，以及不依赖 Finder AppleScript 的安装 DMG。
+# RELEASE_VERSION=1.2.3（不要带 v）会先写入 Tauri / Cargo 版本。未设置时不改文件。
+# 发布 CI 在各系统的原生 runner 上调用：macOS 用本目标（GitHub 托管机是 Apple Silicon），
+# 不用下面的 build-desktop-macos（那是 x86_64 交叉编译）。
 build-desktop:
 	set -a && [ -f .env ] && . ./.env; set +a && \
+	  node scripts/set-release-version.mjs && \
 	  pnpm --dir apps/desktop tauri build
 
-# Platform-specific desktop builds (Tauri targets)
+# Platform-specific desktop builds (Tauri targets).
+# tauri.conf.json 只列了 app/dmg；Windows / Linux 会忽略它们，所以这里显式给安装包类型。
 build-desktop-windows:
 	set -a && [ -f .env ] && . ./.env; set +a && \
-	  pnpm --dir apps/desktop tauri build --target x86_64-pc-windows-msvc
+	  node scripts/set-release-version.mjs && \
+	  pnpm --dir apps/desktop tauri build --bundles nsis --target x86_64-pc-windows-msvc
 
+# Intel macOS 交叉编译。Apple Silicon 与 GitHub 发布流程用 build-desktop。
 build-desktop-macos:
 	set -a && [ -f .env ] && . ./.env; set +a && \
+	  node scripts/set-release-version.mjs && \
 	  pnpm --dir apps/desktop tauri build --target x86_64-apple-darwin
 
 build-desktop-linux:
 	set -a && [ -f .env ] && . ./.env; set +a && \
-	  pnpm --dir apps/desktop tauri build --target x86_64-unknown-linux-gnu
+	  node scripts/set-release-version.mjs && \
+	  pnpm --dir apps/desktop tauri build --bundles deb,appimage --target x86_64-unknown-linux-gnu
 
 check-desktop:
 	cd apps/desktop/src-tauri && cargo check
@@ -213,8 +222,9 @@ build-android-debug: sync-mobile
 	@echo "APK: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
 
 build-android-release: sync-mobile
-	cd apps/mobile/android && ./gradlew assembleRelease
-	@echo "APK: apps/mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk"
+	cd apps/mobile/android && ./gradlew assembleRelease bundleRelease
+	@echo "APK: apps/mobile/android/app/build/outputs/apk/release/ (app-release.apk when ANDROID_KEYSTORE_PATH is set, else app-release-unsigned.apk)"
+	@echo "AAB: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab"
 
 # iOS build (macOS only, requires Xcode)
 build-ios: sync-mobile
@@ -224,8 +234,24 @@ build-ios: sync-mobile
 	cd apps/mobile/ios/App && xcodebuild -scheme App -configuration Debug -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
 	@echo "iOS build complete"
 
+# Production images. api / runtime build from the repo root so they can copy skills/.
+# Local tags only; the release workflow pushes the same Dockerfiles to GHCR.
+API_IMAGE ?= openbot-api:dev
+RUNTIME_IMAGE ?= openbot-agent-runtime:dev
+MARKITDOWN_IMAGE ?= openbot-markitdown:dev
+
+image-api:
+	docker build -f services/api/Dockerfile -t $(API_IMAGE) .
+
+image-runtime:
+	docker build -f services/agent-runtime/Dockerfile -t $(RUNTIME_IMAGE) .
+
+image-markitdown:
+	docker build -f services/markitdown/Dockerfile -t $(MARKITDOWN_IMAGE) services/markitdown
+
 # Sandbox computer images: tooling baked into /usr/local + /opt/micromamba.
-# See deploy/sandbox/README.md for rebuild/publish. Does not push a registry.
+# See deploy/sandbox/README.md for rebuild/publish. These targets do not push.
+# Release CI pushes the same Dockerfiles to GHCR; see docs/release.md.
 SANDBOX_IMAGE ?= openbot-sandbox:dev
 sandbox-image:
 	docker build -t $(SANDBOX_IMAGE) -f deploy/sandbox/Dockerfile deploy/sandbox

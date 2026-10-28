@@ -1,0 +1,597 @@
+# Release images and client packages.
+#
+# Trigger: a GitHub Release is published. Pushing a v* tag by itself does nothing.
+# How to cut one: docs/release.md.
+#
+# Manual run (Actions → Release → Run workflow): input a semver without a leading v.
+# That pushes images under that version (it does not move :latest) and uploads
+# client packages as Actions artifacts only, not onto a GitHub Release.
+#
+# GHCR login is GITHUB_TOKEN with packages: write. There is no registry password.
+#
+# Optional repository secrets. Unset means an unsigned / debug package, and the job still passes:
+#   APPLE_CERTIFICATE              base64 Developer ID .p12
+#   APPLE_CERTIFICATE_PASSWORD
+#   APPLE_SIGNING_IDENTITY         Developer ID Application: Name (TEAMID)
+#   APPLE_ID                       notarization; APPLE_ID + APPLE_PASSWORD + APPLE_TEAM_ID together
+#   APPLE_PASSWORD                 app-specific password
+#   APPLE_TEAM_ID
+#   WINDOWS_CERTIFICATE            base64 Authenticode .pfx; signs the NSIS installer only
+#   WINDOWS_CERTIFICATE_PASSWORD
+#   ANDROID_KEYSTORE_BASE64        PKCS12; switches the Android job to a signed release APK + AAB
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+#
+# Optional repository variable (not a secret), baked into the desktop and Android web shell:
+#   VITE_API_BASE                  omitted → the app default http://127.0.0.1:18080
+#
+# Not built: iOS IPA, apps/mobile-rn (Expo). iOS secrets are not read.
+# Images are linux/amd64. The macOS package is the runner's native arch (Apple Silicon).
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semver without a leading v (for example 1.2.3). Does not move the latest image tag.
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      owner: ${{ steps.v.outputs.owner }}
+      push_latest: ${{ steps.v.outputs.push_latest }}
+    steps:
+      - id: v
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG_INPUT: ${{ github.event.release.tag_name }}
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "release" ]; then
+            tag="$RELEASE_TAG_INPUT"
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              echo "push_latest=false" >> "$GITHUB_OUTPUT"
+              latest=false
+            else
+              echo "push_latest=true" >> "$GITHUB_OUTPUT"
+              latest=true
+            fi
+          else
+            raw="${RELEASE_VERSION_INPUT#v}"
+            tag="v${raw}"
+            echo "push_latest=false" >> "$GITHUB_OUTPUT"
+            latest=false
+          fi
+          version="${tag#v}"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "version must look like 1.2.3 or 1.2.3-rc.1 (tag was ${tag})" >&2
+            exit 1
+          fi
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "owner=${owner}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### ${tag}"
+            echo ""
+            echo "Images: \`ghcr.io/${owner}/openbot-*\` at \`${version}\` and \`${tag}\`."
+            echo "Move \`:latest\`: ${latest}."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  images:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: openbot-api
+            file: services/api/Dockerfile
+            context: .
+          - name: openbot-agent-runtime
+            file: services/agent-runtime/Dockerfile
+            context: .
+          - name: openbot-markitdown
+            file: services/markitdown/Dockerfile
+            context: services/markitdown
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ needs.meta.outputs.owner }}/${{ matrix.name }}
+          tags: |
+            type=raw,value=${{ needs.meta.outputs.version }}
+            type=raw,value=${{ needs.meta.outputs.tag }},enable=${{ needs.meta.outputs.tag != needs.meta.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.meta.outputs.push_latest == 'true' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+      - name: Note image tags
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo ""
+            echo '```'
+            printf '%s\n' "$IMAGE_TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sandbox:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta-cli
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ needs.meta.outputs.owner }}/openbot-sandbox
+          tags: |
+            type=raw,value=${{ needs.meta.outputs.version }}
+            type=raw,value=${{ needs.meta.outputs.tag }},enable=${{ needs.meta.outputs.tag != needs.meta.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.meta.outputs.push_latest == 'true' }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/sandbox
+          file: deploy/sandbox/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta-cli.outputs.tags }}
+          labels: ${{ steps.meta-cli.outputs.labels }}
+          cache-from: type=gha,scope=openbot-sandbox
+          cache-to: type=gha,scope=openbot-sandbox,mode=max
+
+      - id: meta-desktop
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ needs.meta.outputs.owner }}/openbot-sandbox-desktop
+          tags: |
+            type=raw,value=${{ needs.meta.outputs.version }}
+            type=raw,value=${{ needs.meta.outputs.tag }},enable=${{ needs.meta.outputs.tag != needs.meta.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.meta.outputs.push_latest == 'true' }}
+
+      # Desktop Dockerfile FROM's the CLI image. Pull the tag just pushed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/sandbox-desktop
+          file: deploy/sandbox-desktop/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            SANDBOX_BASE=ghcr.io/${{ needs.meta.outputs.owner }}/openbot-sandbox:${{ needs.meta.outputs.version }}
+          tags: ${{ steps.meta-desktop.outputs.tags }}
+          labels: ${{ steps.meta-desktop.outputs.labels }}
+          cache-from: type=gha,scope=openbot-sandbox-desktop
+          cache-to: type=gha,scope=openbot-sandbox-desktop,mode=max
+
+  desktop-linux:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.meta.outputs.version }}
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            pkg-config \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libwebkit2gtk-4.1-dev
+          # AppImage's linuxdeploy wants libfuse. Ubuntu 24.04 renamed the package.
+          sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Linux desktop packages
+        run: make build-desktop-linux
+
+      - name: Collect installers
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          deb="$(find apps/desktop/src-tauri/target -path '*/bundle/deb/*.deb' -print | head -n 1 || true)"
+          appimage="$(find apps/desktop/src-tauri/target -path '*/bundle/appimage/*.AppImage' -print | head -n 1 || true)"
+          if [ -z "$deb" ] || [ -z "$appimage" ]; then
+            echo "expected a .deb and an .AppImage" >&2
+            find apps/desktop/src-tauri/target -type f -path '*/bundle/*' | head -n 50 >&2 || true
+            exit 1
+          fi
+          cp "$deb" "dist/release/open-bot-${RELEASE_VERSION}-linux-amd64.deb"
+          cp "$appimage" "dist/release/open-bot-${RELEASE_VERSION}-linux-amd64.AppImage"
+          chmod +x "dist/release/open-bot-${RELEASE_VERSION}-linux-amd64.AppImage"
+          ls -lh dist/release
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: dist/release/*
+          fail_on_unmatched_files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux
+          path: dist/release/*
+          if-no-files-found: error
+
+  desktop-windows:
+    needs: meta
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.meta.outputs.version }}
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install GNU make
+        shell: pwsh
+        run: choco install make --no-progress -y
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install JavaScript dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows desktop package
+        shell: bash
+        run: make build-desktop-windows
+
+      - name: Collect installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          exe="$(find apps/desktop/src-tauri/target -path '*/bundle/nsis/*.exe' -print | head -n 1 || true)"
+          if [ -z "$exe" ]; then
+            echo "NSIS installer not found" >&2
+            find apps/desktop/src-tauri/target -type f -path '*/bundle/*' | head -n 50 >&2 || true
+            exit 1
+          fi
+          cp "$exe" "dist/release/open-bot-${RELEASE_VERSION}-windows-x64-setup.exe"
+          ls -lh dist/release
+
+      - name: Sign Windows installer when configured
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Host "WINDOWS_CERTIFICATE unset; NSIS installer stays unsigned."
+            exit 0
+          }
+          if (-not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            throw "WINDOWS_CERTIFICATE is set but WINDOWS_CERTIFICATE_PASSWORD is empty"
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "openbot.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool.exe$' } |
+            Sort-Object FullName |
+            Select-Object -Last 1
+          if (-not $signtool) { throw "signtool.exe not found under Windows Kits" }
+          $installer = Get-ChildItem dist/release/*.exe | Select-Object -First 1
+          & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd sha256 /tr http://timestamp.digicert.com /td sha256 $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit $LASTEXITCODE" }
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: dist/release/*
+          fail_on_unmatched_files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist/release/*
+          if-no-files-found: error
+
+  desktop-macos:
+    needs: meta
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.meta.outputs.version }}
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Import Apple certificate when configured
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE}" ]; then
+            echo "APPLE_CERTIFICATE unset; Tauri ad-hoc signs the .app (signingIdentity '-')."
+            exit 0
+          fi
+          if [ -z "${APPLE_CERTIFICATE_PASSWORD}" ]; then
+            echo "APPLE_CERTIFICATE is set but APPLE_CERTIFICATE_PASSWORD is empty" >&2
+            exit 1
+          fi
+          cert="$RUNNER_TEMP/certificate.p12"
+          keychain="$RUNNER_TEMP/app-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 24)"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$cert"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$cert" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychain -d user -s "$keychain"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Native arch. GitHub-hosted macOS is Apple Silicon; build-desktop-macos is the Intel cross-compile.
+      - name: Build macOS desktop package
+        run: make build-desktop
+
+      - name: Collect DMG
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          dmg="$(find apps/desktop/src-tauri/target/release/bundle/dmg -name '*.dmg' ! -name 'rw.*' -print | head -n 1 || true)"
+          if [ -z "$dmg" ]; then
+            echo "DMG not found" >&2
+            find apps/desktop/src-tauri/target -type f -path '*/bundle/*' | head -n 50 >&2 || true
+            exit 1
+          fi
+          arch="$(basename "$dmg" | sed -n 's/.*_\([^_]*\)\.dmg$/\1/p')"
+          if [ -z "$arch" ]; then
+            arch="$(uname -m)"
+          fi
+          cp "$dmg" "dist/release/open-bot-${RELEASE_VERSION}-macos-${arch}.dmg"
+          ls -lh dist/release
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: dist/release/*
+          fail_on_unmatched_files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          path: dist/release/*
+          if-no-files-found: error
+
+  android:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.meta.outputs.version }}
+      ANDROID_VERSION_NAME: ${{ needs.meta.outputs.version }}
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          echo "sdk.dir=${ANDROID_HOME}" > apps/mobile/android/local.properties
+          # The wrapper points at a China mirror for local machines. Hosted runners
+          # reach services.gradle.org more reliably.
+          sed -i 's|mirrors.cloud.tencent.com/gradle/|services.gradle.org/distributions/|' \
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Android package
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+            if [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
+              echo "ANDROID_KEYSTORE_BASE64 is set but the alias or a password is missing" >&2
+              exit 1
+            fi
+            export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/openbot-release.keystore"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ANDROID_KEYSTORE_PATH"
+            echo "Android keystore present; building a signed release APK and AAB."
+            make build-android-release
+          else
+            echo "No Android keystore; building a debug APK (debug-signed, installable for testing)."
+            make build-android-debug
+          fi
+
+      - name: Collect APK and AAB
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release
+          shopt -s nullglob
+          copied=0
+          for apk in apps/mobile/android/app/build/outputs/apk/debug/*.apk; do
+            cp "$apk" "dist/release/open-bot-${RELEASE_VERSION}-android-debug.apk"
+            copied=1
+          done
+          for apk in apps/mobile/android/app/build/outputs/apk/release/*.apk; do
+            cp "$apk" "dist/release/open-bot-${RELEASE_VERSION}-android-release.apk"
+            copied=1
+          done
+          for aab in apps/mobile/android/app/build/outputs/bundle/release/*.aab; do
+            cp "$aab" "dist/release/open-bot-${RELEASE_VERSION}-android-release.aab"
+            copied=1
+          done
+          if [ "$copied" != 1 ]; then
+            echo "no Android package was produced" >&2
+            find apps/mobile/android/app/build/outputs -type f | head -n 50 >&2 || true
+            exit 1
+          fi
+          ls -lh dist/release
+
+      - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          files: dist/release/*
+          fail_on_unmatched_files: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/release/*
+          if-no-files-found: error

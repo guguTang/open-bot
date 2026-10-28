@@ -93,6 +93,10 @@ pnpm --dir apps/mobile install
 make sync-mobile   # 或 cd apps/mobile && npx cap sync
 ```
 
+## 发布包
+
+GitHub Release 在没有 keystore 时上传 **debug APK**（debug 签名，可装到测试机）。配了 `ANDROID_KEYSTORE_*` 后改为签名 release APK 和 AAB。iOS IPA 与 `apps/mobile-rn`（Expo）不在这条流水线里。见 [docs/release.md](../../docs/release.md)。
+
 ## 本轮不做
 
 应用商店上架、推送证书、原生插件大集合、自动更新。
