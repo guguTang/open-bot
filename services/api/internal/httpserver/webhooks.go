@@ -18,6 +18,9 @@ import (
 )
 
 // Inbound hook CRUD (JWT) + Slack/GitHub webhook receivers.
+// Slack/GitHub install wizards only insert an inbound_hooks row and store
+// credentials in oauth_connections. Delivery, url_verification, and GitHub
+// HMAC checks stay in this file for both auto-bound and hand-pasted hooks.
 
 func (s *Server) handleListInboundHooks(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())

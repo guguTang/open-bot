@@ -250,6 +250,15 @@ export {
 } from "./api/gmail";
 
 export {
+  type InstallIntegrationStatus,
+  type InstallDisconnectResult,
+  getInstallIntegrationStatus,
+  startInstallConnect,
+  disconnectInstall,
+  attachGitHubRepo,
+} from "./api/installs";
+
+export {
   type MicroAppKind,
   type MicroAppStatus,
   type MicroAppSurface,

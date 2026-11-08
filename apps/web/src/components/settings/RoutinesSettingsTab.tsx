@@ -245,6 +245,7 @@ export function RoutinesSettingsTab({
         <SettingsHint>
           创建 Hook 后把返回的 URL 配到 Slack Event Subscriptions 或 GitHub Webhooks。
           例行任务的 triggers 匹配事件后，会在绑定会话中唤醒助手。密钥可选用 bot_secrets / Hook secret（GitHub 签名）。
+          也可以在「连接应用」里安装 Slack / GitHub，自动绑定一条 Hook；这里的手工创建仍然有效，断开安装不会删掉它。
         </SettingsHint>
         <SettingsCard>
           <div className="llm-list">

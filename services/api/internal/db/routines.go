@@ -575,6 +575,26 @@ func (d *DB) CreateInboundHook(userID, provider, label, secret string) (*Inbound
 	return h, nil
 }
 
+func (d *DB) GetInboundHookForUser(userID, id string) (*InboundHook, error) {
+	userID = strings.TrimSpace(userID)
+	id = strings.TrimSpace(id)
+	if userID == "" || id == "" {
+		return nil, ErrNotFound
+	}
+	row := d.SQL.QueryRow(
+		`SELECT id, user_id, provider, token, COALESCE(secret,''), COALESCE(label,''), created_at
+		 FROM inbound_hooks WHERE id = $1 AND user_id = $2`, id, userID,
+	)
+	var h InboundHook
+	if err := row.Scan(&h.ID, &h.UserID, &h.Provider, &h.Token, &h.Secret, &h.Label, &h.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &h, nil
+}
+
 func (d *DB) GetInboundHookByToken(token string) (*InboundHook, error) {
 	token = strings.TrimSpace(token)
 	row := d.SQL.QueryRow(
