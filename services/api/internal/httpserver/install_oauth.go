@@ -21,8 +21,10 @@ import (
 )
 
 const (
-	slackProvider  = "slack"
-	githubProvider = "github"
+	slackProvider    = "slack"
+	githubProvider   = "github"
+	telegramProvider = "telegram"
+	feishuProvider   = "feishu"
 
 	// oauthInstallHookLabel marks the single inbound hook created by the
 	// install wizard. Disconnect deletes a hook only when id, user, provider,
@@ -43,6 +45,16 @@ type installMeta struct {
 	RemoteHookID    int64  `json:"remote_hook_id,omitempty"`
 	WebhookAttached bool   `json:"webhook_attached,omitempty"`
 	AttachError     string `json:"attach_error,omitempty"`
+	// Telegram / Feishu phase-1 connect. MentionOnly is a delivery gate.
+	// LastChatID / LastMessageID are the conversation a reply should land in.
+	MentionOnly   bool   `json:"mention_only,omitempty"`
+	BotUsername   string `json:"bot_username,omitempty"`
+	BotID         int64  `json:"bot_id,omitempty"`
+	AppID         string `json:"app_id,omitempty"`
+	Domain        string `json:"domain,omitempty"`
+	OpenID        string `json:"open_id,omitempty"`
+	LastChatID    string `json:"last_chat_id,omitempty"`
+	LastMessageID string `json:"last_message_id,omitempty"`
 }
 
 func installWebOrigin() string {
@@ -70,6 +82,10 @@ func installSetupHint(provider string) string {
 		return "把 Event Request URL 粘贴到 Slack App → Event Subscriptions，并订阅 app_mention 与 message.channels。安装只保存 bot token，并自动绑定一条入站 Hook。不会创建 Slack App，也不启用 Socket Mode。事件唤醒仍走现有 webhook。"
 	case githubProvider:
 		return "填写 owner/repo 后可用 API 把 webhook 挂到该仓库。未挂上时，把 URL 和签名密钥手工填到 GitHub Webhook（Content type: application/json）。验签仍用这条 Hook 的 secret（X-Hub-Signature-256）。"
+	case telegramProvider:
+		return "粘贴 @BotFather 的 Bot token。连接时会调用 setWebhook，把更新发到下面的 Webhook URL。Token 加密存在 oauth_connections（provider=telegram），并自动绑定一条入站 Hook。不代创建机器人。公网 HTTPS 才能让 Telegram 真正把 setWebhook 挂上；本地 HTTP 会保存连接并写明失败原因，URL 仍可复制。群聊可选只在被 @ 时唤醒。手工 Hook 仍可 POST /v1/webhooks/telegram/{token}。"
+	case feishuProvider:
+		return "填写飞书或 Lark 应用的 App ID、App Secret 和 Encrypt Key。Verification Token 可选，填了就会校验 url_verification 和事件里的 token。把事件订阅 URL 填到开放平台。凭据加密存在 oauth_connections（provider=feishu），并自动绑定一条入站 Hook。不代创建应用，也不会改你飞书后台里的其它订阅。手工 Hook 仍可用。"
 	default:
 		return ""
 	}
@@ -260,6 +276,7 @@ type installDisconnectResult struct {
 // the linked hook is the wizard-created one, that hook only.
 // It does not list or delete other inbound hooks, other providers, or remote
 // webhooks other than the single GitHub hook id stored at attach time.
+// Telegram additionally calls deleteWebhook for this bot token only.
 func (s *Server) disconnectOAuthInstall(ctx context.Context, userID, provider string) (installDisconnectResult, error) {
 	var res installDisconnectResult
 	conn, err := s.db.GetOAuthConnection(userID, provider)
@@ -271,6 +288,9 @@ func (s *Server) disconnectOAuthInstall(ctx context.Context, userID, provider st
 	}
 	if provider == githubProvider {
 		s.bestEffortRemoveGitHubRemoteHook(ctx, conn)
+	}
+	if provider == telegramProvider {
+		s.bestEffortDeleteTelegramWebhook(ctx, conn)
 	}
 	if hook, herr := s.db.GetInboundHookForUser(userID, conn.LinkedHookID); herr == nil {
 		if oauthInstallHookDeletable(hook, userID, provider, conn.LinkedHookID) {
@@ -307,6 +327,9 @@ func (s *Server) installStatusPayload(userID, provider string, configured bool) 
 		"oauth_configured": configured,
 		"setup_hint":       installSetupHint(provider),
 	}
+	if provider == telegramProvider || provider == feishuProvider {
+		out["connect_mode"] = "credentials"
+	}
 	if provider == githubProvider {
 		if mode := loadGitHubOAuthConfig().Mode(); mode != "" {
 			out["mode"] = mode
@@ -332,6 +355,21 @@ func (s *Server) installStatusPayload(userID, provider string, configured bool) 
 		out["webhook_attached"] = meta.WebhookAttached
 		if meta.AttachError != "" {
 			out["attach_error"] = meta.AttachError
+		}
+	}
+	if provider == telegramProvider || provider == feishuProvider {
+		out["mention_only"] = meta.MentionOnly
+		if provider == feishuProvider {
+			out["domain"] = firstNonEmpty(meta.Domain, "feishu")
+			if meta.AppID != "" {
+				out["app_id"] = meta.AppID
+			}
+		}
+		if provider == telegramProvider {
+			out["webhook_attached"] = meta.WebhookAttached
+			if meta.AttachError != "" {
+				out["attach_error"] = meta.AttachError
+			}
 		}
 	}
 	hook := s.linkedInstallHook(userID, provider, conn.LinkedHookID)

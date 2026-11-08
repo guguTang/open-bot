@@ -9,7 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// OAuthConnection stores encrypted provider tokens (Gmail, Slack bot, GitHub).
+// OAuthConnection stores encrypted provider tokens (Gmail, Slack bot, GitHub,
+// Telegram bot token, Feishu app secret).
+// Feishu stores the Encrypt Key in RefreshTokenCT. Callers must not run
+// UpdateOAuthTokens against provider=feishu.
 // Public status never exposes ciphertext.
 // LinkedHookID is set only for the inbound hook auto-created by an install
 // wizard. Disconnect may delete that one hook; it must not be used to find
@@ -200,6 +203,29 @@ func (d *DB) OAuthConnectionStatus(userID, provider string) OAuthConnectionStatu
 		Scopes:    c.Scopes,
 		UpdatedAt: FormatTime(c.UpdatedAt),
 	}
+}
+
+// UpdateOAuthInstallMeta replaces non-secret display JSON (last chat, mention
+// filter, webhook attach result). It does not touch tokens.
+func (d *DB) UpdateOAuthInstallMeta(userID, provider, metadataJSON string) error {
+	userID = strings.TrimSpace(userID)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	metadataJSON = strings.TrimSpace(metadataJSON)
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+	res, err := d.SQL.Exec(
+		`UPDATE oauth_connections SET metadata_json=$3, updated_at=$4 WHERE user_id=$1 AND provider=$2`,
+		userID, provider, metadataJSON, Now(),
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (d *DB) UpdateOAuthTokens(userID, provider, accessCT, refreshCT string, expiry *time.Time) error {

@@ -6,17 +6,26 @@ import {
   SettingsPage,
   SettingsSection,
 } from "../SettingsLayout";
-import type { GmailIntegrationStatus, InstallIntegrationStatus } from "../../api";
+import type {
+  FeishuConnectInput,
+  GmailIntegrationStatus,
+  InstallIntegrationStatus,
+  TelegramConnectInput,
+} from "../../api";
 
 export type IntegrationsSettingsTabProps = {
   gmail: GmailIntegrationStatus | null;
   slack: InstallIntegrationStatus | null;
   github: InstallIntegrationStatus | null;
+  telegram: InstallIntegrationStatus | null;
+  feishu: InstallIntegrationStatus | null;
   busy: boolean;
   loading?: boolean;
   loadError?: string;
   slackLoadError?: string;
   githubLoadError?: string;
+  telegramLoadError?: string;
+  feishuLoadError?: string;
   msg: string;
   onConnectGmail: () => void | Promise<void>;
   onDisconnectGmail: () => void | Promise<void>;
@@ -25,6 +34,10 @@ export type IntegrationsSettingsTabProps = {
   onConnectGitHub: (repo: string) => void | Promise<void>;
   onAttachGitHub: (repo: string) => void | Promise<void>;
   onDisconnectGitHub: () => void | Promise<void>;
+  onConnectTelegram: (input: TelegramConnectInput) => void | Promise<void>;
+  onDisconnectTelegram: () => void | Promise<void>;
+  onConnectFeishu: (input: FeishuConnectInput) => void | Promise<void>;
+  onDisconnectFeishu: () => void | Promise<void>;
   onCopy: (text: string, label: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
 };
@@ -33,11 +46,15 @@ export function IntegrationsSettingsTab({
   gmail,
   slack,
   github,
+  telegram,
+  feishu,
   busy,
   loading,
   loadError,
   slackLoadError,
   githubLoadError,
+  telegramLoadError,
+  feishuLoadError,
   msg,
   onConnectGmail,
   onDisconnectGmail,
@@ -46,6 +63,10 @@ export function IntegrationsSettingsTab({
   onConnectGitHub,
   onAttachGitHub,
   onDisconnectGitHub,
+  onConnectTelegram,
+  onDisconnectTelegram,
+  onConnectFeishu,
+  onDisconnectFeishu,
   onCopy,
   onRefresh,
 }: IntegrationsSettingsTabProps) {
@@ -56,9 +77,9 @@ export function IntegrationsSettingsTab({
     <SettingsPage>
       <SettingsHint>
         连接个人邮箱后，Bot 可起草邮件并在你确认后通过 Gmail API 发送。不会擅自代发；桌面 himalaya /
-        google-workspace 技能仍可用于本机 CLI。Slack / GitHub
-        可在这里安装并自动绑定一条入站 Hook，供例行任务按事件唤醒。未配置对应 Client
-        时显示空态。例行任务里手工创建的 Hook 仍然可用。
+        google-workspace 技能仍可用于本机 CLI。Slack / GitHub 可在这里安装，Telegram / 飞书可粘贴凭据。
+        成功后都会自动绑定一条入站 Hook，供例行任务按事件唤醒。未配置加密密钥或对应 Client
+        时显示空态，未连接时不会出现 Webhook URL。例行任务里手工创建的 Hook 仍然可用。
       </SettingsHint>
       {msg ? <div className="settings-status">{msg}</div> : null}
       <SettingsSection title="Gmail">
@@ -159,6 +180,27 @@ export function IntegrationsSettingsTab({
         onConnect={onConnectGitHub}
         onAttach={onAttachGitHub}
         onDisconnect={onDisconnectGitHub}
+        onCopy={onCopy}
+        onRefresh={onRefresh}
+      />
+
+      <TelegramConnectCard
+        status={telegram}
+        loadError={telegramLoadError}
+        loading={loading}
+        busy={busy}
+        onConnect={onConnectTelegram}
+        onDisconnect={onDisconnectTelegram}
+        onCopy={onCopy}
+        onRefresh={onRefresh}
+      />
+      <FeishuConnectCard
+        status={feishu}
+        loadError={feishuLoadError}
+        loading={loading}
+        busy={busy}
+        onConnect={onConnectFeishu}
+        onDisconnect={onDisconnectFeishu}
         onCopy={onCopy}
         onRefresh={onRefresh}
       />
@@ -379,5 +421,368 @@ function CopyRow({
         复制
       </button>
     </div>
+  );
+}
+
+function ChannelShell({
+  title,
+  status,
+  loadError,
+  loading,
+  busy,
+  onRefresh,
+  children,
+}: {
+  title: string;
+  status: InstallIntegrationStatus | null;
+  loadError?: string;
+  loading?: boolean;
+  busy: boolean;
+  onRefresh: () => void | Promise<void>;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsSection title={title}>
+      <SettingsCard padded>
+        {!status ? (
+          loading || !loadError ? (
+            <SettingsEmpty>加载中…</SettingsEmpty>
+          ) : (
+            <div className="settings-status">
+              <p>无法读取连接状态：{loadError}</p>
+              <button type="button" className="ghost" disabled={busy || loading} onClick={() => void onRefresh()}>
+                重试
+              </button>
+            </div>
+          )
+        ) : (
+          children
+        )}
+      </SettingsCard>
+    </SettingsSection>
+  );
+}
+
+function ConnectedInstallBody({
+  status,
+  urlLabel,
+  busy,
+  onDisconnect,
+  onCopy,
+  onRefresh,
+  extra,
+}: {
+  status: InstallIntegrationStatus;
+  urlLabel: string;
+  busy: boolean;
+  onDisconnect: () => void | Promise<void>;
+  onCopy: (text: string, label: string) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+  extra?: ReactNode;
+}) {
+  return (
+    <>
+      <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <div className="agent-name">已连接</div>
+          <div className="agent-desc">{status.account || "(未知账号)"}</div>
+          <div className="agent-desc">
+            {status.mention_only ? "群聊里只在被 @ 时唤醒，私聊始终接收。" : "私聊和群聊文本消息都会唤醒。"}
+          </div>
+        </div>
+        <div className="llm-actions">
+          <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+            刷新
+          </button>
+          <button type="button" className="danger" disabled={busy} onClick={() => void onDisconnect()}>
+            断开连接
+          </button>
+        </div>
+      </div>
+      {status.hook_missing ? (
+        <div className="settings-status">
+          已连接，但自动创建的入站 Hook 不在了。请断开后重新连接以生成新的 URL。这不会删除你手工创建的其它 Hook。
+        </div>
+      ) : status.hook_url ? (
+        <CopyRow label={urlLabel} value={status.hook_url} busy={busy} onCopy={onCopy} />
+      ) : (
+        <div className="settings-status">已连接，但还没有可复制的 Webhook URL。请断开后重连。</div>
+      )}
+      {status.attach_error ? <div className="settings-status">{status.attach_error}</div> : null}
+      {status.provider === "telegram" && status.webhook_attached ? (
+        <div className="settings-status">Telegram 已接受 setWebhook。</div>
+      ) : null}
+      {status.setup_hint ? <div className="settings-status">{status.setup_hint}</div> : null}
+      <div className="settings-status">
+        断开会清除本服务保存的凭据，并且只删除这次连接自动创建的那条入站 Hook（标记为{" "}
+        <code>openbot-oauth-install</code>
+        ）。不会删除「例行任务」里手工粘贴的 Hook，也不会删除其它 provider 的连接。
+      </div>
+      {extra}
+    </>
+  );
+}
+
+function TelegramConnectCard({
+  status,
+  loadError,
+  loading,
+  busy,
+  onConnect,
+  onDisconnect,
+  onCopy,
+  onRefresh,
+}: {
+  status: InstallIntegrationStatus | null;
+  loadError?: string;
+  loading?: boolean;
+  busy: boolean;
+  onConnect: (input: TelegramConnectInput) => void | Promise<void>;
+  onDisconnect: () => void | Promise<void>;
+  onCopy: (text: string, label: string) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+}) {
+  return (
+    <ChannelShell title="Telegram" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
+      {status && status.oauth_configured === false ? (
+        <div className="settings-status">
+          服务端还不能加密保存凭据。请设置 <code>BOT_SECRETS_KEY</code> 或 <code>ENCRYPTION_KEY</code>
+          后重启 API。未配置时不会显示 Webhook URL，也不会假装已连接。
+        </div>
+      ) : status && status.connected ? (
+        <ConnectedInstallBody
+          status={status}
+          urlLabel="Webhook URL"
+          busy={busy}
+          onDisconnect={onDisconnect}
+          onCopy={onCopy}
+          onRefresh={onRefresh}
+        />
+      ) : (
+        <TelegramTokenForm
+          busy={busy}
+          setupHint={status?.setup_hint}
+          onConnect={onConnect}
+          onRefresh={onRefresh}
+        />
+      )}
+    </ChannelShell>
+  );
+}
+
+function FeishuConnectCard({
+  status,
+  loadError,
+  loading,
+  busy,
+  onConnect,
+  onDisconnect,
+  onCopy,
+  onRefresh,
+}: {
+  status: InstallIntegrationStatus | null;
+  loadError?: string;
+  loading?: boolean;
+  busy: boolean;
+  onConnect: (input: FeishuConnectInput) => void | Promise<void>;
+  onDisconnect: () => void | Promise<void>;
+  onCopy: (text: string, label: string) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+}) {
+  return (
+    <ChannelShell title="飞书 / Lark" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
+      {status && status.oauth_configured === false ? (
+        <div className="settings-status">
+          服务端还不能加密保存凭据。请设置 <code>BOT_SECRETS_KEY</code> 或 <code>ENCRYPTION_KEY</code>
+          后重启 API。未配置时不会显示事件订阅 URL，也不会假装已连接。
+        </div>
+      ) : status && status.connected ? (
+        <ConnectedInstallBody
+          status={status}
+          urlLabel="事件订阅 URL"
+          busy={busy}
+          onDisconnect={onDisconnect}
+          onCopy={onCopy}
+          onRefresh={onRefresh}
+          extra={
+            <div className="settings-status">
+              当前开放平台：{status.domain === "lark" ? "Lark（open.larksuite.com）" : "飞书（open.feishu.cn）"}
+              {status.app_id ? ` · App ID ${status.app_id}` : ""}
+            </div>
+          }
+        />
+      ) : (
+        <FeishuCredentialForm
+          busy={busy}
+          setupHint={status?.setup_hint}
+          onConnect={onConnect}
+          onRefresh={onRefresh}
+        />
+      )}
+    </ChannelShell>
+  );
+}
+
+function TelegramTokenForm({
+  busy,
+  setupHint,
+  onConnect,
+  onRefresh,
+}: {
+  busy: boolean;
+  setupHint?: string;
+  onConnect: (input: TelegramConnectInput) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [botToken, setBotToken] = useState("");
+  const [mentionOnly, setMentionOnly] = useState(false);
+  return (
+    <form
+      className="llm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!botToken.trim()) return;
+        void onConnect({ bot_token: botToken, mention_only: mentionOnly });
+      }}
+    >
+      <div className="settings-status">尚未连接。填好 Bot token 并保存后，这里才会出现可复制的 Webhook URL。</div>
+      {setupHint ? <div className="settings-status">{setupHint}</div> : null}
+      <label>
+        Bot token
+        <input
+          type="password"
+          name="telegram-bot-token"
+          autoComplete="off"
+          value={botToken}
+          placeholder="123456:AAA..."
+          disabled={busy}
+          aria-label="Telegram Bot token"
+          onChange={(e) => setBotToken(e.target.value)}
+        />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={mentionOnly} disabled={busy} onChange={(e) => setMentionOnly(e.target.checked)} />
+        群聊里只在被 @ 时唤醒（私聊始终接收）
+      </label>
+      <div className="llm-actions">
+        <button type="submit" className="primary" disabled={busy || !botToken.trim()} aria-busy={busy}>
+          {busy ? "连接中…" : "连接 Telegram"}
+        </button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+          刷新
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function FeishuCredentialForm({
+  busy,
+  setupHint,
+  onConnect,
+  onRefresh,
+}: {
+  busy: boolean;
+  setupHint?: string;
+  onConnect: (input: FeishuConnectInput) => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [appID, setAppID] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [encryptKey, setEncryptKey] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
+  const [domain, setDomain] = useState<"feishu" | "lark">("feishu");
+  const [mentionOnly, setMentionOnly] = useState(false);
+  const ready = Boolean(appID.trim() && appSecret.trim() && encryptKey.trim());
+  return (
+    <form
+      className="llm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!ready) return;
+        void onConnect({
+          app_id: appID,
+          app_secret: appSecret,
+          encrypt_key: encryptKey,
+          verification_token: verificationToken,
+          mention_only: mentionOnly,
+          domain,
+        });
+      }}
+    >
+      <div className="settings-status">
+        尚未连接。填好 App ID、App Secret 和 Encrypt Key 并保存后，这里才会出现可复制的事件订阅 URL。
+      </div>
+      {setupHint ? <div className="settings-status">{setupHint}</div> : null}
+      <label>
+        开放平台
+        <select
+          value={domain}
+          disabled={busy}
+          aria-label="飞书或 Lark"
+          onChange={(e) => setDomain(e.target.value === "lark" ? "lark" : "feishu")}
+        >
+          <option value="feishu">飞书 open.feishu.cn</option>
+          <option value="lark">Lark open.larksuite.com</option>
+        </select>
+      </label>
+      <label>
+        App ID
+        <input
+          type="text"
+          value={appID}
+          autoComplete="off"
+          placeholder="cli_xxx"
+          disabled={busy}
+          aria-label="飞书 App ID"
+          onChange={(e) => setAppID(e.target.value)}
+        />
+      </label>
+      <label>
+        App Secret
+        <input
+          type="password"
+          value={appSecret}
+          autoComplete="off"
+          disabled={busy}
+          aria-label="飞书 App Secret"
+          onChange={(e) => setAppSecret(e.target.value)}
+        />
+      </label>
+      <label>
+        Encrypt Key
+        <input
+          type="password"
+          value={encryptKey}
+          autoComplete="off"
+          disabled={busy}
+          aria-label="飞书 Encrypt Key"
+          onChange={(e) => setEncryptKey(e.target.value)}
+        />
+      </label>
+      <label>
+        Verification Token（可选）
+        <input
+          type="password"
+          value={verificationToken}
+          autoComplete="off"
+          disabled={busy}
+          aria-label="飞书 Verification Token"
+          onChange={(e) => setVerificationToken(e.target.value)}
+        />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={mentionOnly} disabled={busy} onChange={(e) => setMentionOnly(e.target.checked)} />
+        群聊里只在被 @ 时唤醒（私聊始终接收）
+      </label>
+      <div className="llm-actions">
+        <button type="submit" className="primary" disabled={busy || !ready} aria-busy={busy}>
+          {busy ? "连接中…" : "连接飞书"}
+        </button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+          刷新
+        </button>
+      </div>
+    </form>
   );
 }

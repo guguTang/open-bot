@@ -252,9 +252,14 @@ export {
 export {
   type InstallIntegrationStatus,
   type InstallDisconnectResult,
+  type InstallProvider,
+  type TelegramConnectInput,
+  type FeishuConnectInput,
   getInstallIntegrationStatus,
   startInstallConnect,
   disconnectInstall,
+  connectTelegram,
+  connectFeishu,
   attachGitHubRepo,
 } from "./api/installs";
 

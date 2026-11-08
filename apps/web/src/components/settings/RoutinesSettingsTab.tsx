@@ -241,11 +241,11 @@ export function RoutinesSettingsTab({
           </form>
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="入站 Webhook（Slack / GitHub）">
+      <SettingsSection title="入站 Webhook">
         <SettingsHint>
-          创建 Hook 后把返回的 URL 配到 Slack Event Subscriptions 或 GitHub Webhooks。
-          例行任务的 triggers 匹配事件后，会在绑定会话中唤醒助手。密钥可选用 bot_secrets / Hook secret（GitHub 签名）。
-          也可以在「连接应用」里安装 Slack / GitHub，自动绑定一条 Hook；这里的手工创建仍然有效，断开安装不会删掉它。
+          创建 Hook 后把返回的 URL 配到 Slack、GitHub、Telegram 或飞书。
+          例行任务的 triggers 匹配事件后，会在绑定会话中唤醒助手。GitHub 可填 Hook secret（X-Hub-Signature-256）；Telegram 若填了 secret，请求要带 X-Telegram-Bot-Api-Secret-Token。
+          也可以在「连接应用」里连接 Slack / GitHub / Telegram / 飞书，自动绑定一条 Hook；这里的手工创建仍然有效，断开连接不会删掉它。
         </SettingsHint>
         <SettingsCard>
           <div className="llm-list">
@@ -258,6 +258,12 @@ export function RoutinesSettingsTab({
                     <div className="agent-name">{h.label || h.provider}</div>
                     <div className="agent-desc">Slack: {h.url_slack}</div>
                     <div className="agent-desc">GitHub: {h.url_github}</div>
+                    {(h.provider === "any" || h.provider === "telegram") && h.url_telegram ? (
+                      <div className="agent-desc">Telegram: {h.url_telegram}</div>
+                    ) : null}
+                    {(h.provider === "any" || h.provider === "feishu") && h.url_feishu ? (
+                      <div className="agent-desc">飞书: {h.url_feishu}</div>
+                    ) : null}
                     <div className="agent-desc">token: {h.token}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">

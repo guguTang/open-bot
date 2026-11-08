@@ -632,6 +632,29 @@ func (d *DB) ListInboundHooks(userID string) ([]*InboundHook, error) {
 	return out, rows.Err()
 }
 
+// UpdateInboundHookSecret sets the hook shared secret. Empty clears it.
+// Telegram install hooks store the setWebhook secret_token here.
+// Feishu install hooks store the Verification Token here (empty skips the check).
+func (d *DB) UpdateInboundHookSecret(userID, id, secret string) error {
+	userID = strings.TrimSpace(userID)
+	id = strings.TrimSpace(id)
+	if userID == "" || id == "" {
+		return ErrNotFound
+	}
+	res, err := d.SQL.Exec(
+		`UPDATE inbound_hooks SET secret=$3 WHERE id=$1 AND user_id=$2`,
+		id, userID, strings.TrimSpace(secret),
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (d *DB) DeleteInboundHook(userID, id string) error {
 	res, err := d.SQL.Exec(`DELETE FROM inbound_hooks WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {

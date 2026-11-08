@@ -294,6 +294,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 
 	mux.HandleFunc("POST /v1/webhooks/slack/{token}", s.handleSlackWebhook)
 	mux.HandleFunc("POST /v1/webhooks/github/{token}", s.handleGitHubWebhook)
+	mux.HandleFunc("POST /v1/webhooks/telegram/{token}", s.handleTelegramWebhook)
+	mux.HandleFunc("POST /v1/webhooks/feishu/{token}", s.handleFeishuWebhook)
 
 	// Sandbox computer (Phase 1 MVP)
 	mux.HandleFunc("GET /v1/sandbox", s.requireAuth(s.handleGetSandbox))
@@ -335,6 +337,14 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/integrations/github/callback", s.handleGitHubCallback)
 	mux.HandleFunc("POST /v1/integrations/github/attach", s.requireAuth(s.handleGitHubAttach))
 	mux.HandleFunc("DELETE /v1/integrations/github", s.requireAuth(s.handleGitHubDisconnect))
+	mux.HandleFunc("GET /v1/integrations/telegram", s.requireAuth(s.handleTelegramStatus))
+	mux.HandleFunc("POST /v1/integrations/telegram/connect", s.requireAuth(s.handleTelegramConnect))
+	mux.HandleFunc("POST /v1/integrations/telegram/reply", s.requireAuth(s.handleTelegramReply))
+	mux.HandleFunc("DELETE /v1/integrations/telegram", s.requireAuth(s.handleTelegramDisconnect))
+	mux.HandleFunc("GET /v1/integrations/feishu", s.requireAuth(s.handleFeishuStatus))
+	mux.HandleFunc("POST /v1/integrations/feishu/connect", s.requireAuth(s.handleFeishuConnect))
+	mux.HandleFunc("POST /v1/integrations/feishu/reply", s.requireAuth(s.handleFeishuReply))
+	mux.HandleFunc("DELETE /v1/integrations/feishu", s.requireAuth(s.handleFeishuDisconnect))
 	mux.HandleFunc("GET /v1/bot-secret-requests", s.requireAuth(s.handleListSecretRequests))
 	mux.HandleFunc("POST /v1/bot-secret-requests/{id}/resolve", s.requireAuth(s.handleResolveSecretRequest))
 	mux.HandleFunc("POST /internal/bot-secrets/request", s.requireInternal(s.handleInternalRequestSecret))
