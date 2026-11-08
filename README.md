@@ -39,6 +39,7 @@
 ### 例行任务
 
 - cron Routines：到点在会话里交付；支持时区、重试、暂停/恢复
+- Slack / GitHub：设置 → 连接应用可安装并自动绑定入站 Hook（未配置 Client 时为空态）；仍可手工粘贴 Hook URL
 - 产品调度逻辑自研；cron 表达式解析使用 [robfig/cron](https://github.com/robfig/cron)
 
 ### 本机与运行环境

@@ -381,12 +381,22 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
       {settingsTab === "integrations" && (
         <IntegrationsSettingsTab
           gmail={integrations.gmail}
+          slack={integrations.slack}
+          github={integrations.github}
           busy={integrations.busy}
           loading={integrations.loading}
           loadError={integrations.loadError}
+          slackLoadError={integrations.slackLoadError}
+          githubLoadError={integrations.githubLoadError}
           msg={integrations.msg}
           onConnectGmail={integrations.connectGmail}
           onDisconnectGmail={integrations.disconnect}
+          onConnectSlack={integrations.connectSlack}
+          onDisconnectSlack={integrations.disconnectSlack}
+          onConnectGitHub={integrations.connectGitHub}
+          onAttachGitHub={integrations.attachGitHub}
+          onDisconnectGitHub={integrations.disconnectGitHub}
+          onCopy={integrations.copyText}
           onRefresh={integrations.refresh}
         />
       )}

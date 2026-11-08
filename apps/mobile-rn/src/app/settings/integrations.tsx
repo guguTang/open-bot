@@ -1,5 +1,6 @@
 /**
- * 连接应用 · Gmail。对齐 Web `IntegrationsSettingsTab`。
+ * 连接应用 · Gmail。对齐 Web `IntegrationsSettingsTab` 的 Gmail 段。
+ * Slack / GitHub 安装向导目前只在 Web。
  * OAuth 在系统浏览器完成；回调若落到 openbot://settings/integrations 则自动刷新。
  */
 
