@@ -381,12 +381,30 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
       {settingsTab === "integrations" && (
         <IntegrationsSettingsTab
           gmail={integrations.gmail}
+          slack={integrations.slack}
+          github={integrations.github}
+          telegram={integrations.telegram}
+          feishu={integrations.feishu}
           busy={integrations.busy}
           loading={integrations.loading}
           loadError={integrations.loadError}
+          slackLoadError={integrations.slackLoadError}
+          githubLoadError={integrations.githubLoadError}
+          telegramLoadError={integrations.telegramLoadError}
+          feishuLoadError={integrations.feishuLoadError}
           msg={integrations.msg}
           onConnectGmail={integrations.connectGmail}
           onDisconnectGmail={integrations.disconnect}
+          onConnectSlack={integrations.connectSlack}
+          onDisconnectSlack={integrations.disconnectSlack}
+          onConnectGitHub={integrations.connectGitHub}
+          onAttachGitHub={integrations.attachGitHub}
+          onDisconnectGitHub={integrations.disconnectGitHub}
+          onConnectTelegram={integrations.connectTelegramBot}
+          onDisconnectTelegram={integrations.disconnectTelegram}
+          onConnectFeishu={integrations.connectFeishuApp}
+          onDisconnectFeishu={integrations.disconnectFeishu}
+          onCopy={integrations.copyText}
           onRefresh={integrations.refresh}
         />
       )}

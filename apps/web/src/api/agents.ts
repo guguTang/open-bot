@@ -462,6 +462,8 @@ export type InboundHook = {
   created_at: string;
   url_slack?: string;
   url_github?: string;
+  url_telegram?: string;
+  url_feishu?: string;
 };
 
 export async function listInboundHooks(): Promise<InboundHook[]> {

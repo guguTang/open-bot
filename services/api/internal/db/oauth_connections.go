@@ -9,27 +9,35 @@ import (
 	"github.com/google/uuid"
 )
 
-// OAuthConnection stores encrypted provider tokens (e.g. Gmail).
+// OAuthConnection stores encrypted provider tokens (Gmail, Slack bot, GitHub,
+// Telegram bot token, Feishu app secret).
+// Feishu stores the Encrypt Key in RefreshTokenCT. Callers must not run
+// UpdateOAuthTokens against provider=feishu.
 // Public status never exposes ciphertext.
+// LinkedHookID is set only for the inbound hook auto-created by an install
+// wizard. Disconnect may delete that one hook; it must not be used to find
+// or delete any other hook.
 type OAuthConnection struct {
-	ID               string
-	UserID           string
-	Provider         string
-	AccountEmail     string
-	Scopes           string
-	AccessTokenCT    string
-	RefreshTokenCT   string
-	TokenExpiry      *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID             string
+	UserID         string
+	Provider       string
+	AccountEmail   string
+	Scopes         string
+	AccessTokenCT  string
+	RefreshTokenCT string
+	TokenExpiry    *time.Time
+	LinkedHookID   string
+	MetadataJSON   string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type OAuthConnectionStatus struct {
-	Provider     string `json:"provider"`
-	Connected    bool   `json:"connected"`
-	Email        string `json:"email,omitempty"`
-	Scopes       string `json:"scopes,omitempty"`
-	UpdatedAt    string `json:"updated_at,omitempty"`
+	Provider  string `json:"provider"`
+	Connected bool   `json:"connected"`
+	Email     string `json:"email,omitempty"`
+	Scopes    string `json:"scopes,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 func (d *DB) migrateOAuthConnections() error {
@@ -43,11 +51,15 @@ CREATE TABLE IF NOT EXISTS oauth_connections (
   access_token_ct TEXT NOT NULL DEFAULT '',
   refresh_token_ct TEXT NOT NULL DEFAULT '',
   token_expiry TIMESTAMPTZ,
+  linked_hook_id TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (user_id, provider)
 );
 CREATE INDEX IF NOT EXISTS idx_oauth_connections_user ON oauth_connections(user_id);
+ALTER TABLE oauth_connections ADD COLUMN IF NOT EXISTS linked_hook_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE oauth_connections ADD COLUMN IF NOT EXISTS metadata_json TEXT NOT NULL DEFAULT '';
 `)
 	return err
 }
@@ -89,11 +101,56 @@ func (d *DB) UpsertOAuthConnection(
 	return d.GetOAuthConnection(userID, provider)
 }
 
+// UpsertOAuthInstall stores an install-wizard connection (Slack / GitHub).
+// linkedHookID points at the single auto-created inbound hook for this provider.
+// metadataJSON is non-secret display state (team, repo, remote hook id).
+func (d *DB) UpsertOAuthInstall(
+	userID, provider, email, scopes, accessCT, refreshCT, linkedHookID, metadataJSON string,
+	expiry *time.Time,
+) (*OAuthConnection, error) {
+	userID = strings.TrimSpace(userID)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	email = strings.TrimSpace(email)
+	if userID == "" || provider == "" {
+		return nil, errors.New("user_id and provider required")
+	}
+	if strings.TrimSpace(accessCT) == "" {
+		return nil, errors.New("access token required")
+	}
+	now := Now()
+	id := uuid.NewString()
+	_, err := d.SQL.Exec(
+		`INSERT INTO oauth_connections
+		   (id, user_id, provider, account_email, scopes, access_token_ct, refresh_token_ct, token_expiry,
+		    linked_hook_id, metadata_json, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
+		 ON CONFLICT (user_id, provider) DO UPDATE SET
+		   account_email=EXCLUDED.account_email,
+		   scopes=EXCLUDED.scopes,
+		   access_token_ct=EXCLUDED.access_token_ct,
+		   refresh_token_ct=CASE
+		     WHEN EXCLUDED.refresh_token_ct <> '' THEN EXCLUDED.refresh_token_ct
+		     ELSE oauth_connections.refresh_token_ct
+		   END,
+		   token_expiry=EXCLUDED.token_expiry,
+		   linked_hook_id=EXCLUDED.linked_hook_id,
+		   metadata_json=EXCLUDED.metadata_json,
+		   updated_at=EXCLUDED.updated_at`,
+		id, userID, provider, email, strings.TrimSpace(scopes), accessCT, strings.TrimSpace(refreshCT), expiry,
+		strings.TrimSpace(linkedHookID), strings.TrimSpace(metadataJSON), now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return d.GetOAuthConnection(userID, provider)
+}
+
 func (d *DB) GetOAuthConnection(userID, provider string) (*OAuthConnection, error) {
 	userID = strings.TrimSpace(userID)
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	row := d.SQL.QueryRow(
-		`SELECT id, user_id, provider, account_email, scopes, access_token_ct, refresh_token_ct, token_expiry, created_at, updated_at
+		`SELECT id, user_id, provider, account_email, scopes, access_token_ct, refresh_token_ct, token_expiry,
+		        COALESCE(linked_hook_id,''), COALESCE(metadata_json,''), created_at, updated_at
 		 FROM oauth_connections WHERE user_id=$1 AND provider=$2`,
 		userID, provider,
 	)
@@ -101,7 +158,8 @@ func (d *DB) GetOAuthConnection(userID, provider string) (*OAuthConnection, erro
 	var expiry sql.NullTime
 	err := row.Scan(
 		&c.ID, &c.UserID, &c.Provider, &c.AccountEmail, &c.Scopes,
-		&c.AccessTokenCT, &c.RefreshTokenCT, &expiry, &c.CreatedAt, &c.UpdatedAt,
+		&c.AccessTokenCT, &c.RefreshTokenCT, &expiry, &c.LinkedHookID, &c.MetadataJSON,
+		&c.CreatedAt, &c.UpdatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -145,6 +203,29 @@ func (d *DB) OAuthConnectionStatus(userID, provider string) OAuthConnectionStatu
 		Scopes:    c.Scopes,
 		UpdatedAt: FormatTime(c.UpdatedAt),
 	}
+}
+
+// UpdateOAuthInstallMeta replaces non-secret display JSON (last chat, mention
+// filter, webhook attach result). It does not touch tokens.
+func (d *DB) UpdateOAuthInstallMeta(userID, provider, metadataJSON string) error {
+	userID = strings.TrimSpace(userID)
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	metadataJSON = strings.TrimSpace(metadataJSON)
+	if metadataJSON == "" {
+		metadataJSON = "{}"
+	}
+	res, err := d.SQL.Exec(
+		`UPDATE oauth_connections SET metadata_json=$3, updated_at=$4 WHERE user_id=$1 AND provider=$2`,
+		userID, provider, metadataJSON, Now(),
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (d *DB) UpdateOAuthTokens(userID, provider, accessCT, refreshCT string, expiry *time.Time) error {
