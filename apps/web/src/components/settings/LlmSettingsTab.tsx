@@ -75,6 +75,7 @@ export function LlmSettingsTab({
       <SettingsHint>
         可配置多个 OpenAI 兼容连接；聊天默认使用标记为「默认」的连接。密钥不会完整回显。
         勾选「启用 tools」前可用「检测 tools 能力」验证上游是否支持 function calling；不支持时无法开启。
+        保存时会探测该模型是否支持看图（没有单独的开关）；探测失败仍可保存，附图只做文本提及。
         选定模型后会自动检测该端点是否支持 prompt cache（与运行时 OPENBOT_PROMPT_CACHE 一致）。
       </SettingsHint>
       <SettingsSection title="已有连接">
@@ -111,6 +112,7 @@ export function LlmSettingsTab({
                       {c.model || "(无 model)"} · {c.base_url || "(无 base_url)"} · key{" "}
                       {c.api_key_set ? c.api_key_hint || "已设置" : "未设置"}
                       {c.enable_tools ? " · tools" : ""}
+                      {c.supports_vision ? " · 支持看图" : " · 不支持看图"}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">

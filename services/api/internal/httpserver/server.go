@@ -106,6 +106,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/admin/org/llm", s.requireOrgAdmin(s.handleAdminGetLLM))
 	mux.HandleFunc("PUT /v1/admin/org/llm", s.requireOrgAdmin(s.handleAdminPutLLM))
 	mux.HandleFunc("POST /v1/admin/org/llm/probe-tools", s.requireOrgAdmin(s.handleAdminProbeLLMTools))
+	mux.HandleFunc("POST /v1/admin/org/llm/probe-vision", s.requireOrgAdmin(s.handleAdminProbeLLMVision))
 	mux.HandleFunc("POST /v1/admin/org/llm/list-models", s.requireOrgAdmin(s.handleAdminListLLMModels))
 	mux.HandleFunc("POST /v1/admin/org/llm/probe-cache", s.requireOrgAdmin(s.handleAdminProbeLLMPromptCache))
 	mux.HandleFunc("POST /v1/admin/org/llm/probe-model", s.requireOrgAdmin(s.handleAdminProbeLLMModel))
@@ -182,6 +183,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("DELETE /v1/llm-connections/{id}", s.requireAuth(s.handleDeleteLLM))
 	mux.HandleFunc("POST /v1/llm-connections/{id}/default", s.requireAuth(s.handleDefaultLLM))
 	mux.HandleFunc("POST /v1/llm/probe-tools", s.requireAuth(s.handleProbeLLMTools))
+	mux.HandleFunc("POST /v1/llm/probe-vision", s.requireAuth(s.handleProbeLLMVision))
 	mux.HandleFunc("POST /v1/llm/list-models", s.requireAuth(s.handleListLLMModels))
 	mux.HandleFunc("POST /v1/llm/probe-cache", s.requireAuth(s.handleProbeLLMPromptCache))
 	mux.HandleFunc("POST /v1/llm/probe-model", s.requireAuth(s.handleProbeLLMModel))
@@ -679,12 +681,19 @@ func (s *Server) handleCreateLLM(w http.ResponseWriter, r *http.Request) {
 	if s.rejectIfToolsUnsupported(w, r, body.BaseURL, body.APIKey, body.Model, enable) {
 		return
 	}
+	probe := s.probeVisionForSave(r.Context(), body.BaseURL, body.APIKey, body.Model)
+	supports := probe.OK && probe.SupportsVision
 	c, err := s.db.CreateLLMConnection(uid, body.Name, body.BaseURL, body.APIKey, body.Model, enable, isDef, body.ContextWindow)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusCreated, c.Public())
+	updated, uerr := s.db.UpdateLLMConnection(uid, c.ID, db.LLMUpdate{SupportsVision: &supports})
+	if uerr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": uerr.Error()})
+		return
+	}
+	writeLLMSaved(w, http.StatusCreated, updated, probe)
 }
 
 func (s *Server) handlePatchLLM(w http.ResponseWriter, r *http.Request) {
@@ -763,6 +772,9 @@ func (s *Server) handlePatchLLM(w http.ResponseWriter, r *http.Request) {
 	if s.rejectIfToolsUnsupported(w, r, baseURL, apiKey, model, enable) {
 		return
 	}
+	probe := s.probeVisionForSave(r.Context(), baseURL, apiKey, model)
+	supports := probe.OK && probe.SupportsVision
+	upd.SupportsVision = &supports
 	c, err := s.db.UpdateLLMConnection(uid, id, upd)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {
@@ -772,7 +784,7 @@ func (s *Server) handlePatchLLM(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, c.Public())
+	writeLLMSaved(w, http.StatusOK, c, probe)
 }
 
 func (s *Server) handleDeleteLLM(w http.ResponseWriter, r *http.Request) {
@@ -1356,8 +1368,9 @@ type sendBody struct {
 }
 
 type runtimeMsg struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string           `json:"role"`
+	Content    string           `json:"content"`
+	UserImages []userVisionPart `json:"user_images,omitempty"`
 }
 
 func (s *Server) handleCancelConversationRun(w http.ResponseWriter, r *http.Request) {
@@ -1415,9 +1428,25 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Persist the user's original text for the chat UI. Document extracts are
 	// composed only for the model/runtime (runtimeContent), never written back
-	// into the conversation message the UI renders.
+	// into the conversation message the UI renders. Pixels stay on files and
+	// are attached only when the selected connection supports vision.
 	storedContent := content
 	runtimeContent := content
+	var llmPayload map[string]any
+	var llmConn *db.LLMConnection
+	if strings.TrimSpace(body.LLMConnectionID) != "" {
+		llmConn, err = s.db.GetLLMConnection(uid, strings.TrimSpace(body.LLMConnectionID))
+	} else {
+		llmConn, err = s.db.ResolveEffectiveLLM(uid)
+	}
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if llmConn != nil {
+		llmPayload = llmRuntimePayload(llmConn)
+	}
+	seeImages := llmConn != nil && llmConn.SupportsVision
 	if len(body.Attachments) > 0 {
 		var parseTimeoutOverride *int
 		if u, uerr := s.db.GetUserByID(uid); uerr == nil && u != nil && strings.TrimSpace(u.OrgID) != "" {
@@ -1426,7 +1455,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		parseTimeout := resolveDocParseTimeout(parseTimeoutOverride)
-		built, extracts, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments, parseTimeout)
+		built, extracts, berr := buildUserContentWithAttachments(r.Context(), content, uid, conv.ID, body.Attachments, parseTimeout, seeImages)
 		if berr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": berr.Error()})
 			return
@@ -1553,21 +1582,6 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var llmPayload map[string]any
-	var conn *db.LLMConnection
-	if strings.TrimSpace(body.LLMConnectionID) != "" {
-		conn, err = s.db.GetLLMConnection(uid, body.LLMConnectionID)
-	} else {
-		conn, err = s.db.ResolveEffectiveLLM(uid)
-	}
-	if err != nil && !errors.Is(err, db.ErrNotFound) {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if conn != nil {
-		llmPayload = llmRuntimePayload(conn)
-	}
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -1677,7 +1691,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 				out, code, serr := s.postRuntimeJSON(runCtx, "/v1/runs/steer", map[string]any{
 					"conversation_id": conv.ID,
 					"request_id":      activeReq,
-					"text":            runtimeContent,
+					"text":            steerRuntimeText(runtimeContent, seeImages),
 					"mode":            mode,
 					"when_busy":       mode,
 				})
@@ -1763,14 +1777,10 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		var history []runtimeMsg
 		agentNames := speakerNamesForHistory(s.db, msgs, agentID, agentName)
-		if threadRootID != "" {
-			// Quote injection is model-only and done by the runtime from
-			// reply_to_content (apply_reply_quote); do not also prefix here or
-			// the model would see the quote twice. Stored content stays raw.
-			history = historyForThreadRuntime(msgs, threadRootID, agentID, agentNames)
-		} else {
-			history = historyForRuntime(msgs, agentID, agentNames)
-		}
+		// Quote injection is model-only and done by the runtime from
+		// reply_to_content (apply_reply_quote); do not also prefix here or
+		// the model would see the quote twice. Stored content stays raw.
+		history = historyForModel(msgs, threadRootID, agentID, agentNames, seeImages)
 		if len(body.HandoffContext) > 0 {
 			history = mergeHandoffContext(history, body.HandoffContext)
 		}
@@ -2007,11 +2017,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 					}
 					var history []runtimeMsg
 					agentNames := speakerNamesForHistory(s.db, msgs, agentID, agentName)
-					if threadRootID != "" {
-						history = historyForThreadRuntime(msgs, threadRootID, agentID, agentNames)
-					} else {
-						history = historyForRuntime(msgs, agentID, agentNames)
-					}
+					history = historyForModel(msgs, threadRootID, agentID, agentNames, seeImages)
 					if len(body.HandoffContext) > 0 {
 						history = mergeHandoffContext(history, body.HandoffContext)
 					}

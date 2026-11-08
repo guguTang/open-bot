@@ -11,7 +11,7 @@
      → PDF/DOCX/XLSX/XLS/PPTX：POST 文件到 MarkItDown /convert
         → markdown 内联进 runtime content（最多 80 KiB），前面标「以下为用户文件正文」
         → DB/UI 仍保存用户原话；附件卡片来自 message_attachments
-     → 图片：只提及文件名（不做视觉）
+     → 图片：连接 supports_vision 时作为 image_url 交给模型；否则只提及文件名（诚实说明不支持看图）
 ```
 
 解析在侧车里。Go 只有 HTTP 客户端，不链接 PDF/Office 库。
@@ -90,7 +90,7 @@ python -m unittest test_app.py
 - 单文件内联：普通文本 40 KiB；解析出的 Markdown 80 KiB。更长会截断，并注明大约字数。
 - 侧车返回的 markdown 最多约 200 KiB，避免把整本表格塞进 API 进程。
 - 允许的 Office 类型：`.pdf` `.docx` `.xlsx` `.xls` `.pptx` 及对应 MIME（含 `application/vnd.ms-excel`）。旧版 `.doc` / `.ppt` 仍不在白名单。经典 `.xls` 依赖侧车 `markitdown[xls]`（xlrd/pandas）；损坏或受密码保护的表可能抽不出字。
-- 图片仍只写「一期未传视觉多模态」。
+- 图片：模型支持看图时传 jpeg/png/webp；不支持或未探测到时写「当前模型不支持看图，仅文件名/类型提及」。
 - 多个附件按顺序各请求一次，每个有自己的超时。
 
 ## 镜像里有什么
@@ -119,5 +119,5 @@ API：`GET/PUT /v1/admin/org/doc-parse`，body `{"doc_parse_timeout_seconds": 90
 ## 非目标
 
 - 不做 RAG、分块、embedding 或向量库。
-- 不做 OCR，也不接视觉模型读图。
+- 不做 OCR。文档解析不把扫描件送给视觉模型；用户聊天附图是否看图由连接的 `supports_vision` 决定。
 - 不在 Go 进程里解析 PDF/Office。

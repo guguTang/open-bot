@@ -199,6 +199,7 @@ export type LLMConnection = {
   base_url: string;
   model: string;
   enable_tools: boolean;
+  supports_vision?: boolean;
   is_default: boolean;
   context_window?: number | null;
   api_key_set: boolean;

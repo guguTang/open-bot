@@ -61,7 +61,7 @@ func lastMainSummary(msgs []db.Message) string {
 // main timeline only, from the last summary onward.
 // currentAgentID + agentNames attribute other bots' assistant turns in groups.
 func historyForRuntime(msgs []db.Message, currentAgentID string, agentNames map[string]string) []runtimeMsg {
-	return historyForRuntimeScoped(filterMainTimeline(msgs), false, currentAgentID, agentNames)
+	return historyForRuntimeScoped(filterMainTimeline(msgs), false, currentAgentID, agentNames, false)
 }
 
 // historyForThreadRuntime builds history for a thread reply:
@@ -73,7 +73,7 @@ func historyForThreadRuntime(msgs []db.Message, threadRootID, currentAgentID str
 		return historyForRuntime(msgs, currentAgentID, agentNames)
 	}
 	thread := filterThreadMessages(msgs, rootID)
-	scoped := historyForRuntimeScoped(thread, true, currentAgentID, agentNames)
+	scoped := historyForRuntimeScoped(thread, true, currentAgentID, agentNames, false)
 	if sum := lastMainSummary(msgs); sum != "" {
 		out := make([]runtimeMsg, 0, len(scoped)+1)
 		out = append(out, runtimeMsg{Role: "summary", Content: sum})
@@ -83,11 +83,37 @@ func historyForThreadRuntime(msgs []db.Message, threadRootID, currentAgentID str
 	return scoped
 }
 
+// historyForModel is the history actually sent to the model.
+// When vision is true, near-history user image attachments ride along as
+// user_images (pixels stay out of the text). Otherwise the text says the
+// model cannot see them.
+func historyForModel(msgs []db.Message, threadRootID, currentAgentID string, agentNames map[string]string, vision bool) []runtimeMsg {
+	root := strings.TrimSpace(threadRootID)
+	var out []runtimeMsg
+	if root == "" {
+		out = historyForRuntimeScoped(filterMainTimeline(msgs), false, currentAgentID, agentNames, vision)
+	} else {
+		thread := filterThreadMessages(msgs, root)
+		scoped := historyForRuntimeScoped(thread, true, currentAgentID, agentNames, vision)
+		if sum := lastMainSummary(msgs); sum != "" {
+			out = make([]runtimeMsg, 0, len(scoped)+1)
+			out = append(out, runtimeMsg{Role: "summary", Content: sum})
+			out = append(out, scoped...)
+		} else {
+			out = scoped
+		}
+	}
+	if vision {
+		return trimUserVisionImages(out, maxUserVisionImagesTotal)
+	}
+	return out
+}
+
 // historyForRuntimeScoped converts a pre-filtered message slice into runtime
 // turns, cutting from the last summary and optionally compacting long threads.
 // When currentAgentID is set, assistant messages from other agents are rewritten
 // as labeled user turns so the target bot does not treat them as its own voice.
-func historyForRuntimeScoped(msgs []db.Message, compactThread bool, currentAgentID string, agentNames map[string]string) []runtimeMsg {
+func historyForRuntimeScoped(msgs []db.Message, compactThread bool, currentAgentID string, agentNames map[string]string, vision bool) []runtimeMsg {
 	lastSummary := -1
 	for i, m := range msgs {
 		if m.Role == "summary" {
@@ -126,6 +152,12 @@ func historyForRuntimeScoped(msgs []db.Message, compactThread bool, currentAgent
 					out = append(out, runtimeMsg{Role: "user", Content: formatOtherAgentHistoryNote(label, content)})
 					continue
 				}
+			}
+			if m.Role == "user" {
+				var imgs []userVisionPart
+				content, imgs = userVisionForMessage(content, m.Attachments, vision)
+				out = append(out, runtimeMsg{Role: "user", Content: content, UserImages: imgs})
+				continue
 			}
 			out = append(out, runtimeMsg{Role: m.Role, Content: content})
 		case "host_confirm":

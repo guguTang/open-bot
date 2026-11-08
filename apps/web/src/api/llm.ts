@@ -7,6 +7,8 @@ export type LLMConnection = {
   base_url: string;
   model: string;
   enable_tools: boolean;
+  /** Probe result stored on the connection. Absent on older responses means unknown. */
+  supports_vision?: boolean;
   is_default: boolean;
   context_window?: number | null;
   api_key_set: boolean;
@@ -41,7 +43,11 @@ export type LLMInput = {
   context_window?: number | null;
 };
 
-export async function createLLMConnection(body: LLMInput): Promise<LLMConnection> {
+export type LLMSavedConnection = LLMConnection & {
+  vision_probe?: LLMVisionProbeResult;
+};
+
+export async function createLLMConnection(body: LLMInput): Promise<LLMSavedConnection> {
   const res = await fetch(`${API_BASE}/v1/llm-connections`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -51,7 +57,7 @@ export async function createLLMConnection(body: LLMInput): Promise<LLMConnection
   return res.json();
 }
 
-export async function updateLLMConnection(id: string, body: Partial<LLMInput>): Promise<LLMConnection> {
+export async function updateLLMConnection(id: string, body: Partial<LLMInput>): Promise<LLMSavedConnection> {
   const res = await fetch(`${API_BASE}/v1/llm-connections/${id}`, {
     method: "PATCH",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -124,6 +130,39 @@ export async function listLLMModels(body: {
   });
   if (!res.ok) throw new Error(await readError(res));
   return res.json();
+}
+
+export type LLMVisionProbeResult = {
+  ok: boolean;
+  supports_vision: boolean;
+  detail: string;
+  hint?: string;
+  error?: string;
+  http_status?: number;
+};
+
+export async function probeLLMVision(body: {
+  base_url?: string;
+  api_key?: string;
+  model?: string;
+  connection_id?: string;
+}): Promise<LLMVisionProbeResult> {
+  const res = await fetch(`${API_BASE}/v1/llm/probe-vision`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export function formatLLMVisionProbe(result: LLMVisionProbeResult | null | undefined): string {
+  if (!result) return "";
+  if (!result.ok) {
+    return result.hint || "未能确认视觉能力，附图将仅文本提及";
+  }
+  const head = result.supports_vision ? "支持看图" : "不支持看图";
+  return [head, result.detail, result.hint].filter(Boolean).join(" ");
 }
 
 export function formatLLMToolsProbe(result: LLMToolsProbeResult): string {

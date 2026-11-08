@@ -81,6 +81,9 @@ def skills_for(user_id: str | None) -> SkillRegistry:
 class ChatMessage(BaseModel):
     role: str
     content: str
+    # User chat images. Pixels are not stored in the messages table; the API
+    # attaches them only when the selected connection supports vision.
+    user_images: list[dict[str, Any]] | None = None
 
 
 class LLMConfig(BaseModel):

@@ -519,7 +519,7 @@ func resolveAttachmentPath(uid, convID string, ref AttachmentRef) (string, error
 	return abs, nil
 }
 
-func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef, parseTimeout time.Duration) (string, []attachmentExtract, error) {
+func buildUserContentWithAttachments(ctx context.Context, text string, uid, convID string, refs []AttachmentRef, parseTimeout time.Duration, vision bool) (string, []attachmentExtract, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -534,6 +534,7 @@ func buildUserContentWithAttachments(ctx context.Context, text string, uid, conv
 		b.WriteString("\n\n")
 	}
 	b.WriteString(fmt.Sprintf("（用户上传了 %d 个附件）\n", len(refs)))
+	imageSlots := 0
 	for _, ref := range refs {
 		abs, err := resolveAttachmentPath(uid, convID, ref)
 		if err != nil {
@@ -555,8 +556,20 @@ func buildUserContentWithAttachments(ctx context.Context, text string, uid, conv
 		var markdown string
 		if isOfficeAttachment(mimeType, name) {
 			markdown = appendOfficeDocument(ctx, &b, abs, name, mimeType, parseTimeout)
-		} else if strings.HasPrefix(strings.ToLower(mimeType), "image/") {
-			b.WriteString("  （图片已存储；一期未传视觉多模态，仅文本提及）\n")
+		} else if attachmentLooksLikeImage(mimeType, name) {
+			note := imageNoteNoVision
+			if vision {
+				if imageSlots >= maxUserVisionImagesPerMessage {
+					note = imageNoteBudget
+				} else {
+					part, n := prepareUserVisionFile(abs, mimeType, name)
+					note = n
+					if part != nil {
+						imageSlots++
+					}
+				}
+			}
+			b.WriteString("  （" + note + "）\n")
 		} else if !isTextLikeAttachment(mimeType, name) {
 			// binary without a text extract
 		} else {

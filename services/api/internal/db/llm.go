@@ -17,6 +17,7 @@ type LLMConnection struct {
 	APIKey         string    `json:"-"`
 	Model          string    `json:"model"`
 	EnableTools    bool      `json:"enable_tools"`
+	SupportsVision bool      `json:"supports_vision"`
 	IsDefault      bool      `json:"is_default"`
 	ContextWindow  *int      `json:"context_window,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -24,18 +25,19 @@ type LLMConnection struct {
 }
 
 type LLMConnectionPublic struct {
-	ID            string `json:"id"`
-	UserID        string `json:"user_id"`
-	Name          string `json:"name"`
-	BaseURL       string `json:"base_url"`
-	Model         string `json:"model"`
-	EnableTools   bool   `json:"enable_tools"`
-	IsDefault     bool   `json:"is_default"`
-	ContextWindow *int   `json:"context_window"`
-	APIKeySet     bool   `json:"api_key_set"`
-	APIKeyHint    string `json:"api_key_hint,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID             string `json:"id"`
+	UserID         string `json:"user_id"`
+	Name           string `json:"name"`
+	BaseURL        string `json:"base_url"`
+	Model          string `json:"model"`
+	EnableTools    bool   `json:"enable_tools"`
+	SupportsVision bool   `json:"supports_vision"`
+	IsDefault      bool   `json:"is_default"`
+	ContextWindow  *int   `json:"context_window"`
+	APIKeySet      bool   `json:"api_key_set"`
+	APIKeyHint     string `json:"api_key_hint,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
 }
 
 func (c *LLMConnection) Public() LLMConnectionPublic {
@@ -49,18 +51,19 @@ func (c *LLMConnection) Public() LLMConnectionPublic {
 		}
 	}
 	return LLMConnectionPublic{
-		ID:            c.ID,
-		UserID:        c.UserID,
-		Name:          c.Name,
-		BaseURL:       c.BaseURL,
-		Model:         c.Model,
-		EnableTools:   c.EnableTools,
-		IsDefault:     c.IsDefault,
-		ContextWindow: c.ContextWindow,
-		APIKeySet:     set,
-		APIKeyHint:    hint,
-		CreatedAt:     FormatTime(c.CreatedAt),
-		UpdatedAt:     FormatTime(c.UpdatedAt),
+		ID:             c.ID,
+		UserID:         c.UserID,
+		Name:           c.Name,
+		BaseURL:        c.BaseURL,
+		Model:          c.Model,
+		EnableTools:    c.EnableTools,
+		SupportsVision: c.SupportsVision,
+		IsDefault:      c.IsDefault,
+		ContextWindow:  c.ContextWindow,
+		APIKeySet:      set,
+		APIKeyHint:     hint,
+		CreatedAt:      FormatTime(c.CreatedAt),
+		UpdatedAt:      FormatTime(c.UpdatedAt),
 	}
 }
 
@@ -69,7 +72,7 @@ func scanLLM(row interface{ Scan(dest ...any) error }) (*LLMConnection, error) {
 	var cw sql.NullInt64
 	if err := row.Scan(
 		&c.ID, &c.UserID, &c.Name, &c.BaseURL, &c.APIKey, &c.Model,
-		&c.EnableTools, &c.IsDefault, &cw, &c.CreatedAt, &c.UpdatedAt,
+		&c.EnableTools, &c.IsDefault, &cw, &c.CreatedAt, &c.UpdatedAt, &c.SupportsVision,
 	); err != nil {
 		return nil, err
 	}
@@ -138,7 +141,7 @@ func (d *DB) CreateLLMConnection(userID string, name, baseURL, apiKey, model str
 	return c, nil
 }
 
-const llmSelectCols = `id, user_id, name, base_url, api_key, model, enable_tools, is_default, context_window, created_at, updated_at`
+const llmSelectCols = `id, user_id, name, base_url, api_key, model, enable_tools, is_default, context_window, created_at, updated_at, supports_vision`
 
 func (d *DB) ListLLMConnections(userID string) ([]*LLMConnection, error) {
 	rows, err := d.SQL.Query(
@@ -212,6 +215,7 @@ type LLMUpdate struct {
 	APIKey           *string
 	Model            *string
 	EnableTools      *bool
+	SupportsVision   *bool
 	IsDefault        *bool
 	ContextWindow    *int
 	SetContextWindow bool
@@ -239,6 +243,9 @@ func (d *DB) UpdateLLMConnection(userID, id string, upd LLMUpdate) (*LLMConnecti
 	}
 	if upd.EnableTools != nil {
 		c.EnableTools = *upd.EnableTools
+	}
+	if upd.SupportsVision != nil {
+		c.SupportsVision = *upd.SupportsVision
 	}
 	if upd.SetContextWindow {
 		if upd.ContextWindow != nil && *upd.ContextWindow > 0 {
@@ -271,10 +278,10 @@ func (d *DB) UpdateLLMConnection(userID, id string, upd LLMUpdate) (*LLMConnecti
 
 	_, err = tx.Exec(
 		`UPDATE llm_connections SET name=$1, base_url=$2, api_key=$3, model=$4,
-		 enable_tools=$5, is_default=$6, context_window=$7, updated_at=$8
-		 WHERE id=$9 AND user_id=$10`,
+		 enable_tools=$5, is_default=$6, context_window=$7, supports_vision=$8, updated_at=$9
+		 WHERE id=$10 AND user_id=$11`,
 		c.Name, c.BaseURL, c.APIKey, c.Model, c.EnableTools, c.IsDefault,
-		llmContextWindowArg(c.ContextWindow), c.UpdatedAt, id, userID,
+		llmContextWindowArg(c.ContextWindow), c.SupportsVision, c.UpdatedAt, id, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -326,9 +333,9 @@ func (d *DB) SetDefaultLLM(userID, id string) (*LLMConnection, error) {
 }
 
 // ResolveEffectiveLLM picks the LLM for a user run:
-//   1) user's personal default (is_default), else first personal connection
-//   2) org_settings default LLM (when configured)
-//   3) nil (none available)
+//  1. user's personal default (is_default), else first personal connection
+//  2. org_settings default LLM (when configured)
+//  3. nil (none available)
 //
 // Soft-deleted users still resolve org LLM: requireAuth should reject them, but
 // JWT-only middleware historically allowed deleted tokens through. Falling through
@@ -385,16 +392,18 @@ func OrgSettingsAsLLM(s *OrgSettings, userID string) *LLMConnection {
 		name = "组织默认连接"
 	}
 	return &LLMConnection{
-		ID:            "org-default:" + s.OrgID,
-		UserID:        userID,
-		Name:          name,
-		BaseURL:       base,
-		APIKey:        key,
-		Model:         model,
-		EnableTools:   s.LLMEnableTools,
-		IsDefault:     true,
-		ContextWindow: s.LLMContextWindow,
-		CreatedAt:     s.UpdatedAt,
-		UpdatedAt:     s.UpdatedAt,
+		ID:          "org-default:" + s.OrgID,
+		UserID:      userID,
+		Name:        name,
+		BaseURL:     base,
+		APIKey:      key,
+		Model:       model,
+		EnableTools: s.LLMEnableTools,
+		// Org default is not probe-persisted; personal connections carry supports_vision.
+		SupportsVision: false,
+		IsDefault:      true,
+		ContextWindow:  s.LLMContextWindow,
+		CreatedAt:      s.UpdatedAt,
+		UpdatedAt:      s.UpdatedAt,
 	}
 }

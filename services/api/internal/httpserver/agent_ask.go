@@ -128,21 +128,23 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
-	history := historyForRuntime(msgs, toID, speakerNamesForHistory(s.db, msgs, toID, toName))
-	content := question
-	if len(history) > 0 && history[len(history)-1].Role == "user" {
-		content = history[len(history)-1].Content
-	}
-
 	enabledSkills, _ := s.db.ListEnabledSkillNamesForAgent(userID, toID)
 	if enabledSkills == nil {
 		enabledSkills = []string{}
 	}
 	var llmPayload map[string]any
+	var askConn *db.LLMConnection
 	if conn, lerr := s.db.ResolveEffectiveLLM(userID); lerr == nil && conn != nil {
+		askConn = conn
 		llmPayload = llmRuntimePayload(conn)
 	} else if lerr != nil && !errors.Is(lerr, db.ErrNotFound) {
 		return nil, http.StatusInternalServerError, lerr
+	}
+	seeImages := askConn != nil && askConn.SupportsVision
+	history := historyForModel(msgs, "", toID, speakerNamesForHistory(s.db, msgs, toID, toName), seeImages)
+	content := question
+	if len(history) > 0 && history[len(history)-1].Role == "user" {
+		content = history[len(history)-1].Content
 	}
 
 	payload := map[string]any{

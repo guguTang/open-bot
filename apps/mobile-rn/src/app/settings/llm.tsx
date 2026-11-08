@@ -354,6 +354,7 @@ export default function LlmSettingsScreen(): JSX.Element {
                 {c.model || "(无 model)"} · {c.base_url || "(无 base_url)"} · key{" "}
                 {c.api_key_set ? c.api_key_hint || "已设置" : "未设置"}
                 {c.enable_tools ? " · tools" : ""}
+                {c.supports_vision ? " · 支持看图" : " · 不支持看图"}
               </Typography.Paragraph>
               {c.updated_at ? (
                 <Typography.Paragraph color="muted" className="text-xs">

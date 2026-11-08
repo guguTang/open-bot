@@ -12,11 +12,13 @@ sys.path.insert(0, str(ROOT))
 from app.client_env import tool_display_label  # noqa: E402
 from app.host_vision import (  # noqa: E402
     HOST_IMAGE_KEY,
+    USER_IMAGE_KEY,
     drop_host_images_for_text_model,
     is_vision_input_reject,
     promote_host_images_for_model,
     split_host_image,
 )
+from app.llm import normalize_messages  # noqa: E402
 from app.llm import (  # noqa: E402
     TOOL_DEFS,
     fold_tool_results_in_messages,
@@ -118,6 +120,30 @@ def test_permission_error_is_not_a_shell_retry() -> None:
     _ok(vision is None and "屏幕录制" in text, "observe keeps the permission error text")
 
 
+def test_user_image_promote_and_reject_retry() -> None:
+    raw = {
+        "role": "user",
+        "content": "图里有什么\n（图片已随消息交给模型，请直接看图）",
+        "user_images": [{"mime": "image/png", "data": "B" * 40}],
+    }
+    normalized = normalize_messages([raw], raw["content"])
+    _ok(USER_IMAGE_KEY in normalized[-1], "sidecar kept")
+    _ok(normalized[-1][USER_IMAGE_KEY][0]["data"] == "B" * 40, "sidecar bytes")
+    _ok(isinstance(normalized[-1]["content"], str), "history content stays text")
+    _ok("B" * 40 not in normalized[-1]["content"], "pixels not in text")
+    promoted = promote_host_images_for_model(normalized)
+    content = promoted[0]["content"]
+    _ok(isinstance(content, list) and content[1]["type"] == "image_url", "user image part")
+    _ok(content[1]["image_url"]["url"].startswith("data:image/png;base64,B"), "user data url")
+    _ok(USER_IMAGE_KEY not in promoted[0], "sidecar stripped upstream")
+    _ok(normalized[0]["content"] == raw["content"], "source text unchanged")
+    _ok(is_vision_input_reject("该模型不支持图像输入"), "chinese reject")
+    dropped = drop_host_images_for_text_model(promoted)
+    _ok(isinstance(dropped[0]["content"], str), "user content back to text")
+    _ok("没有看到用户附图" in dropped[0]["content"], "does not pretend the user image was seen")
+    _ok("base64" not in dropped[0]["content"], "user pixels not left in fallback")
+
+
 def test_text_model_fallback_strips_image() -> None:
     messages = [
         {
@@ -143,4 +169,5 @@ if __name__ == "__main__":
     test_fold_drops_older_screenshots()
     test_permission_error_is_not_a_shell_retry()
     test_text_model_fallback_strips_image()
+    test_user_image_promote_and_reject_retry()
     print("all passed")

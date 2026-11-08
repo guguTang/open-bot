@@ -5,12 +5,15 @@ import {
   fetchEffectiveLLMConnection,
   formatLLMPromptCacheProbe,
   formatLLMToolsProbe,
+  formatLLMVisionProbe,
   listLLMConnections,
   listLLMModels,
   LLMConnection,
   LLMInput,
+  LLMVisionProbeResult,
   probeLLMPromptCache,
   probeLLMTools,
+  probeLLMVision,
   updateLLMConnection,
 } from "../../api";
 import { emptyLLMForm } from "../../lib/app/constants";
@@ -83,6 +86,7 @@ export function useLlmSettings() {
       setLLMBusy(true);
       setLLMMsg("");
       try {
+        let toolsNote = "";
         if (llmForm.enable_tools) {
           const probe = await probeLLMTools({
             base_url: llmForm.base_url,
@@ -96,8 +100,26 @@ export function useLlmSettings() {
             return;
           }
           if (probe.mode !== "native") {
-            setLLMMsg(formatLLMToolsProbe(probe));
+            toolsNote = formatLLMToolsProbe(probe);
           }
+        }
+        setLLMMsg("正在探测视觉能力…");
+        let clientVision: LLMVisionProbeResult | null = null;
+        try {
+          clientVision = await probeLLMVision({
+            base_url: llmForm.base_url,
+            model: llmForm.model,
+            api_key: llmForm.api_key?.trim() || undefined,
+            connection_id: editingId || undefined,
+          });
+        } catch (err) {
+          clientVision = {
+            ok: false,
+            supports_vision: false,
+            detail: err instanceof Error ? err.message : String(err),
+            hint: "未能确认视觉能力，附图将仅文本提及",
+            error: err instanceof Error ? err.message : String(err),
+          };
         }
         if (editingId) {
           const patch: Partial<LLMInput> = {
@@ -114,20 +136,22 @@ export function useLlmSettings() {
           if (llmForm.api_key && llmForm.api_key.trim()) {
             patch.api_key = llmForm.api_key.trim();
           }
-          await updateLLMConnection(editingId, patch);
-          setLLMMsg((prev) => (prev ? `${prev} · 已更新` : "已更新"));
+          const saved = await updateLLMConnection(editingId, patch);
+          clientVision = saved.vision_probe ?? clientVision;
         } else {
-          await createLLMConnection({
+          const saved = await createLLMConnection({
             ...llmForm,
             context_window:
               llmForm.context_window && llmForm.context_window > 0
                 ? llmForm.context_window
                 : null,
           });
-          setLLMMsg((prev) => (prev ? `${prev} · 已创建` : "已创建"));
+          clientVision = saved.vision_probe ?? clientVision;
         }
+        const visionLine = formatLLMVisionProbe(clientVision);
         await refreshLLMs();
         resetForm();
+        setLLMMsg([toolsNote, visionLine].filter(Boolean).join(" ") || "已保存");
       } catch (err) {
         setLLMMsg(err instanceof Error ? err.message : String(err));
       } finally {

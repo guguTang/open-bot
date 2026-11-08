@@ -255,6 +255,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 	if conn != nil {
 		llmPayload = llmRuntimePayload(conn)
 	}
+	seeImages := conn != nil && conn.SupportsVision
 	enabledSkills, _ := s.db.ListEnabledSkillNamesForAgent(task.UserID, task.AgentID)
 	if enabledSkills == nil {
 		enabledSkills = []string{}
@@ -267,7 +268,7 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 		"user_id":           task.UserID,
 		"channel_id":        conv.ChannelID,
 		"system_prompt":     systemPrompt,
-		"messages":          historyForRuntime(msgs, task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName)),
+		"messages":          historyForModel(msgs, "", task.AgentID, speakerNamesForHistory(s.db, msgs, task.AgentID, agentName), seeImages),
 		"enabled_skills":    enabledSkills,
 		"max_tool_rounds":   s.effectiveMaxToolRounds(task.UserID),
 		"request_id":        task.ID,

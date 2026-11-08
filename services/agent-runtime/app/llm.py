@@ -25,6 +25,8 @@ from .client_env import (
 )
 from .host_vision import (
     HOST_IMAGE_KEY,
+    USER_IMAGE_KEY,
+    clean_user_images,
     drop_host_images_for_text_model,
     is_vision_input_reject,
     messages_include_images,
@@ -1791,16 +1793,23 @@ def sanitize_fake_tool_narration(text: str) -> str:
 def normalize_messages(
     messages: list[dict[str, Any]] | None,
     content: str,
-) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     if messages:
         for m in messages:
             role = str(m.get("role") or "").strip()
-            text = str(m.get("content") or "")
+            raw = m.get("content")
+            text = raw if isinstance(raw, str) else ("" if raw is None else str(raw))
             if role in ("assistant", "summary"):
                 text = strip_think(text)
-            if role in ("system", "user", "assistant", "summary") and text.strip() != "":
-                out.append({"role": role, "content": text})
+            imgs = clean_user_images(m.get("user_images")) if role == "user" else None
+            if role in ("system", "user", "assistant", "summary") and (text.strip() != "" or imgs):
+                if not text.strip() and imgs:
+                    text = "（见附图）"
+                item: dict[str, Any] = {"role": role, "content": text}
+                if imgs:
+                    item[USER_IMAGE_KEY] = imgs
+                out.append(item)
     if not out and content.strip():
         out.append({"role": "user", "content": content.strip()})
     elif content.strip():
@@ -2236,7 +2245,7 @@ async def chat_completion(
                     list(payload.get("messages") or [])
                 )
                 logger.info(
-                    "LLM rejected image input; retrying screenshot as text metadata model=%s",
+                    "LLM rejected image input; retrying without images model=%s",
                     model,
                 )
                 continue
@@ -2698,6 +2707,32 @@ async def stream_chat_tokens(
     sources_out: list[dict[str, str]] | None = None,
 ):
     """Yield text deltas from streaming completions (no tools)."""
+    work = promote_host_images_for_model(list(messages))
+    try:
+        async for text in _stream_chat_tokens_once(
+            work, api_key=api_key, override=override, sources_out=sources_out
+        ):
+            yield text
+    except RuntimeError as exc:
+        if is_vision_input_reject(str(exc)) and messages_include_images(work):
+            logger.info("LLM rejected image input on stream; retrying without images")
+            stripped = drop_host_images_for_text_model(work)
+            async for text in _stream_chat_tokens_once(
+                stripped, api_key=api_key, override=override, sources_out=sources_out
+            ):
+                yield text
+            return
+        raise
+
+
+async def _stream_chat_tokens_once(
+    messages: list[dict[str, Any]],
+    *,
+    api_key: str,
+    override: LLMOverride | None = None,
+    sources_out: list[dict[str, str]] | None = None,
+):
+    """One streaming completion. Caller promotes or strips images first."""
     _, base, model = openai_config(override)
     profile = profile_for(model, base)
     url = f"{base}/chat/completions"

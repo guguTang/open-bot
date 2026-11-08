@@ -334,9 +334,15 @@ def _prepare_generation_input(input_messages: Any) -> Any:
                 entry["content"] = truncate(_flatten_message_content(content), sys_limit)
                 safe_in.append(entry)
             else:
-                entry = {k: v for k, v in m.items() if k not in ("content", "_host_image")}
+                entry = {
+                    k: v
+                    for k, v in m.items()
+                    if k not in ("content", "_host_image", "_user_images")
+                }
                 entry["role"] = role
-                if isinstance(m.get("_host_image"), dict):
+                if isinstance(m.get("_host_image"), dict) or (
+                    isinstance(m.get("_user_images"), list) and m.get("_user_images")
+                ):
                     entry["image_attached"] = True
                 entry["content"] = truncate(_flatten_message_content(content), max(256, limit // 4))
                 safe_in.append(entry)

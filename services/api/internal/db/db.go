@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS llm_connections (
 CREATE INDEX IF NOT EXISTS idx_llm_connections_user ON llm_connections(user_id);
 
 ALTER TABLE llm_connections ADD COLUMN IF NOT EXISTS context_window INT;
+ALTER TABLE llm_connections ADD COLUMN IF NOT EXISTS supports_vision BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(username));
 
 CREATE TABLE IF NOT EXISTS agents (

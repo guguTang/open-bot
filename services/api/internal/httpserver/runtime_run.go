@@ -59,8 +59,6 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 	if err != nil {
 		return nil, err
 	}
-	history := historyForRuntime(msgs, agentID, speakerNamesForHistory(s.db, msgs, agentID, ""))
-
 	var llmPayload map[string]any
 	conn, err := s.db.ResolveEffectiveLLM(userID)
 	if err != nil && !errors.Is(err, db.ErrNotFound) {
@@ -69,6 +67,8 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 	if conn != nil {
 		llmPayload = llmRuntimePayload(conn)
 	}
+	seeImages := conn != nil && conn.SupportsVision
+	history := historyForModel(msgs, "", agentID, speakerNamesForHistory(s.db, msgs, agentID, ""), seeImages)
 
 	systemPrompt := ""
 	if agent, aerr := s.db.GetAgent(userID, agentID); aerr == nil {
