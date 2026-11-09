@@ -141,12 +141,59 @@ export function ConnectAppsMarket({
 
   const title = view === "detail" && detail ? detail.name : view === "advanced" ? "高级" : "连接应用";
   const showBack = view !== "catalog";
+  const catalog = view === "catalog";
+
+  const connectedStrip = (
+    <>
+      <button type="button" className="connect-apps-count" onClick={() => setPill("已连接")}>
+        已连接 {connectedIds.length}
+      </button>
+      {connectedIds.length > 0 ? (
+        <span className="connect-apps-iconstrip" aria-label="已连接的应用">
+          {icons.visible.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="connect-apps-iconbtn"
+              aria-label={`管理 ${connectAppById(id).name}`}
+              onClick={() => openDetail(id)}
+            >
+              <ConnectAppMark id={id} size="sm" />
+            </button>
+          ))}
+          {icons.overflow > 0 ? <span className="connect-apps-iconmore">+{icons.overflow}</span> : null}
+        </span>
+      ) : null}
+    </>
+  );
+
+  const pills = (
+    <div className="connect-apps-pills" role="tablist" aria-label="应用分类">
+      {CONNECT_APP_PILLS.map((item) => (
+        <button
+          key={item}
+          type="button"
+          role="tab"
+          aria-selected={pill === item}
+          className={cn("connect-apps-pill", pill === item && "is-active")}
+          onClick={() => setPill(item)}
+        >
+          {item}
+          {item === "已连接" ? <span className="connect-apps-pill-count">{connectedIds.length}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div
-      className={cn("connect-apps", sheetForm ? "settings-hub connect-apps--narrow" : "connect-apps--desktop")}
+      className={cn(
+        "connect-apps flex min-h-0 flex-1 flex-col overflow-hidden",
+        sheetForm ? "settings-hub connect-apps--narrow" : "connect-apps--desktop",
+      )}
       data-testid="connect-apps-market"
     >
+      <div className="connect-apps-chrome">
       {sheetForm ? (
         showBack ? (
           <header className="settings-shell-subhead">
@@ -196,29 +243,9 @@ export function ConnectAppsMarket({
               </Button>
             ) : null}
             <h2 className="connect-apps-desktop-title">{title}</h2>
-            {view === "catalog" ? (
-              <button type="button" className="connect-apps-count" onClick={() => setPill("已连接")}>
-                已连接 {connectedIds.length}
-              </button>
-            ) : null}
-            {view === "catalog" && connectedIds.length > 0 ? (
-              <span className="connect-apps-iconstrip" aria-label="已连接的应用">
-                {icons.visible.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="connect-apps-iconbtn"
-                    aria-label={`管理 ${connectAppById(id).name}`}
-                    onClick={() => openDetail(id)}
-                  >
-                    <ConnectAppMark id={id} size="sm" />
-                  </button>
-                ))}
-                {icons.overflow > 0 ? <span className="connect-apps-iconmore">+{icons.overflow}</span> : null}
-              </span>
-            ) : null}
+            {catalog ? connectedStrip : null}
           </div>
-          {view === "catalog" ? (
+          {catalog ? (
             <SearchField
               aria-label="搜索应用"
               value={query}
@@ -232,8 +259,22 @@ export function ConnectAppsMarket({
           </Button>
         </header>
       )}
+      {sheetForm && catalog ? (
+        <>
+          <div className="connect-apps-narrow-meta">{connectedStrip}</div>
+          <SearchField
+            aria-label="搜索应用"
+            value={query}
+            onChange={setQuery}
+            placeholder="搜索应用"
+            className="connect-apps-search connect-apps-search--touch"
+          />
+        </>
+      ) : null}
+      {catalog ? pills : null}
+      </div>
 
-      <div className={cn(sheetForm ? "settings-hub-scroll" : "connect-apps-scroll")}>
+      <div className="connect-apps-scroll">
         {props.msg ? (
           <p className={cn("connect-apps-msg", isFailure(props.msg) && "connect-apps-msg--fail")} role="status">
             {props.msg}
@@ -246,56 +287,6 @@ export function ConnectAppsMarket({
           <ConnectAppDetail id={detailId} {...detailProps} />
         ) : (
           <>
-            {sheetForm ? (
-              <div className="connect-apps-narrow-meta">
-                <button type="button" className="connect-apps-count" onClick={() => setPill("已连接")}>
-                  已连接 {connectedIds.length}
-                </button>
-                {connectedIds.length > 0 ? (
-                  <span className="connect-apps-iconstrip" aria-label="已连接的应用">
-                    {icons.visible.map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className="connect-apps-iconbtn"
-                        aria-label={`管理 ${connectAppById(id).name}`}
-                        onClick={() => openDetail(id)}
-                      >
-                        <ConnectAppMark id={id} size="sm" />
-                      </button>
-                    ))}
-                    {icons.overflow > 0 ? <span className="connect-apps-iconmore">+{icons.overflow}</span> : null}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {sheetForm ? (
-              <SearchField
-                aria-label="搜索应用"
-                value={query}
-                onChange={setQuery}
-                placeholder="搜索应用"
-                className="connect-apps-search connect-apps-search--touch"
-              />
-            ) : null}
-
-            <div className="connect-apps-pills" role="tablist" aria-label="应用分类">
-              {CONNECT_APP_PILLS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  role="tab"
-                  aria-selected={pill === item}
-                  className={cn("connect-apps-pill", pill === item && "is-active")}
-                  onClick={() => setPill(item)}
-                >
-                  {item}
-                  {item === "已连接" ? <span className="connect-apps-pill-count">{connectedIds.length}</span> : null}
-                </button>
-              ))}
-            </div>
-
             {showRecommended ? (
               <section className="connect-apps-recommended" aria-label="推荐" data-testid="connect-apps-recommended">
                 <h3>推荐</h3>

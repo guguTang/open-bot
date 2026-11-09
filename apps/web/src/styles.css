@@ -5634,20 +5634,72 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
 /* === 连接应用 market shell ===
    Wide: settings-dialog white elevated. Narrow: settings-hub gray + white cards.
    No recommended rail unless a provider sets recommended (phase 1 does not). */
+/* Fixed-height shell. DialogContent's `grid` must not win, or the row grows
+   with content and overflow:hidden clips it with no scrollbar. */
+.modal.settings-dialog.connect-apps-dialog {
+  min-height: 0;
+}
+
+/* DialogContent defaults to grid. A fixed-height grid row grows with the
+   catalog and overflow clips it, so the inner scroller never overflows. */
 .modal.settings-dialog.connect-apps-dialog:not(.settings-dialog-shell) {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: clip;
   width: min(860px, calc(100vw - 32px));
   max-width: min(860px, calc(100vw - 32px));
-  height: min(680px, calc(100vh - 32px));
-  max-height: min(680px, calc(100vh - 32px));
+  height: min(680px, calc(100dvh - 32px));
+  max-height: min(680px, calc(100dvh - 32px));
   border-radius: 16px;
 }
 
+.modal.settings-dialog.connect-apps-dialog.settings-dialog-shell {
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+  border-radius: 0;
+}
+
+.modal.connect-apps-dialog > .connect-apps {
+  width: 100%;
+}
+
+/* Same fill as .micro-apps-hub--desktop: bounded height so the scroller can overflow. */
 .connect-apps--desktop {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
+  overflow: hidden;
   background: var(--bg-elevated);
+}
+
+.connect-apps-chrome {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+}
+
+.connect-apps--narrow .connect-apps-chrome {
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.connect-apps--narrow .connect-apps-narrow-meta,
+.connect-apps--narrow .connect-apps-search--touch,
+.connect-apps--narrow .connect-apps-pills {
+  margin-left: 16px;
+  margin-right: 16px;
 }
 
 .connect-apps-desktop-head {
@@ -5710,6 +5762,7 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   gap: 6px;
   min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
@@ -5747,15 +5800,26 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   width: 100%;
 }
 
+/* Only vertical scroller. Needs the desktop shell's bounded height above. */
 .connect-apps-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
   padding: 4px 22px 22px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.connect-apps-scroll > * {
+  flex-shrink: 0;
+}
+
+.connect-apps--narrow .connect-apps-scroll {
+  padding: 0 16px max(16px, var(--safe-bottom, 0px));
 }
 
 .connect-apps-narrow-meta {
@@ -5769,6 +5833,8 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   flex-wrap: nowrap;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
   scrollbar-width: none;
   mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent);
   padding-bottom: 2px;
@@ -5817,6 +5883,7 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   border-radius: 12px;
   background: var(--surface);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .connect-apps--narrow .connect-apps-list {
@@ -5992,15 +6059,6 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   padding-top: 8px;
 }
 
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-search,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-pills,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-list,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-advanced-row,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-empty,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-narrow-meta,
-.connect-apps--narrow .settings-hub-scroll > .connect-apps-msg {
-  flex-shrink: 0;
-}
 
 /* Beat `.modal button` (margin, border, 12px type) inside this shell. */
 .modal .connect-apps button.connect-apps-count,

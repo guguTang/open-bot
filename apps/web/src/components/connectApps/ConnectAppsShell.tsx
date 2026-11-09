@@ -43,7 +43,7 @@ export function ConnectAppsShell({ settings }: { settings: AppSettingsBundle }) 
         showCloseButton={false}
         overlayClassName={cn(sheetForm && "settings-backdrop-shell")}
         className={cn(
-          "modal settings-dialog connect-apps-dialog max-w-none gap-0 overflow-hidden border-0 p-0 sm:max-w-none",
+          "modal settings-dialog connect-apps-dialog flex min-h-0 flex-col max-w-none gap-0 overflow-clip border-0 p-0 sm:max-w-none",
           sheetForm && "settings-dialog-shell",
         )}
       >
