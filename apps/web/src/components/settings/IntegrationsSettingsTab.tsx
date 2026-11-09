@@ -42,6 +42,15 @@ export type IntegrationsSettingsTabProps = {
   onRefresh: () => void | Promise<void>;
 };
 
+function gmailConnectionTitle(gmail: GmailIntegrationStatus): string {
+  const canSend = Boolean(gmail.can_send);
+  const canRead = Boolean(gmail.can_read);
+  if (!canSend && !canRead) return "已连接（权限不足）";
+  if (!canSend) return "已连接（发送权限不足）";
+  if (!canRead) return "已连接（读取权限不足）";
+  return "已连接";
+}
+
 export function IntegrationsSettingsTab({
   gmail,
   slack,
@@ -76,10 +85,10 @@ export function IntegrationsSettingsTab({
   return (
     <SettingsPage>
       <SettingsHint>
-        连接个人邮箱后，Bot 可起草邮件并在你确认后通过 Gmail API 发送。不会擅自代发；桌面 himalaya /
-        google-workspace 技能仍可用于本机 CLI。Slack / GitHub 可在这里安装，Telegram / 飞书可粘贴凭据。
-        成功后都会自动绑定一条入站 Hook，供例行任务按事件唤醒。未配置加密密钥或对应 Client
-        时显示空态，未连接时不会出现 Webhook URL。例行任务里手工创建的 Hook 仍然可用。
+        连接个人邮箱后，Bot 可在你确认后发信，并按需搜索、阅读邮件摘要（正文会截断）。不会擅自代发，也不会监听新邮件。
+        桌面 himalaya / google-workspace 仍可用于本机 CLI。Slack / GitHub 可在这里安装，Telegram /
+        飞书可粘贴凭据；这四项成功后会自动绑定一条入站 Hook。Gmail 不创建入站 Hook。未连接或未配置 Client
+        时这里是空态。例行任务里手工创建的 Hook 仍然可用。
       </SettingsHint>
       {msg ? <div className="settings-status">{msg}</div> : null}
       <SettingsSection title="Gmail">
@@ -106,10 +115,10 @@ export function IntegrationsSettingsTab({
             <>
               <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                 <div>
-                  <div className="agent-name">
-                    {gmail.can_send === false ? "已连接（发送权限不足）" : "已连接"}
-                  </div>
+                  <div className="agent-name">{gmailConnectionTitle(gmail)}</div>
                   <div className="agent-desc">{gmail.email || "(未知邮箱)"}</div>
+                  <div className="agent-desc">发送：{gmail.can_send ? "可以" : "不可以"}</div>
+                  <div className="agent-desc">读取：{gmail.can_read ? "可以" : "不可以"}</div>
                 </div>
                 <div className="llm-actions">
                   <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
@@ -125,29 +134,41 @@ export function IntegrationsSettingsTab({
                   </button>
                 </div>
               </div>
-              {gmail.can_send === false ? (
+              {gmail.can_send ? null : (
                 <div className="settings-status">
                   当前授权缺少 Gmail 发送范围。请先「断开连接」，再「连接 Gmail」，并在 Google
                   授权页勾选发送邮件权限；同时确认 Cloud 控制台 OAuth
                   同意屏幕已添加 <code>gmail.send</code>。
                 </div>
-              ) : null}
+              )}
+              {gmail.can_read ? null : (
+                <div className="settings-status">
+                  当前授权缺少读取邮件范围（<code>gmail.readonly</code>
+                  ）。请先「断开连接」，再「连接 Gmail」，并在 Google
+                  授权页勾选查看邮件。仅有发送权限的旧连接不能搜索或打开邮件；重新连接才会申请新的同意，不会静默追加权限。
+                </div>
+              )}
             </>
           ) : (
-            <div className="llm-actions">
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                aria-busy={busy}
-                onClick={() => void onConnectGmail()}
-              >
-                {busy ? "连接中…" : "连接 Gmail"}
-              </button>
-              <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
-                刷新
-              </button>
-            </div>
+            <>
+              <SettingsEmpty>
+                尚未连接 Gmail。连接后可以在你确认后发信，并按需搜索、阅读邮件摘要。不会创建入站 Hook，也不会在后台监听新邮件。
+              </SettingsEmpty>
+              <div className="llm-actions">
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy}
+                  aria-busy={busy}
+                  onClick={() => void onConnectGmail()}
+                >
+                  {busy ? "连接中…" : "连接 Gmail"}
+                </button>
+                <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+                  刷新
+                </button>
+              </div>
+            </>
           )}
         </SettingsCard>
       </SettingsSection>

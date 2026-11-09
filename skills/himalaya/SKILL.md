@@ -13,6 +13,7 @@ description: Read, search, draft and send IMAP/SMTP email with the himalaya CLI 
 - **长进程**：没有后台进程工具。用 `nohup <cmd> > /tmp/<name>.log 2>&1 &` 启动，再用 `host_shell` 跑 `tail -n 50 /tmp/<name>.log` 轮询；整体耗时很长的任务用 `defer_work` 放后台交付。
 - **确认**：写入/删除/有风险的命令由系统确认卡处理；结果 waiting = 尚未执行，denied = 用户拒绝，如实说明，不要编造输出。
 - **发信 / 回复 / 转发 / 删除 / 移动** 之前，先把收件人、主题、正文发给用户确认，得到明确同意再执行。
+- **Web 已连接 Gmail 时**：搜索和阅读优先 `gmail_search` / `gmail_get`（技能 `web-gmail`），发信优先 `gmail_send`。本技能留给已连接电脑上的 himalaya CLI，或用户明确要走本机 IMAP 时。
 
 
 Himalaya is a CLI email client that lets you manage emails from the terminal using IMAP, SMTP, Notmuch, or Sendmail backends.

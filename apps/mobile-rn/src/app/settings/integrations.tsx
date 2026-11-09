@@ -102,7 +102,7 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
   async function onDisconnect(): Promise<void> {
     const ok = await confirm({
       title: "断开 Gmail？",
-      message: "断开后 Bot 将无法通过该邮箱发送邮件，需要重新授权才能恢复。",
+      message: "断开后 Bot 将无法通过该邮箱发送或阅读邮件，需要重新授权才能恢复。",
       confirmLabel: "断开连接",
       cancelLabel: "取消",
       destructive: true,
@@ -139,7 +139,7 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
       onRetry={() => void refresh()}
     >
       <PageIntro>
-        连接个人邮箱后，Bot 可起草邮件并在你确认后通过 Gmail API 发送。不会擅自代发。
+        连接个人邮箱后，Bot 可在你确认后发信，并按需搜索、阅读邮件摘要。不会监听新邮件，也不创建入站 Hook。
       </PageIntro>
 
       <Card>
@@ -160,16 +160,33 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
           {gmail && configured && connected ? (
             <View className="gap-2">
               <Typography.Paragraph>
-                {gmail.can_send === false ? "已连接（发送权限不足）" : "已连接"}
+                {gmail.can_send && gmail.can_read
+                  ? "已连接"
+                  : !gmail.can_send && !gmail.can_read
+                    ? "已连接（权限不足）"
+                    : !gmail.can_send
+                      ? "已连接（发送权限不足）"
+                      : "已连接（读取权限不足）"}
               </Typography.Paragraph>
               <Typography.Paragraph color="muted" className="text-sm">
                 {gmail.email || "(未知邮箱)"}
               </Typography.Paragraph>
-              {gmail.can_send === false ? (
+              <Typography.Paragraph color="muted" className="text-sm">
+                发送：{gmail.can_send ? "可以" : "不可以"}
+              </Typography.Paragraph>
+              <Typography.Paragraph color="muted" className="text-sm">
+                读取：{gmail.can_read ? "可以" : "不可以"}
+              </Typography.Paragraph>
+              {gmail.can_send ? null : (
                 <Typography.Paragraph className="text-xs text-warning">
                   当前授权缺少 Gmail 发送范围。请先断开再重新连接，并在授权页勾选发送邮件。
                 </Typography.Paragraph>
-              ) : null}
+              )}
+              {gmail.can_read ? null : (
+                <Typography.Paragraph className="text-xs text-warning">
+                  当前授权缺少读取范围（gmail.readonly）。请先断开再重新连接，并在授权页勾选查看邮件。仅有发送权限的旧连接不能读信。
+                </Typography.Paragraph>
+              )}
               <FormActions>
                 <Button
                   size="sm"
@@ -192,19 +209,24 @@ export default function IntegrationsSettingsScreen(): JSX.Element {
           ) : null}
 
           {gmail && configured && !connected ? (
-            <FormActions>
-              <Button size="sm" isDisabled={busy} onPress={() => void onConnect()}>
-                <Button.Label>{busy ? "连接中…" : "连接 Gmail"}</Button.Label>
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                isDisabled={busy}
-                onPress={() => void refresh()}
-              >
-                <Button.Label>刷新</Button.Label>
-              </Button>
-            </FormActions>
+            <View className="gap-3">
+              <Typography.Paragraph color="muted" className="text-sm">
+                尚未连接 Gmail。连接后可以确认后发信，并按需搜索、阅读邮件摘要。
+              </Typography.Paragraph>
+              <FormActions>
+                <Button size="sm" isDisabled={busy} onPress={() => void onConnect()}>
+                  <Button.Label>{busy ? "连接中…" : "连接 Gmail"}</Button.Label>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isDisabled={busy}
+                  onPress={() => void refresh()}
+                >
+                  <Button.Label>刷新</Button.Label>
+                </Button>
+              </FormActions>
+            </View>
           ) : null}
 
           {msg ? (

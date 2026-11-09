@@ -352,6 +352,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/bot-secrets/http", s.requireInternal(s.handleInternalSecretHTTP))
 	mux.HandleFunc("POST /internal/gmail/status", s.requireInternal(s.handleInternalGmailStatus))
 	mux.HandleFunc("POST /internal/gmail/send", s.requireInternal(s.handleInternalGmailSend))
+	mux.HandleFunc("POST /internal/gmail/search", s.requireInternal(s.handleInternalGmailSearch))
+	mux.HandleFunc("POST /internal/gmail/get", s.requireInternal(s.handleInternalGmailGet))
 	mux.HandleFunc("POST /internal/routines/run", s.requireInternal(s.handleInternalRunRoutine))
 	mux.HandleFunc("POST /internal/conversation-tasks/enqueue", s.requireInternal(s.handleInternalEnqueueTask))
 	mux.HandleFunc("POST /internal/conversations/attachments", s.requireInternal(s.handleInternalUploadAttachment))

@@ -8,6 +8,8 @@ export type GmailIntegrationStatus = {
   scopes?: string;
   /** False when connected but token lacks gmail.send (need reconnect). */
   can_send?: boolean;
+  /** True only when the stored grant includes gmail.readonly (or a superset). Send-only grants are false. */
+  can_read?: boolean;
   updated_at?: string;
   oauth_configured: boolean;
 };

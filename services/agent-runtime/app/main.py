@@ -1711,6 +1711,43 @@ async def openai_path(
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
+        if name == "gmail_search":
+            from . import gmail_api
+
+            try:
+                raw_limit = args.get("limit", 10)
+                try:
+                    limit = int(raw_limit)
+                except (TypeError, ValueError):
+                    return json.dumps(
+                        {"ok": False, "error": "limit 须为整数"},
+                        ensure_ascii=False,
+                    )
+                return json.dumps(
+                    gmail_api.gmail_search(
+                        str(user_id or ""),
+                        q=str(args.get("q") or ""),
+                        limit=limit,
+                    ),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+        if name == "gmail_get":
+            from . import gmail_api
+
+            try:
+                return json.dumps(
+                    gmail_api.gmail_get(
+                        str(user_id or ""),
+                        message_id=str(args.get("id") or ""),
+                    ),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
         if name == "gmail_send":
             from . import gmail_api
 
