@@ -264,7 +264,7 @@ func (s *Server) gmailAccessFromConn(ctx context.Context, userID string, conn *d
 			"ok":        false,
 			"connected": false,
 			"can_read":  false,
-			"error":     "Gmail 授权已失效，请重新在「设置 → 连接应用」连接：" + sanitizeGmailOAuthLog(err.Error()),
+			"error":     "Gmail 授权已失效，请重新在「连接应用」（侧栏底部，或设置里的同名入口）连接：" + sanitizeGmailOAuthLog(err.Error()),
 		}
 	}
 	return access, nil
@@ -288,7 +288,7 @@ func gmailReadCallError(err error) map[string]any {
 			"ok":        false,
 			"connected": true,
 			"can_read":  true,
-			"error":     "Gmail 拒绝了这次读取（未授权或登录已失效）。请到「设置 → 连接应用」断开后重新连接。",
+			"error":     "Gmail 拒绝了这次读取（未授权或登录已失效）。请到「连接应用」（侧栏底部，或设置里的同名入口）断开后重新连接。",
 		}
 	case errors.Is(err, errGmailInsufficientScope):
 		return map[string]any{

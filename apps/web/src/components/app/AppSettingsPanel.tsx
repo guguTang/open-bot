@@ -21,7 +21,6 @@ import {
   RoutinesSettingsTab,
   SandboxSettingsTab,
   SecretsSettingsTab,
-  IntegrationsSettingsTab,
   SkillsSettingsTab,
 } from "../settings";
 import type { AppSettingsBundle } from "../../hooks/useAppSettings";
@@ -64,7 +63,6 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
     sandbox,
     machines,
     secrets,
-    integrations,
     review,
     hostMachineId,
     clientEnv,
@@ -90,8 +88,17 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
     return m?.label || mid;
   })();
 
+  const openConnectApps = () => {
+    patchShell({ connectAppsOpen: true, connectAppsFocus: null });
+    prefetchSettingsTab("integrations");
+  };
+
   const onHubNavigate = (hub: Parameters<typeof resolveSettingsHubNav>[0]) => {
     const target = resolveSettingsHubNav(hub);
+    if (target.opensConnectApps) {
+      openConnectApps();
+      return;
+    }
     if (target.generalPane) setSettingsGeneralPane(target.generalPane);
     setSettingsTab(target.tab);
     setSettingsShellHub(false);
@@ -124,6 +131,7 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
       }}
       onLogout={onLogout}
       onSystemBack={onSystemBack}
+      onOpenConnectApps={openConnectApps}
     >
       {settingsTab === "general" && (
         <GeneralSettingsTab
@@ -378,36 +386,6 @@ export function AppSettingsPanel({ settings }: { settings: AppSettingsBundle }) 
         />
       )}
 
-      {settingsTab === "integrations" && (
-        <IntegrationsSettingsTab
-          gmail={integrations.gmail}
-          slack={integrations.slack}
-          github={integrations.github}
-          telegram={integrations.telegram}
-          feishu={integrations.feishu}
-          busy={integrations.busy}
-          loading={integrations.loading}
-          loadError={integrations.loadError}
-          slackLoadError={integrations.slackLoadError}
-          githubLoadError={integrations.githubLoadError}
-          telegramLoadError={integrations.telegramLoadError}
-          feishuLoadError={integrations.feishuLoadError}
-          msg={integrations.msg}
-          onConnectGmail={integrations.connectGmail}
-          onDisconnectGmail={integrations.disconnect}
-          onConnectSlack={integrations.connectSlack}
-          onDisconnectSlack={integrations.disconnectSlack}
-          onConnectGitHub={integrations.connectGitHub}
-          onAttachGitHub={integrations.attachGitHub}
-          onDisconnectGitHub={integrations.disconnectGitHub}
-          onConnectTelegram={integrations.connectTelegramBot}
-          onDisconnectTelegram={integrations.disconnectTelegram}
-          onConnectFeishu={integrations.connectFeishuApp}
-          onDisconnectFeishu={integrations.disconnectFeishu}
-          onCopy={integrations.copyText}
-          onRefresh={integrations.refresh}
-        />
-      )}
     </AppSettingsDialog>
   );
 }

@@ -24,7 +24,7 @@ Out of scope：Outlook、应用市场、`users.watch` / Pub/Sub / 轮询唤醒�
 ## 2. Settings 连接流
 
 ```
-设置 → 连接应用（integrations）
+侧栏底部「连接应用」（设置里的同名入口打开同一壳；OAuth 回跳仍用 `open_settings=integrations`）
   ├─ 未连接：空态（说明可发信 / 按需读信；无入站 Hook）
   │            [连接 Gmail] → POST /v1/integrations/gmail/start
   │            → 浏览器跳转 Google 同意屏
@@ -96,7 +96,7 @@ Google Cloud 配置要点：
 | `gmail_send` | `to` / `subject` / `body` + 可选 `attachments[{path,filename?}]`（`/workspace` 内，≤5 个 / 5MB 每个 / 8MB 合计）→ multipart MIME → Gmail API；HTML/PDF/图片优先附件，body 短说明；禁止无附件时 body 只写路径 | **是**（host_confirm，预览含附件名） |
 
 命名对齐仓库：`snake_case`，与 `request_secret` / `host_shell` 一致。  
-未连接时 `gmail_send` / `gmail_search` / `gmail_get` 立即失败并提示去「设置 → 连接应用」；读信不创建确认卡，发信在未连接时也不创建确认卡。
+未连接时 `gmail_send` / `gmail_search` / `gmail_get` 立即失败并提示去「连接应用」（侧栏底部，或设置里的同名入口）；读信不创建确认卡，发信在未连接时也不创建确认卡。
 
 读信走已有 `resolveGmailAccessToken`：access 过期则用 `oauth_connections` 里的 refresh token 换新并回写。Gmail API 若返回未授权，工具明确要求重新连接；若返回范围不足，`can_read=false` 并给出同一条断开重连说明。
 
@@ -199,4 +199,4 @@ make dev   # 或既有 api + runtime + web
 | `himalaya` skill | 已连接电脑上的 IMAP/SMTP + App Password。Web 未连接、或用户明确要本机 CLI 时再用 |
 | `google-workspace` skill | 已连接电脑上的 gws / Desktop OAuth。日历、云盘、表格，以及用户明确要求本机 gws 时再用 |
 
-Agent 应优先：`gmail_status`。已连接且 `can_read=true` → Web 的 search/get；`can_read=false` → 请用户断开重连，不要改用桌面 CLI 假装已经读到 Web 邮箱，除非用户要的就是那台电脑上的另一个邮箱。未连接 → 引导「设置 → 连接应用」，或在已连接电脑上使用 himalaya / gws。
+Agent 应优先：`gmail_status`。已连接且 `can_read=true` → Web 的 search/get；`can_read=false` → 请用户断开重连，不要改用桌面 CLI 假装已经读到 Web 邮箱，除非用户要的就是那台电脑上的另一个邮箱。未连接 → 引导「连接应用」（侧栏底部，或设置里的同名入口），或在已连接电脑上使用 himalaya / gws。

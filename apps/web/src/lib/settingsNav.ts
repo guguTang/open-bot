@@ -7,6 +7,8 @@ export type SettingsNavTarget = {
   generalPane?: SettingsGeneralPane;
   /** Tab to prefetch (usually same as tab; account/server prefetch general). */
   prefetch: SettingsTab;
+  /** Opens the shared connect-apps shell instead of a settings page. */
+  opensConnectApps?: boolean;
 };
 
 /**
@@ -24,6 +26,9 @@ export function resolveSettingsHubNav(hub: SettingsHubNav): SettingsNavTarget {
   }
   if (hub === "general") {
     return { tab: "general", generalPane: "review", prefetch: "general" };
+  }
+  if (hub === "integrations") {
+    return { tab: "integrations", prefetch: "integrations", opensConnectApps: true };
   }
   return { tab: hub, prefetch: hub };
 }

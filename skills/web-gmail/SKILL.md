@@ -5,7 +5,7 @@ description: Read and send with Web Gmail (gmail_search/gmail_get/gmail_send/gma
 
 # Web Gmail
 
-用用户在 **设置 → 连接应用** 连好的 Gmail。
+用用户在 **「连接应用」**（侧栏底部，或设置里的同名入口）连好的 Gmail。
 
 Web 上搜索和阅读优先 `gmail_search` / `gmail_get`，发信用 `gmail_send`。已连接电脑上的 `himalaya` 与 `google-workspace`（gws）仍然可用：用户明确要本机 CLI，或要日历 / 云盘 / 另一套 IMAP 时再用它们。
 

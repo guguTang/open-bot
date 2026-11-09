@@ -30,6 +30,8 @@ type Props = {
   apiBaseLabel?: string;
   onClose: () => void;
   onNavigate: (tab: SettingsHubNav) => void;
+  /** Same market shell as the sidebar. Hub row stays; it does not open a second form page. */
+  onOpenConnectApps?: () => void;
   /** Open BotAvatarSettings (形象 + 优先电脑); keep separate from「当前 Bot」人设. */
   onOpenBotAvatar?: () => void;
   onLogout: () => void;
@@ -54,6 +56,7 @@ export function MobileSettingsHub({
   apiBaseLabel,
   onClose,
   onNavigate,
+  onOpenConnectApps,
   onOpenBotAvatar,
   onLogout,
 }: Props) {
@@ -183,10 +186,14 @@ export function MobileSettingsHub({
             </span>
             <Chevron />
           </button>
-          <button type="button" className="settings-hub-row" onClick={() => onNavigate("integrations")}>
+          <button
+            type="button"
+            className="settings-hub-row"
+            onClick={() => (onOpenConnectApps ? onOpenConnectApps() : onNavigate("integrations"))}
+          >
             <span className="settings-hub-row-main">
               <span className="settings-hub-row-title">连接应用</span>
-              <span className="settings-hub-row-sub">Gmail 等邮箱授权</span>
+              <span className="settings-hub-row-sub">Gmail、Slack、Telegram、飞书、GitHub</span>
             </span>
             <Chevron />
           </button>

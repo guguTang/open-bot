@@ -169,6 +169,11 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
 
   const selectSettingsTab = useCallback(
     (tab: SettingsTab) => {
+      if (tab === "integrations") {
+        patchShell({ connectAppsOpen: true, connectAppsFocus: null });
+        prefetchSettingsTab("integrations");
+        return;
+      }
       setSettingsTab(tab);
       prefetchSettingsTab(tab);
     },
@@ -177,6 +182,11 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
 
   const openSettings = useCallback(
     (tab: SettingsTab = "llm") => {
+      if (tab === "integrations") {
+        patchShell({ connectAppsOpen: true, connectAppsFocus: null });
+        prefetchSettingsTab("integrations");
+        return;
+      }
       const sheetForm = readSheetForm();
       setShowSettings(true);
       patchShell({
@@ -228,6 +238,14 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     if (!allowed.includes(tab as SettingsTab)) return;
     openSettings(tab as SettingsTab);
     if (tab === "integrations") {
+      const focus = params.get("gmail_connected") || params.get("gmail_error")
+        ? "gmail"
+        : params.get("slack_connected") || params.get("slack_error")
+          ? "slack"
+          : params.get("github_connected") || params.get("github_error")
+            ? "github"
+            : null;
+      if (focus) patchShell({ connectAppsFocus: focus });
       const notes: string[] = [];
       if (params.get("gmail_connected") === "1") notes.push("Gmail 已连接");
       if (params.get("slack_connected") === "1") {

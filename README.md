@@ -39,7 +39,7 @@
 ### 例行任务
 
 - cron Routines：到点在会话里交付；支持时区、重试、暂停/恢复
-- Slack / GitHub：设置 → 连接应用可安装并自动绑定入站 Hook（未配置 Client 时为空态）；仍可手工粘贴 Hook URL
+- Slack / GitHub：侧栏底部「连接应用」（设置里的同名入口打开同一壳）可安装并自动绑定入站 Hook（未配置 Client 时详情为空态）；仍可手工粘贴 Hook URL
 - Telegram / 飞书：同一页粘贴 Bot token 或应用凭据（不代创建机器人）；连上后可复制 Webhook，消息能唤醒例行，并在同一会话回复
 - 产品调度逻辑自研；cron 表达式解析使用 [robfig/cron](https://github.com/robfig/cron)
 

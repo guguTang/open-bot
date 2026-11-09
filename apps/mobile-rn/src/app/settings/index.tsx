@@ -130,7 +130,7 @@ export default function SettingsScreen(): JSX.Element {
     {
       id: "integrations",
       title: "连接应用",
-      desc: "Gmail 等邮箱授权",
+      desc: "Gmail、Slack、Telegram、飞书、GitHub",
       icon: "mail-outline",
       href: "/settings/integrations",
     },
