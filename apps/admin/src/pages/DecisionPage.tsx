@@ -32,7 +32,7 @@ const PROVIDER_HELP: Record<DecisionBackend, string> = {
   laya:
     "填写 base_url 时，Laya 走同一套 HTTP 契约。留空则由 runtime 进程内懒加载 laya（需已 pip install laya），默认模型 convaiinnovations/laya。自托管 / Unsloth 桌面也可改选「自定义」。与其他提供方互斥。",
   microsoft:
-    "Microsoft-Decision-1（非聊天模型）：Go API 直连 OpenRouter 或 Azure AI Foundry 的 systemone 接口，用于群 Auto 选人 decision 模式等。失败 / 超时 / 低置信度时回退启发式，不会再调用其他决策提供方。计费约 $0.042 / 1M 输入 token。",
+    "Microsoft-Decision-1（非聊天模型）：Go API 直连 OpenRouter 或 Azure AI Foundry 的 systemone 接口，用于群 Auto 选人 decision 模式等。失败 / 超时 / 低置信度时回退启发式，不会再调用其他决策提供方。探测页仍可显示约 $0.042 / 1M 输入 token 的列表价；群 Auto 的实际用量记入同一用量账本，单价以「模型单价」为准，不另记一套账。",
   custom:
     "任意兼容 System One 决策 API 的 HTTP 端点（POST {base_url}/v1/systemone）。须自行填写 base_url 与模型；API key 可选。例如自托管服务，或 Unsloth 桌面端本地 Decision API（http://localhost:8888，模型 laya；请先在 Unsloth：设置 → API → 决策 API 启用「提供请求服务」）。未填完整时检测/运行时会明确失败。与其他提供方互斥。",
 };

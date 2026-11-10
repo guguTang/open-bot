@@ -140,6 +140,9 @@ WHERE agent_id IN (SELECT id FROM agents WHERE user_id = $1)
 	if err := execCount("memory_recalls", `DELETE FROM memory_recalls WHERE user_id = $1`, userID); err != nil {
 		return nil, err
 	}
+	if err := execCount("usage_calls", `DELETE FROM usage_calls WHERE user_id = $1`, userID); err != nil {
+		return nil, err
+	}
 	if err := execCount("usage_runs", `DELETE FROM usage_runs WHERE user_id = $1`, userID); err != nil {
 		return nil, err
 	}

@@ -28,13 +28,6 @@ def usage_for_done(usage: Any) -> dict[str, int] | None:
     return out or None
 
 
-def _with_usage(payload: dict[str, Any], usage: Any) -> dict[str, Any]:
-    attached = usage_for_done(usage)
-    if attached:
-        payload["usage"] = attached
-    return payload
-
-
 def idempotent_done_frames(
     *,
     meta: dict[str, Any],
@@ -42,24 +35,26 @@ def idempotent_done_frames(
     rid: str,
     tid: str,
     usage: dict[str, Any] | None = None,
+    usage_calls: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
+    from ..usage_meter import attach_usage
+
     yield sse("meta", meta)
     for part in tokens_from_text(final):
         yield sse("token", {"text": part})
-    yield sse(
-        "done",
-        _with_usage(
-            {
-                "ok": True,
-                "mode": "openai",
-                "run_id": rid,
-                "thread_id": tid,
-                "durable": True,
-                "idempotent": True,
-            },
-            usage,
-        ),
+    payload = attach_usage(
+        {
+            "ok": True,
+            "mode": "openai",
+            "run_id": rid,
+            "thread_id": tid,
+            "durable": True,
+            "idempotent": True,
+        },
+        legacy=usage,
+        calls=usage_calls,
     )
+    yield sse("done", payload)
 
 
 def waiting_approval_frames(
@@ -68,7 +63,10 @@ def waiting_approval_frames(
     rid: str,
     tid: str,
     detail: str = "",
+    usage_calls: list[dict[str, Any]] | None = None,
 ) -> Iterator[str]:
+    from ..usage_meter import attach_usage
+
     if meta is not None:
         yield sse("meta", meta)
     status: dict[str, Any] = {
@@ -79,35 +77,40 @@ def waiting_approval_frames(
     if detail:
         status["detail"] = detail[:300]
     yield sse("status", status)
-    yield sse(
-        "done",
+    payload: dict[str, Any] = {
+        "ok": False,
+        "mode": "openai",
+        "waiting_approval": True,
+        "run_id": rid,
+        "thread_id": tid,
+        "durable": True,
+    }
+    if usage_calls:
+        attach_usage(payload, calls=usage_calls)
+    yield sse("done", payload)
+
+
+def success_done_frames(
+    *,
+    rid: str,
+    tid: str,
+    usage: dict[str, Any] | None = None,
+    usage_calls: list[dict[str, Any]] | None = None,
+) -> Iterator[str]:
+    from ..usage_meter import attach_usage
+
+    payload = attach_usage(
         {
-            "ok": False,
+            "ok": True,
             "mode": "openai",
-            "waiting_approval": True,
             "run_id": rid,
             "thread_id": tid,
             "durable": True,
         },
+        legacy=usage,
+        calls=usage_calls,
     )
-
-
-def success_done_frames(
-    *, rid: str, tid: str, usage: dict[str, Any] | None = None
-) -> Iterator[str]:
-    yield sse(
-        "done",
-        _with_usage(
-            {
-                "ok": True,
-                "mode": "openai",
-                "run_id": rid,
-                "thread_id": tid,
-                "durable": True,
-            },
-            usage,
-        ),
-    )
+    yield sse("done", payload)
 
 
 def failed_done_frames(*, rid: str, tid: str, error: str) -> Iterator[str]:

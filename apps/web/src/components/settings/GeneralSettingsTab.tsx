@@ -8,6 +8,7 @@ import {
 import { accountInitials } from "../app/accountInitials";
 import { ApiServerField } from "../ApiServerField";
 import { GeneralBotSettings } from "../GeneralBotSettings";
+import { MonthUsageSection } from "../MonthUsageSection";
 import {
   SettingsCard,
   SettingsHint,
@@ -75,6 +76,7 @@ export function GeneralSettingsTab({
           </SettingsCard>
         </SettingsSection>
       )}
+      {(!sheetForm || settingsGeneralPane === "account") && <MonthUsageSection />}
       {(!sheetForm || settingsGeneralPane === "account" || settingsGeneralPane === "server") && (
         <SettingsSection title={sheetForm ? undefined : "服务器"}>
           <SettingsCard className="settings-card-padded">

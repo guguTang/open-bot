@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tangxin/open-bot/services/api/internal/billing"
 	"github.com/tangxin/open-bot/services/api/internal/db"
 	"github.com/tangxin/open-bot/services/api/internal/decision"
 )
@@ -28,9 +29,12 @@ const (
 )
 
 // msDecisionBinding is a ready client plus optional confidence threshold.
+// OnUsage records the call on the shared usage ledger. It must not price from
+// the probe-only $0.042 constant; the ledger looks up model_prices.
 type msDecisionBinding struct {
 	Client    *decision.Client
 	Threshold float64 // 0 → no extra threshold (auto-pick floor still applies)
+	OnUsage   func(model, provider, source string, prompt, completion int64)
 }
 
 // msDecisionConfigFromSettings builds the client config from org settings.
@@ -118,6 +122,24 @@ func microsoftAutoPickDecide(ms *msDecisionBinding) func(ctx context.Context, st
 			log.Printf("auto_pick=decision provider=microsoft/%s model=%s upstream=%s latency_ms=%d input_tokens=%d output_tokens=%d cost_usd=%.8f estimated=%t",
 				cfg.Provider, resp.Model, resp.Provider, resp.Latency.Milliseconds(),
 				resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.Cost, resp.Usage.CostEstimated)
+			if ms.OnUsage != nil {
+				in, out := resp.Usage.InputTokens, resp.Usage.OutputTokens
+				source := billing.SourceProvider
+				if in == 0 && out == 0 {
+					est := billing.EstimateTokens(decisionStateText(state))
+					if est > 0 {
+						in = est
+						source = billing.SourceEstimated
+					} else {
+						source = billing.SourceUnknown
+					}
+				}
+				model := resp.Model
+				if strings.TrimSpace(model) == "" {
+					model = cfg.Model
+				}
+				ms.OnUsage(model, cfg.Provider, source, in, out)
+			}
 		}
 		if err != nil {
 			log.Printf("auto_pick=decision provider=microsoft/%s note=ms_decision_failed_failopen_heuristic err=%v", cfg.Provider, err)

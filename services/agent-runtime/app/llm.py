@@ -62,6 +62,7 @@ class LLMOverride:
     api_key: str | None = None
     model: str | None = None
     enable_tools: bool | None = None
+    connection_id: str | None = None
 
 
 def strip_think(text: str) -> str:
@@ -2248,6 +2249,15 @@ async def chat_completion(
                     max_attempts,
                     model,
                 )
+            from .usage_meter import record_chat_result
+
+            record_chat_result(
+                data=data,
+                messages=list(payload.get("messages") or work_messages),
+                model=model,
+                base_url=base,
+                llm_connection_id=str(getattr(override, "connection_id", "") or ""),
+            )
             return data
         except asyncio.CancelledError:
             raise
@@ -2778,11 +2788,62 @@ async def _stream_chat_tokens_once(
     override: LLMOverride | None = None,
     sources_out: list[dict[str, str]] | None = None,
 ):
-    """One streaming completion. Caller promotes or strips images first."""
+    """One streaming completion. Caller promotes or strips images first.
+
+    Asks the gateway for usage via stream_options.include_usage. If the gateway
+    rejects that field, retries once without it and estimates tokens.
+    """
+    from .usage_meter import finalize_stream_call, note_call, stream_options_rejected
+
+    _, base, model = openai_config(override)
+    include_usage = True
+    while True:
+        try:
+            parts: list[str] = []
+            last_usage: dict[str, Any] | None = None
+            async for text, usage in _iter_stream_events(
+                messages,
+                api_key=api_key,
+                override=override,
+                include_usage=include_usage,
+            ):
+                if usage is not None:
+                    last_usage = usage
+                if text:
+                    parts.append(text)
+                    yield text
+            call = finalize_stream_call(
+                messages=messages,
+                output_text="".join(parts),
+                raw_usage=last_usage,
+                model=model,
+                base_url=base,
+                llm_connection_id=str(getattr(override, "connection_id", "") or ""),
+            )
+            note_call(call)
+            return
+        except RuntimeError as exc:
+            if include_usage and stream_options_rejected(str(exc)):
+                include_usage = False
+                logger.info("gateway rejected stream_options.include_usage; estimating tokens")
+                continue
+            raise
+
+
+async def _iter_stream_events(
+    messages: list[dict[str, Any]],
+    *,
+    api_key: str,
+    override: LLMOverride | None = None,
+    include_usage: bool = True,
+):
+    """Yield (text, usage) from one streaming POST. usage is set on the chunk that has it."""
+    from .usage_meter import stream_request_payload
+
     _, base, model = openai_config(override)
     profile = profile_for(model, base)
     url = f"{base}/chat/completions"
-    payload: dict[str, Any] = {"model": model, "stream": True, "messages": messages}
+    payload = stream_request_payload(model, messages, include_usage=include_usage)
     payload = adapt_chat_payload(payload, has_tools=False, profile=profile)
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -2804,10 +2865,11 @@ async def _stream_chat_tokens_once(
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                usage = obj.get("usage") if isinstance(obj.get("usage"), dict) else None
                 choices = obj.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta") or {}
-                text = delta.get("content")
-                if text:
-                    yield text
+                text = ""
+                if choices:
+                    delta = choices[0].get("delta") or {}
+                    text = str(delta.get("content") or "")
+                if text or usage:
+                    yield text, usage

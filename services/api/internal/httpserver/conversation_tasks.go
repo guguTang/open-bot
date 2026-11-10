@@ -308,8 +308,9 @@ func (s *Server) runConversationTaskOnce(ctx context.Context, task *db.Conversat
 	}
 	text, _, runID, runSources, runUsage, runErr := s.proxyRuntimeRun(ctx, emit, payloadMap, recallCtx)
 	if runErr == nil {
-		_ = s.db.RecordUsageRun("", task.UserID, task.AgentID, task.ConversationID, "defer_work",
-			runUsage.PromptTokens, runUsage.CompletionTokens, runUsage.TotalTokens)
+		recordRunUsage(s, db.UsageLedgerMeta{
+			UserID: task.UserID, AgentID: task.AgentID, ConversationID: task.ConversationID, Source: "defer_work",
+		}, runUsage)
 	}
 	return text, runID, runSources, runErr
 }

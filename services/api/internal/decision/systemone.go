@@ -41,7 +41,8 @@ const (
 	MaxTimeout     = 60 * time.Second
 
 	// InputUSDPerMillionTokens is Microsoft-Decision-1 list price (output tokens are free).
-	// Used only to estimate cost when the provider omits usage.cost.
+	// Used only for the decision probe's usage.cost display and logs.
+	// The usage ledger does not read this constant; decision calls are priced from model_prices.
 	InputUSDPerMillionTokens = 0.042
 
 	maxChoiceOptions = 255

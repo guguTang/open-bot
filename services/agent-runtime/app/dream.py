@@ -91,7 +91,7 @@ def status() -> dict[str, Any]:
     }
 
 
-def _llm_summarize(facts: list[str]) -> str:
+def _llm_summarize(facts: list[str], *, user_id: str = "") -> str:
     api_key, base, model = openai_config(None)
     if not api_key and not base:
         raise RuntimeError("OPENAI_* not configured")
@@ -118,6 +118,17 @@ def _llm_summarize(facts: list[str]) -> str:
         resp = client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
+    from .usage_meter import record_text_call
+
+    record_text_call(
+        call_kind_name="dream",
+        model=model,
+        base_url=base,
+        messages=messages,
+        output_text=str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""),
+        raw_usage=data.get("usage") if isinstance(data, dict) else None,
+        actor={"user_id": user_id},
+    )
     choices = data.get("choices") or []
     if not choices:
         return ""
@@ -191,7 +202,7 @@ def consolidate_user(user_id: str, *, max_facts: int = 60) -> dict[str, Any]:
         return {"ok": False, "error": "no facts to consolidate", "user_id": uid}
 
     try:
-        summary = _llm_summarize(facts)
+        summary = _llm_summarize(facts, user_id=uid)
     except Exception as e:  # noqa: BLE001
         logger.warning("dream LLM failed user=%s: %s", uid, e)
         return {"ok": False, "error": f"llm failed: {e}", "user_id": uid}

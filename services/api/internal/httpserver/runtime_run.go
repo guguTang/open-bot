@@ -207,8 +207,9 @@ func (s *Server) runAgentOnce(ctx context.Context, userID, agentID, content, tit
 		_, _ = s.db.AddMessageWithOpts(conv.ID, "assistant", reply, db.AddMessageOpts{RequestID: runID})
 	}
 	source := sourceHint(title)
-	_ = s.db.RecordUsageRun("", userID, agentID, conv.ID, source,
-		usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
+	recordRunUsage(s, db.UsageLedgerMeta{
+		UserID: userID, AgentID: agentID, ConversationID: conv.ID, Source: source,
+	}, usage)
 	s.publishBotPresence(userID, conv.ID, agentID, "idle")
 	return &runOnceResult{
 		ConversationID: conv.ID,

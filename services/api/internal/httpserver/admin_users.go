@@ -544,7 +544,7 @@ func (s *Server) handleAdminPurgeUserData(w http.ResponseWriter, r *http.Request
 		"side_effects": side,
 		"purged": []string{
 			"conversations/messages", "conversation_tasks", "agents/bots", "agent_skills",
-			"memories", "memory_recalls", "usage_runs", "routines/routine_runs",
+			"memories", "memory_recalls", "usage_runs", "usage_calls", "routines/routine_runs",
 			"channels/channel_members", "agent_messages", "user_machines", "user_settings",
 			"bot_secrets", "bot_secret_requests", "mcp_servers", "sandboxes(row)",
 			"inbound_hooks", "llm_connections", "user_skills", "user_skill_files",

@@ -325,6 +325,15 @@ def search_for_scope(
     fetch = k if not (scope or "").strip() else min(50, max(k * 4, k))
     try:
         raw = m.search(q, filters={"user_id": uid}, top_k=fetch)
+        from .usage_meter import record_text_call
+
+        record_text_call(
+            call_kind_name="mem0",
+            model=os.getenv("MEM0_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL") or "bge-m3",
+            base_url=os.getenv("MEM0_EMBEDDING_BASE_URL") or os.getenv("EMBEDDING_BASE_URL") or "",
+            input_text=q,
+            actor={"user_id": uid, "agent_id": agent_id},
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning("Mem0 search failed user_id=%s: %s", uid, e)
         return []
@@ -427,6 +436,21 @@ def add_conversation(
         if meta:
             kwargs["metadata"] = meta
         m.add(messages, **kwargs)
+        if isinstance(messages, str):
+            submitted = messages
+        else:
+            submitted = "\n".join(
+                str(item.get("content") or "") for item in messages if isinstance(item, dict)
+            )
+        from .usage_meter import record_text_call
+
+        record_text_call(
+            call_kind_name="mem0",
+            model=os.getenv("MEM0_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL") or "bge-m3",
+            base_url=os.getenv("MEM0_EMBEDDING_BASE_URL") or os.getenv("EMBEDDING_BASE_URL") or "",
+            input_text=submitted,
+            actor={"user_id": uid, "agent_id": agent},
+        )
     except Exception as e:  # noqa: BLE001
         logger.warning("Mem0 add failed user_id=%s: %s", uid, e)
 
