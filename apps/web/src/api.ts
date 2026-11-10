@@ -250,6 +250,20 @@ export {
 } from "./api/gmail";
 
 export {
+  type InstallIntegrationStatus,
+  type InstallDisconnectResult,
+  type InstallProvider,
+  type TelegramConnectInput,
+  type FeishuConnectInput,
+  getInstallIntegrationStatus,
+  startInstallConnect,
+  disconnectInstall,
+  connectTelegram,
+  connectFeishu,
+  attachGitHubRepo,
+} from "./api/installs";
+
+export {
   type MicroAppKind,
   type MicroAppStatus,
   type MicroAppSurface,

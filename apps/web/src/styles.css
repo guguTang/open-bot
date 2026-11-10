@@ -5630,3 +5630,543 @@ html:not([data-openui-devtools]) [aria-label="OpenUI Debug"] {
   scrollbar-width: none;
 }
 .bot-avatar-status-toggles > * { flex-shrink: 0; }
+
+/* === 连接应用 market shell ===
+   Wide: settings-dialog white elevated. Narrow: settings-hub gray + white cards.
+   No recommended rail unless a provider sets recommended (phase 1 does not). */
+/* Fixed-height shell. DialogContent's `grid` must not win, or the row grows
+   with content and overflow:hidden clips it with no scrollbar. */
+.modal.settings-dialog.connect-apps-dialog {
+  min-height: 0;
+}
+
+/* DialogContent defaults to grid. A fixed-height grid row grows with the
+   catalog and overflow clips it, so the inner scroller never overflows. */
+.modal.settings-dialog.connect-apps-dialog:not(.settings-dialog-shell) {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: clip;
+  width: min(860px, calc(100vw - 32px));
+  max-width: min(860px, calc(100vw - 32px));
+  height: min(680px, calc(100dvh - 32px));
+  max-height: min(680px, calc(100dvh - 32px));
+  border-radius: 16px;
+}
+
+.modal.settings-dialog.connect-apps-dialog.settings-dialog-shell {
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-height: 0 !important;
+  border-radius: 0;
+}
+
+.modal.connect-apps-dialog > .connect-apps {
+  width: 100%;
+}
+
+/* Same fill as .micro-apps-hub--desktop: bounded height so the scroller can overflow. */
+.connect-apps--desktop {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+
+.connect-apps-chrome {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+}
+
+.connect-apps--narrow .connect-apps-chrome {
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.connect-apps--narrow .connect-apps-narrow-meta,
+.connect-apps--narrow .connect-apps-search--touch,
+.connect-apps--narrow .connect-apps-pills {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.connect-apps-desktop-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px 10px 22px;
+  flex-shrink: 0;
+}
+
+.connect-apps-desktop-titleline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.connect-apps-desktop-title,
+.connect-apps-narrow-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-apps-desktop-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.connect-apps-narrow-title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  padding-left: 4px;
+}
+
+.connect-apps-count {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.2;
+  padding: 4px 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.connect-apps-count:hover {
+  color: var(--text);
+}
+
+.connect-apps-iconstrip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.connect-apps-iconstrip::-webkit-scrollbar {
+  display: none;
+}
+
+.connect-apps-iconbtn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+}
+
+.connect-apps-iconmore {
+  font-size: 12px;
+  color: var(--muted);
+  padding-left: 2px;
+}
+
+.connect-apps-search {
+  height: 36px;
+  border-radius: 10px;
+  flex: 0 1 280px;
+}
+
+.connect-apps-search--touch {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  flex: none;
+  width: 100%;
+}
+
+/* Only vertical scroller. Needs the desktop shell's bounded height above. */
+.connect-apps-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connect-apps-scroll > * {
+  flex-shrink: 0;
+}
+
+.connect-apps--narrow .connect-apps-scroll {
+  padding: 0 16px max(16px, var(--safe-bottom, 0px));
+}
+
+.connect-apps-narrow-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.connect-apps-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent);
+  padding-bottom: 2px;
+}
+
+.connect-apps-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.connect-apps-pill {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.connect-apps--narrow .connect-apps-pill {
+  height: 36px;
+}
+
+.connect-apps-pill.is-active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: transparent;
+}
+
+.connect-apps-pill-count {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.connect-apps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.connect-apps--narrow .connect-apps-list {
+  border: 0;
+  border-radius: 16px;
+}
+
+.connect-apps-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 10px 6px 12px;
+  border-top: 1px solid var(--separator);
+}
+
+.connect-apps-row:first-child {
+  border-top: 0;
+}
+
+.connect-apps--narrow .connect-apps-row {
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+.connect-apps-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.connect-apps-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.connect-apps-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.connect-apps--narrow .connect-apps-row-name {
+  font-size: 15px;
+}
+
+.connect-apps-row-blurb,
+.connect-apps-row-error {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-apps-row-blurb {
+  color: var(--muted);
+}
+
+.connect-apps--narrow .connect-apps-row-blurb {
+  font-size: 13px;
+  white-space: normal;
+}
+
+.connect-apps-row-error {
+  color: var(--danger);
+  white-space: normal;
+}
+
+.connect-apps-row-action {
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.connect-apps-row-action--touch {
+  height: 44px;
+  min-height: 44px;
+}
+
+.connect-app-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.connect-app-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.connect-app-mark--sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+.connect-app-mark--sm svg {
+  width: 14px;
+  height: 14px;
+}
+
+.connect-app-mark[data-app="gmail"] { background: #ea4335; }
+.connect-app-mark[data-app="slack"] { background: #611f69; }
+.connect-app-mark[data-app="telegram"] { background: #2aabee; }
+.connect-app-mark[data-app="feishu"] { background: #3370ff; }
+.connect-app-mark[data-app="github"] { background: #24292f; }
+
+[data-theme="dark"] .connect-app-mark[data-app="github"] {
+  background: #f0f3f6;
+  color: #24292f;
+}
+
+.connect-apps-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.connect-apps-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.connect-apps-msg {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.connect-apps-msg--fail {
+  color: var(--danger);
+}
+
+.connect-apps-advanced-toggle,
+.connect-apps-advanced-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 4px;
+}
+
+.connect-apps-advanced-row {
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+.connect-apps-advanced-body {
+  padding-top: 8px;
+}
+
+
+/* Beat `.modal button` (margin, border, 12px type) inside this shell. */
+.modal .connect-apps button.connect-apps-count,
+.modal .connect-apps button.connect-apps-iconbtn,
+.modal .connect-apps button.connect-apps-pill,
+.modal .connect-apps button.connect-apps-row-main,
+.modal .connect-apps button.connect-apps-advanced-toggle,
+.modal .connect-apps button.connect-apps-advanced-row,
+.modal .connect-apps .connect-apps-search button {
+  margin-top: 0;
+  box-shadow: none;
+}
+
+.modal .connect-apps button.connect-apps-count,
+.modal .connect-apps button.connect-apps-iconbtn,
+.modal .connect-apps button.connect-apps-row-main,
+.modal .connect-apps button.connect-apps-advanced-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.modal .connect-apps button.connect-apps-pill {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.modal .connect-apps--narrow button.connect-apps-pill {
+  height: 36px;
+}
+
+.modal .connect-apps button.connect-apps-pill.is-active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: transparent;
+}
+
+.modal .connect-apps button.connect-apps-row-action {
+  margin-top: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.modal .connect-apps button.connect-apps-row-action[data-variant="primary"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: transparent;
+}
+
+.modal .connect-apps button.connect-apps-row-action[data-variant="outline"] {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.modal .connect-apps button.connect-apps-row-action--touch {
+  height: 44px;
+  min-height: 44px;
+}
+
+.modal .connect-apps button.connect-apps-advanced-row {
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  min-height: 52px;
+  padding: 0 16px;
+  font-size: 15px;
+  text-align: left;
+}
+
+.modal .connect-apps button.connect-apps-advanced-toggle {
+  width: 100%;
+  text-align: left;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+
+.modal .connect-apps button.primary {
+  margin-top: 0;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modal .connect-apps--narrow button.primary {
+  min-height: 44px;
+}
+
+.modal .connect-apps .llm-actions button.danger {
+  color: var(--danger);
+  background: transparent;
+}

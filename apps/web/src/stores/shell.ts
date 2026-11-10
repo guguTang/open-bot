@@ -8,6 +8,7 @@ import type { Agent, Channel } from "../api";
 import type { ConvSheetTarget } from "../components/app/AppOverlays";
 import type { FeedbackTarget } from "../components/feedbackModalTypes";
 import type { NewChatMode } from "../components/newChatTypes";
+import type { ConnectAppId } from "../lib/connectApps/catalog";
 
 export type SettingsGeneralPane = "account" | "server" | "review";
 
@@ -28,6 +29,10 @@ export type ShellSnapshot = {
   trainAgent: Agent | null;
   trainReload: number;
   onboardingDismissed: boolean;
+  /** Independent「连接应用」market shell. */
+  connectAppsOpen: boolean;
+  /** OAuth return opens that provider's existing detail inside the same shell. */
+  connectAppsFocus: ConnectAppId | null;
 };
 
 const initialOverlays: Pick<
@@ -43,6 +48,8 @@ const initialOverlays: Pick<
   | "trainAgent"
   | "trainReload"
   | "onboardingDismissed"
+  | "connectAppsOpen"
+  | "connectAppsFocus"
 > = {
   showNewChat: false,
   createSheetOpen: false,
@@ -55,6 +62,8 @@ const initialOverlays: Pick<
   trainAgent: null,
   trainReload: 0,
   onboardingDismissed: false,
+  connectAppsOpen: false,
+  connectAppsFocus: null,
 };
 
 const initialShell: ShellSnapshot = {

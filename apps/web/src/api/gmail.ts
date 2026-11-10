@@ -1,6 +1,6 @@
 import { API_BASE, authHeaders, readError } from "./client";
 
-/** Gmail Web OAuth integration (Settings → 连接应用). */
+/** Gmail Web OAuth integration（侧栏底部「连接应用」，设置里的同名入口打开同一壳）. */
 export type GmailIntegrationStatus = {
   provider: string;
   connected: boolean;
@@ -8,6 +8,8 @@ export type GmailIntegrationStatus = {
   scopes?: string;
   /** False when connected but token lacks gmail.send (need reconnect). */
   can_send?: boolean;
+  /** True only when the stored grant includes gmail.readonly (or a superset). Send-only grants are false. */
+  can_read?: boolean;
   updated_at?: string;
   oauth_configured: boolean;
 };

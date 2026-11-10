@@ -18,6 +18,11 @@ import (
 )
 
 // Inbound hook CRUD (JWT) + Slack/GitHub webhook receivers.
+// Slack/GitHub install wizards and Telegram/Feishu connect only insert an
+// inbound_hooks row and store credentials in oauth_connections. Delivery,
+// url_verification, and GitHub HMAC checks stay in this file for both
+// auto-bound and hand-pasted hooks. Telegram and Feishu receivers live in
+// im_webhook.go and call the same dispatchEventWakes.
 
 func (s *Server) handleListInboundHooks(w http.ResponseWriter, r *http.Request) {
 	uid := userIDFrom(r.Context())
@@ -33,15 +38,17 @@ func (s *Server) handleListInboundHooks(w http.ResponseWriter, r *http.Request) 
 	out := make([]map[string]any, 0, len(list))
 	for _, h := range list {
 		out = append(out, map[string]any{
-			"id":         h.ID,
-			"user_id":    h.UserID,
-			"provider":   h.Provider,
-			"token":      h.Token,
-			"label":      h.Label,
-			"has_secret": strings.TrimSpace(h.Secret) != "",
-			"created_at": h.CreatedAt,
-			"url_slack":  fmt.Sprintf("/v1/webhooks/slack/%s", h.Token),
-			"url_github": fmt.Sprintf("/v1/webhooks/github/%s", h.Token),
+			"id":           h.ID,
+			"user_id":      h.UserID,
+			"provider":     h.Provider,
+			"token":        h.Token,
+			"label":        h.Label,
+			"has_secret":   strings.TrimSpace(h.Secret) != "",
+			"created_at":   h.CreatedAt,
+			"url_slack":    fmt.Sprintf("/v1/webhooks/slack/%s", h.Token),
+			"url_github":   fmt.Sprintf("/v1/webhooks/github/%s", h.Token),
+			"url_telegram": fmt.Sprintf("/v1/webhooks/telegram/%s", h.Token),
+			"url_feishu":   fmt.Sprintf("/v1/webhooks/feishu/%s", h.Token),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"hooks": out})
@@ -68,14 +75,16 @@ func (s *Server) handleCreateInboundHook(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"id":         h.ID,
-		"provider":   h.Provider,
-		"token":      h.Token,
-		"label":      h.Label,
-		"created_at": h.CreatedAt,
-		"url_slack":  fmt.Sprintf("/v1/webhooks/slack/%s", h.Token),
-		"url_github": fmt.Sprintf("/v1/webhooks/github/%s", h.Token),
-		"hint":       "将 Slack Event Subscriptions / GitHub Webhook 指向上述 URL；GitHub 可选填与 secret 相同的签名密钥。",
+		"id":           h.ID,
+		"provider":     h.Provider,
+		"token":        h.Token,
+		"label":        h.Label,
+		"created_at":   h.CreatedAt,
+		"url_slack":    fmt.Sprintf("/v1/webhooks/slack/%s", h.Token),
+		"url_github":   fmt.Sprintf("/v1/webhooks/github/%s", h.Token),
+		"url_telegram": fmt.Sprintf("/v1/webhooks/telegram/%s", h.Token),
+		"url_feishu":   fmt.Sprintf("/v1/webhooks/feishu/%s", h.Token),
+		"hint":         "将 Slack / GitHub / Telegram / 飞书事件订阅指向对应 URL。GitHub 可选填与 secret 相同的签名密钥。Telegram 若填写了 secret，请求需带 X-Telegram-Bot-Api-Secret-Token。连接应用自动绑定的 Hook 与这里手工创建的 Hook 互相独立。",
 	})
 }
 

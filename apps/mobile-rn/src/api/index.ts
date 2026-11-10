@@ -1247,6 +1247,8 @@ export type GmailIntegrationStatus = {
   email?: string;
   scopes?: string;
   can_send?: boolean;
+  /** True only when the stored grant includes gmail.readonly (or a superset). */
+  can_read?: boolean;
   updated_at?: string;
   oauth_configured: boolean;
 };

@@ -36,9 +36,11 @@ const (
 	gmailSendURL          = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
 	gmailOAuthStateCookie = "openbot_gmail_oauth_state"
 	gmailScopeSend        = "https://www.googleapis.com/auth/gmail.send"
+	gmailScopeRead        = "https://www.googleapis.com/auth/gmail.readonly"
 	gmailScopeEmail       = "https://www.googleapis.com/auth/userinfo.email"
-	// Space-separated scopes for the authorize request (must include gmail.send).
-	gmailDefaultScopes  = gmailScopeSend + " " + gmailScopeEmail
+	// Space-separated scopes for the authorize request.
+	// gmail.readonly is required for on-demand search/get. Do not request gmail.modify.
+	gmailDefaultScopes  = gmailScopeSend + " " + gmailScopeRead + " " + gmailScopeEmail
 	gmailOAuthStateTTL  = 10 * time.Minute
 	gmailConfirmTimeout = 90 * time.Second
 	gmailMaxAttachments = 5
@@ -93,14 +95,59 @@ func gmailScopeList(scopes string) []string {
 	return out
 }
 
+// gmailScopeMatch reports whether a granted scope is the full URL or its last segment
+// (Google returns full URLs; a stored short name such as gmail.send still counts).
+func gmailScopeMatch(granted, full string) bool {
+	granted = strings.TrimSpace(granted)
+	full = strings.TrimSpace(full)
+	if granted == "" || full == "" {
+		return false
+	}
+	if granted == full {
+		return true
+	}
+	base := strings.TrimRight(full, "/")
+	i := strings.LastIndex(base, "/")
+	if i < 0 || i >= len(base)-1 {
+		return false
+	}
+	short := base[i+1:]
+	return short != "" && granted == short
+}
+
+func gmailIsMailScope(s string) bool {
+	switch strings.TrimSpace(s) {
+	case "https://mail.google.com/", "https://mail.google.com", "mail.google.com":
+		return true
+	default:
+		return false
+	}
+}
+
 // gmailHasSendScope reports whether granted scopes can call users.messages.send.
 func gmailHasSendScope(scopes string) bool {
 	for _, s := range gmailScopeList(scopes) {
-		switch s {
-		case gmailScopeSend,
-			"https://www.googleapis.com/auth/gmail.compose",
-			"https://www.googleapis.com/auth/gmail.modify",
-			"https://mail.google.com/":
+		switch {
+		case gmailScopeMatch(s, gmailScopeSend),
+			gmailScopeMatch(s, "https://www.googleapis.com/auth/gmail.compose"),
+			gmailScopeMatch(s, "https://www.googleapis.com/auth/gmail.modify"),
+			gmailIsMailScope(s):
+			return true
+		}
+	}
+	return false
+}
+
+// gmailHasReadScope reports whether granted scopes can list messages and read a
+// truncated body. gmail.send and gmail.compose do not count. gmail.metadata does
+// not count: it cannot supply a body summary. Detection uses the scopes stored
+// on oauth_connections, not a live probe.
+func gmailHasReadScope(scopes string) bool {
+	for _, s := range gmailScopeList(scopes) {
+		switch {
+		case gmailScopeMatch(s, gmailScopeRead),
+			gmailScopeMatch(s, "https://www.googleapis.com/auth/gmail.modify"),
+			gmailIsMailScope(s):
 			return true
 		}
 	}
@@ -108,7 +155,22 @@ func gmailHasSendScope(scopes string) bool {
 }
 
 func gmailMissingSendScopeHint() string {
-	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「设置 → 连接应用」断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
+	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「连接应用」（侧栏底部，或设置里的同名入口）断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
+}
+
+func gmailMissingReadScopeHint() string {
+	return "Gmail 授权缺少「查看邮件」范围（gmail.readonly）。请到「连接应用」（侧栏底部，或设置里的同名入口）断开后重新连接，并在 Google 授权页勾选查看邮件；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.readonly。仅有 gmail.send 的旧连接不能搜索或打开邮件。重新连接才会申请完整同意，不会静默追加权限。"
+}
+
+func gmailConnectedHint(canSend, canRead bool) string {
+	var parts []string
+	if !canSend {
+		parts = append(parts, gmailMissingSendScopeHint())
+	}
+	if !canRead {
+		parts = append(parts, gmailMissingReadScopeHint())
+	}
+	return strings.Join(parts, "\n")
 }
 
 // gmailBodyLooksLikePathOnly detects a body that is only a filesystem path
@@ -252,6 +314,7 @@ func (s *Server) handleGmailStatus(w http.ResponseWriter, r *http.Request) {
 		"email":            st.Email,
 		"scopes":           st.Scopes,
 		"can_send":         st.Connected && gmailHasSendScope(st.Scopes),
+		"can_read":         st.Connected && gmailHasReadScope(st.Scopes),
 		"updated_at":       st.UpdatedAt,
 		"oauth_configured": cfg.Enabled(),
 	})
@@ -287,8 +350,8 @@ func (s *Server) handleGmailStart(w http.ResponseWriter, r *http.Request) {
 	q.Set("scope", gmailDefaultScopes)
 	q.Set("access_type", "offline")
 	q.Set("prompt", "consent") // force refresh token + re-show scopes on reconnect
-	// false: avoid incremental merge that can succeed with only email/openid
-	// when gmail.send was unchecked (granular consent) or missing on GCP screen.
+	// false: consent must explicitly include send + readonly + email.
+	// Do not merge previously granted scopes, or a send-only grant could look complete.
 	q.Set("include_granted_scopes", "false")
 	q.Set("state", state)
 	authURL := gmailAuthURL + "?" + q.Encode()
@@ -417,9 +480,10 @@ func (s *Server) handleInternalGmailStatus(w http.ResponseWriter, r *http.Reques
 	cfg := loadGmailOAuthConfig()
 	st := s.db.OAuthConnectionStatus(uid, gmailProvider)
 	canSend := st.Connected && gmailHasSendScope(st.Scopes)
-	hint := gmailNotConnectedHint(st.Connected, cfg.Enabled())
-	if st.Connected && !canSend {
-		hint = gmailMissingSendScopeHint()
+	canRead := st.Connected && gmailHasReadScope(st.Scopes)
+	hint := gmailNotConnectedHint(false, cfg.Enabled())
+	if st.Connected {
+		hint = gmailConnectedHint(canSend, canRead)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":               true,
@@ -427,6 +491,7 @@ func (s *Server) handleInternalGmailStatus(w http.ResponseWriter, r *http.Reques
 		"email":            st.Email,
 		"scopes":           st.Scopes,
 		"can_send":         canSend,
+		"can_read":         canRead,
 		"oauth_configured": cfg.Enabled(),
 		"hint":             hint,
 	})
@@ -437,9 +502,9 @@ func gmailNotConnectedHint(connected, configured bool) string {
 		return ""
 	}
 	if !configured {
-		return "服务端未配置 Google OAuth（GOOGLE_OAUTH_CLIENT_ID / SECRET）。请管理员配置后再在设置 → 连接应用 中连接 Gmail。"
+		return "服务端未配置 Google OAuth（GOOGLE_OAUTH_CLIENT_ID / SECRET）。请管理员配置后再在「连接应用」（侧栏底部，或设置里的同名入口）中连接 Gmail。"
 	}
-	return "尚未连接 Gmail。请用户打开「设置 → 连接应用」点击「连接 Gmail」完成授权后再发信。"
+	return "尚未连接 Gmail。请用户打开「连接应用」（侧栏底部，或设置里的同名入口）点击「连接 Gmail」完成授权后再发信。"
 }
 
 // ---- single-flight / short dedupe for identical gmail_send ----
@@ -687,7 +752,7 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		result = map[string]any{
 			"ok": false, "connected": false,
-			"error": "Gmail 授权已失效，请重新在「设置 → 连接应用」连接：" + err.Error(),
+			"error": "Gmail 授权已失效，请重新在「连接应用」（侧栏底部，或设置里的同名入口）连接：" + err.Error(),
 		}
 		writeJSON(w, http.StatusOK, result)
 		return
