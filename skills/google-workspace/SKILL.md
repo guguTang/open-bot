@@ -54,10 +54,7 @@ Before starting OAuth setup, ask the user TWO questions:
 **Question 1: "What Google services do you need? Just email, or also
 Calendar/Drive/Sheets/Docs?"**
 
-- **Email only** → They don't need this skill at all. Use the `himalaya` skill
-  instead — it works with a Gmail App Password (Settings → Security → App
-  Passwords) and takes 2 minutes to set up. No Google Cloud project needed.
-  Load the himalaya skill and follow its setup instructions.
+- **Email only** → On the web, prefer `gmail_status` / `gmail_search` / `gmail_get` / `gmail_send` (skill `web-gmail`) when Gmail is connected in Settings. If `can_read` is false, ask the user to disconnect and reconnect; do not pretend a desktop mailbox is that Web account. This skill's `gws` CLI, and `himalaya`, stay available on a connected computer when the user wants a local client or Web Gmail is not connected.
 
 - **Email + Calendar** → Continue with this skill, but use
   `--services email,calendar` during auth so the consent screen only asks for

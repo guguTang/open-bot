@@ -89,6 +89,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("GET /v1/auth/oidc/start", s.handleOIDCStart)
 	mux.HandleFunc("POST /v1/auth/oidc/exchange", s.handleOIDCExchange)
 	mux.HandleFunc("GET /v1/me", s.requireAuth(s.handleMe))
+	mux.HandleFunc("GET /v1/me/usage", s.requireAuth(s.handleMeUsage))
 	mux.HandleFunc("GET /v1/me/settings", s.requireAuth(s.handleGetUserSettings))
 	mux.HandleFunc("PUT /v1/me/settings", s.requireAuth(s.handlePutUserSettings))
 	mux.HandleFunc("GET /v1/me/tool-allowlist", s.requireAuth(s.handleListToolAllowlist))
@@ -117,6 +118,10 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("PUT /v1/admin/org/decision/microsoft", s.requireOrgAdmin(s.handleAdminPutMSDecision))
 	mux.HandleFunc("POST /v1/admin/org/decision/microsoft/test", s.requireOrgAdmin(s.handleAdminTestMSDecision))
 	mux.HandleFunc("GET /v1/admin/usage", s.requireOrgAdmin(s.handleAdminUsage))
+	mux.HandleFunc("GET /v1/admin/model-prices", s.requireOrgAdmin(s.handleAdminListPrices))
+	mux.HandleFunc("POST /v1/admin/model-prices", s.requirePlatformAdmin(s.handleAdminCreatePrice))
+	mux.HandleFunc("PUT /v1/admin/model-prices/{id}", s.requirePlatformAdmin(s.handleAdminUpdatePrice))
+	mux.HandleFunc("DELETE /v1/admin/model-prices/{id}", s.requirePlatformAdmin(s.handleAdminExpirePrice))
 	mux.HandleFunc("GET /v1/admin/me/scope", s.requireOrgAdmin(s.handleAdminMeScope))
 	mux.HandleFunc("GET /v1/admin/platform/orgs", s.requirePlatformAdmin(s.handlePlatformListOrgs))
 	mux.HandleFunc("POST /v1/admin/platform/orgs", s.requirePlatformAdmin(s.handlePlatformCreateOrg))
@@ -253,6 +258,7 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/agent-bus/messages", s.requireInternal(s.handleInternalPostAgentBusMessage))
 	mux.HandleFunc("POST /internal/handoff-notes", s.requireInternal(s.handleInternalHandoffNote))
 	mux.HandleFunc("POST /internal/bot-presence", s.requireInternal(s.handleInternalBotPresence))
+	mux.HandleFunc("POST /internal/usage", s.requireInternal(s.handleInternalUsage))
 	mux.HandleFunc("GET /internal/lessons/active", s.requireInternal(s.handleInternalActiveLessons))
 	mux.HandleFunc("GET /v1/compact-config", s.requireAuth(s.handleCompactConfig))
 
@@ -294,6 +300,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 
 	mux.HandleFunc("POST /v1/webhooks/slack/{token}", s.handleSlackWebhook)
 	mux.HandleFunc("POST /v1/webhooks/github/{token}", s.handleGitHubWebhook)
+	mux.HandleFunc("POST /v1/webhooks/telegram/{token}", s.handleTelegramWebhook)
+	mux.HandleFunc("POST /v1/webhooks/feishu/{token}", s.handleFeishuWebhook)
 
 	// Sandbox computer (Phase 1 MVP)
 	mux.HandleFunc("GET /v1/sandbox", s.requireAuth(s.handleGetSandbox))
@@ -326,6 +334,23 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /v1/integrations/gmail/start", s.requireAuth(s.handleGmailStart))
 	mux.HandleFunc("GET /v1/integrations/gmail/callback", s.handleGmailCallback)
 	mux.HandleFunc("DELETE /v1/integrations/gmail", s.requireAuth(s.handleGmailDisconnect))
+	mux.HandleFunc("GET /v1/integrations/slack", s.requireAuth(s.handleSlackStatus))
+	mux.HandleFunc("POST /v1/integrations/slack/start", s.requireAuth(s.handleSlackStart))
+	mux.HandleFunc("GET /v1/integrations/slack/callback", s.handleSlackCallback)
+	mux.HandleFunc("DELETE /v1/integrations/slack", s.requireAuth(s.handleSlackDisconnect))
+	mux.HandleFunc("GET /v1/integrations/github", s.requireAuth(s.handleGitHubStatus))
+	mux.HandleFunc("POST /v1/integrations/github/start", s.requireAuth(s.handleGitHubStart))
+	mux.HandleFunc("GET /v1/integrations/github/callback", s.handleGitHubCallback)
+	mux.HandleFunc("POST /v1/integrations/github/attach", s.requireAuth(s.handleGitHubAttach))
+	mux.HandleFunc("DELETE /v1/integrations/github", s.requireAuth(s.handleGitHubDisconnect))
+	mux.HandleFunc("GET /v1/integrations/telegram", s.requireAuth(s.handleTelegramStatus))
+	mux.HandleFunc("POST /v1/integrations/telegram/connect", s.requireAuth(s.handleTelegramConnect))
+	mux.HandleFunc("POST /v1/integrations/telegram/reply", s.requireAuth(s.handleTelegramReply))
+	mux.HandleFunc("DELETE /v1/integrations/telegram", s.requireAuth(s.handleTelegramDisconnect))
+	mux.HandleFunc("GET /v1/integrations/feishu", s.requireAuth(s.handleFeishuStatus))
+	mux.HandleFunc("POST /v1/integrations/feishu/connect", s.requireAuth(s.handleFeishuConnect))
+	mux.HandleFunc("POST /v1/integrations/feishu/reply", s.requireAuth(s.handleFeishuReply))
+	mux.HandleFunc("DELETE /v1/integrations/feishu", s.requireAuth(s.handleFeishuDisconnect))
 	mux.HandleFunc("GET /v1/bot-secret-requests", s.requireAuth(s.handleListSecretRequests))
 	mux.HandleFunc("POST /v1/bot-secret-requests/{id}/resolve", s.requireAuth(s.handleResolveSecretRequest))
 	mux.HandleFunc("POST /internal/bot-secrets/request", s.requireInternal(s.handleInternalRequestSecret))
@@ -333,6 +358,8 @@ func Listen(addr, runtimeURL string, database *db.DB) error {
 	mux.HandleFunc("POST /internal/bot-secrets/http", s.requireInternal(s.handleInternalSecretHTTP))
 	mux.HandleFunc("POST /internal/gmail/status", s.requireInternal(s.handleInternalGmailStatus))
 	mux.HandleFunc("POST /internal/gmail/send", s.requireInternal(s.handleInternalGmailSend))
+	mux.HandleFunc("POST /internal/gmail/search", s.requireInternal(s.handleInternalGmailSearch))
+	mux.HandleFunc("POST /internal/gmail/get", s.requireInternal(s.handleInternalGmailGet))
 	mux.HandleFunc("POST /internal/routines/run", s.requireInternal(s.handleInternalRunRoutine))
 	mux.HandleFunc("POST /internal/conversation-tasks/enqueue", s.requireInternal(s.handleInternalEnqueueTask))
 	mux.HandleFunc("POST /internal/conversations/attachments", s.requireInternal(s.handleInternalUploadAttachment))
@@ -614,10 +641,11 @@ func llmRuntimePayload(conn *db.LLMConnection) map[string]any {
 		return nil
 	}
 	m := map[string]any{
-		"base_url":     conn.BaseURL,
-		"api_key":      conn.APIKey,
-		"model":        conn.Model,
-		"enable_tools": conn.EnableTools,
+		"base_url":      conn.BaseURL,
+		"api_key":       conn.APIKey,
+		"model":         conn.Model,
+		"enable_tools":  conn.EnableTools,
+		"connection_id": conn.ID,
 	}
 	if conn.ContextWindow != nil && *conn.ContextWindow > 0 {
 		m["context_window"] = *conn.ContextWindow
@@ -1960,8 +1988,9 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 							"index":    prep.index,
 						})
 					}
-					_ = s.db.RecordUsageRun("", uid, prep.agentID, conv.ID, "chat",
-						runUsage.PromptTokens, runUsage.CompletionTokens, runUsage.TotalTokens)
+					recordRunUsage(s, db.UsageLedgerMeta{
+						UserID: uid, AgentID: prep.agentID, ConversationID: conv.ID, Source: "chat",
+					}, runUsage)
 				}(prep)
 			}
 			wg.Wait()
@@ -2273,51 +2302,6 @@ func (s *Server) planSendTargets(uid string, conv *db.Conversation, explicit []s
 		plan.DebugNames = displayNamesForAgents(plan.Targets, agents)
 	}
 	return plan, nil
-}
-
-type runtimeUsage struct {
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-}
-
-func usageFromDonePayload(payload map[string]any) runtimeUsage {
-	var u runtimeUsage
-	raw, _ := payload["usage"].(map[string]any)
-	if raw == nil {
-		raw, _ = payload["usage_details"].(map[string]any)
-	}
-	if raw == nil {
-		return u
-	}
-	asInt := func(v any) int64 {
-		switch t := v.(type) {
-		case float64:
-			return int64(t)
-		case int64:
-			return t
-		case int:
-			return int64(t)
-		case json.Number:
-			n, _ := t.Int64()
-			return n
-		default:
-			return 0
-		}
-	}
-	u.PromptTokens = asInt(raw["prompt_tokens"])
-	if u.PromptTokens == 0 {
-		u.PromptTokens = asInt(raw["input_tokens"])
-	}
-	u.CompletionTokens = asInt(raw["completion_tokens"])
-	if u.CompletionTokens == 0 {
-		u.CompletionTokens = asInt(raw["output_tokens"])
-	}
-	u.TotalTokens = asInt(raw["total_tokens"])
-	if u.TotalTokens == 0 && (u.PromptTokens > 0 || u.CompletionTokens > 0) {
-		u.TotalTokens = u.PromptTokens + u.CompletionTokens
-	}
-	return u
 }
 
 // proxyRuntimeRun streams one runtime /v1/runs call via emit, returning assistant text,

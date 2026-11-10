@@ -932,8 +932,11 @@ func (s *Server) callRuntimeDecision(ctx context.Context, provider, baseURL, api
 		return nil, fmt.Errorf("%s", msg)
 	}
 	var out struct {
-		Enabled bool           `json:"enabled"`
-		Answers map[string]any `json:"answers"`
+		Enabled  bool           `json:"enabled"`
+		Answers  map[string]any `json:"answers"`
+		Model    string         `json:"model"`
+		Provider string         `json:"provider"`
+		Usage    map[string]any `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("decision response parse: %w", err)
@@ -941,6 +944,7 @@ func (s *Server) callRuntimeDecision(ctx context.Context, provider, baseURL, api
 	if !out.Enabled || len(out.Answers) == 0 {
 		return nil, fmt.Errorf("decision disabled or empty answers")
 	}
+	s.recordParsedDecision(userID, conversationID, model, provider, state, out.Model, out.Provider, out.Usage)
 	return out.Answers, nil
 }
 
@@ -982,6 +986,9 @@ func (s *Server) decisionDepsForUser(uid, conversationID string) *autoPickDecisi
 			return deps
 		}
 		deps.Microsoft = true
+		ms.OnUsage = func(modelName, providerName, source string, prompt, completion int64) {
+			s.recordDecisionUsage(uid, conversationID, modelName, providerName, source, prompt, completion)
+		}
 		deps.Decide = microsoftAutoPickDecide(ms)
 		return deps
 	}

@@ -169,6 +169,11 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
 
   const selectSettingsTab = useCallback(
     (tab: SettingsTab) => {
+      if (tab === "integrations") {
+        patchShell({ connectAppsOpen: true, connectAppsFocus: null });
+        prefetchSettingsTab("integrations");
+        return;
+      }
       setSettingsTab(tab);
       prefetchSettingsTab(tab);
     },
@@ -177,6 +182,11 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
 
   const openSettings = useCallback(
     (tab: SettingsTab = "llm") => {
+      if (tab === "integrations") {
+        patchShell({ connectAppsOpen: true, connectAppsFocus: null });
+        prefetchSettingsTab("integrations");
+        return;
+      }
       const sheetForm = readSheetForm();
       setShowSettings(true);
       patchShell({
@@ -205,7 +215,7 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
 
   const closeSettings = useCallback(() => setShowSettings(false), []);
 
-  // OAuth return: /?open_settings=integrations&gmail_connected=1
+  // OAuth return: /?open_settings=integrations&gmail_connected=1 (also slack_* / github_*)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -228,11 +238,24 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
     if (!allowed.includes(tab as SettingsTab)) return;
     openSettings(tab as SettingsTab);
     if (tab === "integrations") {
-      if (params.get("gmail_connected") === "1") {
-        integrations.setMsg("Gmail 已连接");
+      const focus = params.get("gmail_connected") || params.get("gmail_error")
+        ? "gmail"
+        : params.get("slack_connected") || params.get("slack_error")
+          ? "slack"
+          : params.get("github_connected") || params.get("github_error")
+            ? "github"
+            : null;
+      if (focus) patchShell({ connectAppsFocus: focus });
+      const notes: string[] = [];
+      if (params.get("gmail_connected") === "1") notes.push("Gmail 已连接");
+      if (params.get("slack_connected") === "1") {
+        notes.push("Slack 已连接。请复制 Event Request URL 到 Slack App 的 Event Subscriptions");
       }
-      const err = params.get("gmail_error");
-      if (err) {
+      if (params.get("github_connected") === "1") {
+        notes.push("GitHub 已连接。可复制 Webhook URL，或填写仓库后用 API 挂载");
+      }
+      const gmailErr = params.get("gmail_error");
+      if (gmailErr) {
         const hints: Record<string, string> = {
           token_exchange_network:
             "无法访问 Google 换票接口（多为未走代理）。请在仓库根 .env 设置 HTTPS_PROXY=http://127.0.0.1:端口（Clash/Surge 等），重启 API 后再连",
@@ -244,13 +267,44 @@ export function useAppSettings(opts: UseAppSettingsOptions) {
           missing_gmail_send_scope:
             "未获得 gmail.send 发送权限。请确认 Google Cloud 同意屏幕已添加该范围，重新连接时在授权页勾选发送邮件",
         };
-        integrations.setMsg("Gmail 连接失败：" + (hints[err] ?? err));
+        notes.push("Gmail 连接失败：" + (hints[gmailErr] ?? gmailErr));
       }
+      const slackErr = params.get("slack_error");
+      if (slackErr) {
+        const hints: Record<string, string> = {
+          oauth_not_configured: "服务端未配置 SLACK_CLIENT_ID / SLACK_CLIENT_SECRET",
+          missing_bot_token: "Slack 没有返回 bot token。请确认授权的是 Bot Token Scopes，而不是只授了用户 token",
+          token_exchange_failed: "换取 Slack token 失败，请查看 API 日志中的 slack oauth 行",
+          token_exchange_network: "无法访问 Slack 换票接口。可在 .env 设置 HTTPS_PROXY 后重启 API",
+          invalid_state: "授权 state 无效。请回到设置重新点击安装",
+          state_expired: "授权已过期，请重新点击安装",
+        };
+        notes.push("Slack 连接失败：" + (hints[slackErr] ?? slackErr));
+      }
+      const githubErr = params.get("github_error");
+      if (githubErr) {
+        const hints: Record<string, string> = {
+          oauth_not_configured: "服务端未配置 GitHub OAuth App 或 GitHub App",
+          github_app_not_configured: "回调带了 installation_id，但未配置 GITHUB_APP_ID / SLUG / PRIVATE_KEY",
+          github_app_key_invalid: "GITHUB_APP_PRIVATE_KEY 无法解析",
+          token_exchange_failed: "换取 GitHub token 失败，请查看 API 日志中的 github oauth 行",
+          token_exchange_network: "无法访问 GitHub。可在 .env 设置 HTTPS_PROXY 后重启 API",
+          invalid_state: "授权 state 无效。请回到设置重新点击连接",
+          state_expired: "授权已过期，请重新点击连接",
+          invalid_repo: "仓库名须为 owner/name",
+        };
+        notes.push("GitHub 连接失败：" + (hints[githubErr] ?? githubErr));
+      }
+      if (notes.length) integrations.setMsg(notes.join(" "));
       void integrations.refresh();
     }
     params.delete("open_settings");
     params.delete("gmail_connected");
     params.delete("gmail_error");
+    params.delete("slack_connected");
+    params.delete("slack_error");
+    params.delete("github_connected");
+    params.delete("github_error");
     const q = params.toString();
     const next = window.location.pathname + (q ? `?${q}` : "") + window.location.hash;
     window.history.replaceState({}, "", next);

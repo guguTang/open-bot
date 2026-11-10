@@ -169,7 +169,7 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 	attachToolAllowlist(payload, s.toolAllowlistOrEmpty(userID))
 	s.attachPreferredMachine(payload, userID, toID)
 
-	reply, _, _, sources, _, runErr := s.proxyRuntimeRun(ctx, func(string, any) {}, payload, &recallPersistContext{
+	reply, _, _, sources, runUsage, runErr := s.proxyRuntimeRun(ctx, func(string, any) {}, payload, &recallPersistContext{
 		UserID:         userID,
 		AgentID:        toID,
 		ConversationID: targetConv.ID,
@@ -181,6 +181,9 @@ func (s *Server) askAgent(ctx context.Context, body askAgentBody) (map[string]an
 	if runErr != nil {
 		return nil, http.StatusBadGateway, runErr
 	}
+	recordRunUsage(s, db.UsageLedgerMeta{
+		UserID: userID, AgentID: toID, ConversationID: targetConv.ID, Source: "ask_agent",
+	}, runUsage)
 	reply = strings.TrimSpace(stripThinkTags(reply))
 	if reply == "" {
 		return nil, http.StatusBadGateway, errors.New("对方没有返回文本")

@@ -41,6 +41,15 @@ def embed_texts(texts: list[str], *, timeout: float = 30.0) -> list[list[float]]
             resp = client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
+        from .usage_meter import record_text_call
+
+        record_text_call(
+            call_kind_name="embedding",
+            model=model,
+            base_url=base,
+            input_text="\n".join(texts),
+            raw_usage=data.get("usage") if isinstance(data, dict) else None,
+        )
         rows = data.get("data") or []
         rows = sorted(rows, key=lambda r: int(r.get("index", 0)))
         out = [list(map(float, r.get("embedding") or [])) for r in rows]

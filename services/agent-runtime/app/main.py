@@ -92,6 +92,7 @@ class LLMConfig(BaseModel):
     model: str | None = None
     enable_tools: bool | None = None
     context_window: int | None = None
+    connection_id: str | None = None
 
 
 class RunRequest(BaseModel):
@@ -220,6 +221,7 @@ def _override_from_body(llm: LLMConfig | None) -> LLMOverride | None:
         api_key=llm.api_key,
         model=llm.model,
         enable_tools=llm.enable_tools,
+        connection_id=llm.connection_id,
     )
 
 
@@ -596,6 +598,16 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
     if langfuse_trace_id:
         lf.update_obs(root_obs, metadata={"run_id": run_id, "langfuse_trace_id": langfuse_trace_id})
     decision_token = bind_decision(body.decision)
+    from .usage_meter import attach_usage, begin_run, call_kind, end_run
+
+    meter_tokens = begin_run(
+        {
+            "user_id": body.user_id or "",
+            "agent_id": body.agent_id or "",
+            "conversation_id": body.conversation_id or "",
+            "llm_connection_id": (body.llm.connection_id if body.llm else "") or "",
+        }
+    )
     try:
         # Prefer client request_id for durable idempotency / resume.
         if body.request_id and str(body.request_id).strip():
@@ -784,7 +796,8 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
             dialog = [m for m in history if m["role"] in ("user", "assistant", "summary")]
 
             async def _summarize(msgs: list[dict[str, Any]]) -> str:
-                return await chat_text(msgs, api_key=api_key or "", override=override)
+                with call_kind("compress"):
+                    return await chat_text(msgs, api_key=api_key or "", override=override)
 
             compacted, compact_meta = await compact_mod.compact_messages(
                 dialog,
@@ -912,6 +925,7 @@ async def run_events(body: RunRequest, request: Request | None = None) -> AsyncI
             pass
         lf.flush()
         reset_decision(decision_token)
+        end_run(meter_tokens)
 
 
 async def echo_events(
@@ -1711,6 +1725,43 @@ async def openai_path(
             except Exception as e:  # noqa: BLE001
                 return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
+        if name == "gmail_search":
+            from . import gmail_api
+
+            try:
+                raw_limit = args.get("limit", 10)
+                try:
+                    limit = int(raw_limit)
+                except (TypeError, ValueError):
+                    return json.dumps(
+                        {"ok": False, "error": "limit 须为整数"},
+                        ensure_ascii=False,
+                    )
+                return json.dumps(
+                    gmail_api.gmail_search(
+                        str(user_id or ""),
+                        q=str(args.get("q") or ""),
+                        limit=limit,
+                    ),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+        if name == "gmail_get":
+            from . import gmail_api
+
+            try:
+                return json.dumps(
+                    gmail_api.gmail_get(
+                        str(user_id or ""),
+                        message_id=str(args.get("id") or ""),
+                    ),
+                    ensure_ascii=False,
+                )
+            except Exception as e:  # noqa: BLE001
+                return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
         if name == "gmail_send":
             from . import gmail_api
 
@@ -1964,8 +2015,7 @@ async def openai_path(
             }
             if cited_sources:
                 done_payload["sources"] = cited_sources
-            if usage_details:
-                done_payload["usage"] = usage_details
+            attach_usage(done_payload, legacy=usage_details)
             yield sse("done", done_payload)
     except asyncio.CancelledError:
         raise

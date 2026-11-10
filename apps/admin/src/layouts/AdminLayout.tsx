@@ -50,6 +50,7 @@ const menuRoutes = {
       routes: [
         { path: "/llm", name: "默认模型" },
         { path: "/decision", name: "决策模型" },
+        { path: "/prices", name: "模型单价" },
       ],
     },
     {

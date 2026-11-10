@@ -32,6 +32,9 @@ export {
   register,
   login,
   fetchMe,
+  fetchMyUsage,
+  type MyUsage,
+  type MyUsageAgent,
   type AutoReviewRule,
   type UserSettings,
   fetchUserSettings,
@@ -248,6 +251,20 @@ export {
   startGmailConnect,
   disconnectGmail,
 } from "./api/gmail";
+
+export {
+  type InstallIntegrationStatus,
+  type InstallDisconnectResult,
+  type InstallProvider,
+  type TelegramConnectInput,
+  type FeishuConnectInput,
+  getInstallIntegrationStatus,
+  startInstallConnect,
+  disconnectInstall,
+  connectTelegram,
+  connectFeishu,
+  attachGitHubRepo,
+} from "./api/installs";
 
 export {
   type MicroAppKind,

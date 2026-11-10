@@ -180,10 +180,23 @@ export type UsageRunDay = {
   username?: string;
   agent_id?: string;
   agent_name?: string;
+  model?: string;
+  provider?: string;
   run_count: number;
   prompt_tokens: number;
   completion_tokens: number;
+  cached_tokens?: number;
+  reasoning_tokens?: number;
   total_tokens: number;
+  estimated_cost_minor?: number | null;
+  currency?: string;
+  usage_source?: string;
+  provider_tokens?: number;
+  estimated_tokens?: number;
+  unknown_tokens?: number;
+  unpriced_tokens?: number;
+  priced_calls?: number;
+  unpriced_calls?: number;
 };
 
 export type OrgUsage = {
@@ -195,11 +208,73 @@ export type OrgUsage = {
   run_count?: number;
   prompt_tokens?: number;
   completion_tokens?: number;
+  cached_tokens?: number;
+  reasoning_tokens?: number;
   total_tokens?: number;
+  estimated_cost_minor?: number | null;
+  currency?: string;
+  usage_source?: string;
+  provider_tokens?: number;
+  estimated_tokens?: number;
+  unknown_tokens?: number;
+  unpriced_tokens?: number;
+  priced_calls?: number;
+  unpriced_calls?: number;
   by_day?: UsageRunDay[];
   by_user?: UsageRunDay[];
   by_bot?: UsageRunDay[];
+  by_model?: UsageRunDay[];
 };
+
+export type ModelPrice = {
+  id: number;
+  org_id: string;
+  provider: string;
+  model: string;
+  match_kind: "exact" | "prefix";
+  input_per_million_minor: number;
+  output_per_million_minor: number;
+  cached_per_million_minor: number | null;
+  currency: string;
+  effective_from: string;
+  effective_to: string | null;
+  note: string;
+  cached_policy: string;
+};
+
+export async function adminListPrices(): Promise<{ prices: ModelPrice[]; cached_policy: string }> {
+  const res = await fetch(`${API_BASE}/v1/admin/model-prices`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminCreatePrice(body: Partial<ModelPrice>): Promise<ModelPrice> {
+  const res = await fetch(`${API_BASE}/v1/admin/model-prices`, {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminUpdatePrice(id: number, body: Partial<ModelPrice>): Promise<ModelPrice> {
+  const res = await fetch(`${API_BASE}/v1/admin/model-prices/${id}`, {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
+export async function adminExpirePrice(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/v1/admin/model-prices/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
 
 export type PlatformOrgSummary = {
   org_id: string;

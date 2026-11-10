@@ -235,7 +235,11 @@ async def run_durable_events(
                         "waiting_approval": True,
                     }
                 )
-            for frame in waiting_approval_frames(meta=meta, rid=rid, tid=tid):
+            from ..usage_meter import snapshot
+
+            for frame in waiting_approval_frames(
+                meta=meta, rid=rid, tid=tid, usage_calls=snapshot() or None
+            ):
                 yield frame
             return
 
@@ -275,10 +279,26 @@ async def run_durable_events(
         if root_obs is not None:
             lf.update_obs(root_obs, output=lf.truncate(final_text))
         await journal.set_status("done")
+        from ..usage_meter import snapshot
+
+        calls = snapshot()
+        continued = resume_command is not None or paused_next
+        # A resumed turn already billed the calls from before the pause.
+        # Do not fall back to the checkpoint aggregate or those tokens are counted twice.
+        if calls:
+            frame_usage = None
+            frame_calls: list[dict[str, Any]] | None = calls
+        elif continued:
+            frame_usage = None
+            frame_calls = []
+        else:
+            frame_usage = values.get("usage") if isinstance(values.get("usage"), dict) else None
+            frame_calls = None
         for frame in success_done_frames(
             rid=rid,
             tid=tid,
-            usage=values.get("usage") if isinstance(values.get("usage"), dict) else None,
+            usage=frame_usage,
+            usage_calls=frame_calls,
         ):
             yield frame
     except GraphInterrupt as gi:

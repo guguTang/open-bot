@@ -40,6 +40,47 @@ export type UserSettings = {
   updated_at?: string;
 };
 
+export type MyUsageAgent = {
+  agent_id?: string;
+  agent_name?: string;
+  run_count: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cached_tokens?: number;
+  total_tokens: number;
+  estimated_cost_minor: number | null;
+  currency?: string;
+  unpriced_tokens?: number;
+  usage_source?: string;
+};
+
+export type MyUsage = {
+  month: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cached_tokens: number;
+  reasoning_tokens?: number;
+  total_tokens: number;
+  estimated_cost_minor: number | null;
+  currency: string;
+  usage_source: string;
+  provider_tokens: number;
+  estimated_tokens: number;
+  unknown_tokens: number;
+  unpriced_tokens: number;
+  priced_calls: number;
+  unpriced_calls: number;
+  by_agent: MyUsageAgent[];
+  note?: string;
+};
+
+export async function fetchMyUsage(month?: string): Promise<MyUsage> {
+  const q = month ? `?month=${encodeURIComponent(month)}` : "";
+  const res = await fetch(`${API_BASE}/v1/me/usage${q}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(await readError(res));
+  return res.json();
+}
+
 export async function fetchUserSettings(): Promise<UserSettings> {
   const res = await fetch(`${API_BASE}/v1/me/settings`, { headers: authHeaders() });
   if (!res.ok) throw new Error(await readError(res));

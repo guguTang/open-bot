@@ -310,6 +310,8 @@ TOOL_DISPLAY_ALIASES: dict[str, str] = {
     "request_secret": "请求密钥",
     "secret_http": "带密钥请求",
     "gmail_status": "Gmail 连接状态",
+    "gmail_search": "搜索 Gmail",
+    "gmail_get": "读取 Gmail",
     "gmail_send": "Gmail 发信",
     "clone_agent": "复制助手",
 }

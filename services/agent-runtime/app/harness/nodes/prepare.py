@@ -165,7 +165,10 @@ async def prepare_node(state: AgentState, config: RunnableConfig) -> dict[str, A
             dialog = kept
 
     async def _summarize(msgs: list[dict[str, Any]]) -> str:
-        return await chat_text(msgs, api_key=api_key or "", override=override)
+        from ...usage_meter import call_kind
+
+        with call_kind("compress"):
+            return await chat_text(msgs, api_key=api_key or "", override=override)
 
     llm_cw = cfg.get("llm_context_window")
     _, base, default_model = openai_config(override)

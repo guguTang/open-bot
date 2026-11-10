@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Plus, Search, Settings, Trash2 } from "lucide-react";
+import { Blocks, ChevronDown, Copy, Plus, Search, Settings, Trash2 } from "lucide-react";
 import { memo, useDeferredValue, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -21,7 +21,7 @@ import { useConvLongPressHandlers } from "../../hooks/useConvLongPress";
 import { useChatStore } from "../../stores/chat";
 import { botIsOnline, usePresenceStore } from "../../stores/presence";
 import { sessionActions } from "../../stores/sessionActions";
-import { useShellStore } from "../../stores/shell";
+import { patchShell, useShellStore } from "../../stores/shell";
 import { useMicroAppsStore } from "../../stores/microApps";
 import { MicroAppShortcuts } from "../MicroAppShortcuts";
 import { isCapacitorNative } from "../../lib/microApp/capabilities";
@@ -456,8 +456,22 @@ function AppSidebarInner() {
         </ul>
       </div>
 
-      {!sheetForm ? (
-        <div className="mt-auto flex shrink-0 flex-col gap-2 pt-1">
+      <div
+        className={cn(
+          "mt-auto flex shrink-0 flex-col gap-2",
+          sheetForm ? "px-4 pt-2 pb-[max(16px,var(--safe-bottom,0px))]" : "pt-1",
+        )}
+      >
+        <Button
+          type="button"
+          variant="primary"
+          className={cn("w-full justify-start", sheetForm && "min-h-11")}
+          onClick={() => patchShell({ connectAppsOpen: true, connectAppsFocus: null })}
+        >
+          <Blocks aria-hidden />
+          连接应用
+        </Button>
+        {!sheetForm ? (
           <AccountMenu
             username={user?.username || "账户"}
             llm={defaultLLM}
@@ -466,8 +480,8 @@ function AppSidebarInner() {
             onOpenMicroApps={() => useMicroAppsStore.getState().setHubOpen(true)}
             onLogout={() => sessionActions().onLogout()}
           />
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </aside>
   );
 }

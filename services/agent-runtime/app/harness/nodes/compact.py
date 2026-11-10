@@ -25,7 +25,10 @@ async def compact_node(state: AgentState, config: RunnableConfig) -> dict[str, A
     dialog = [m for m in msgs if m.get("role") in ("user", "assistant", "summary", "tool")]
 
     async def _summarize(batch: list[dict[str, Any]]) -> str:
-        return await chat_text(batch, api_key=api_key or "", override=override)
+        from ...usage_meter import call_kind
+
+        with call_kind("compress"):
+            return await chat_text(batch, api_key=api_key or "", override=override)
 
     llm_cw = cfg.get("llm_context_window")
     _, _, default_model = openai_config(override)
