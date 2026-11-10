@@ -155,11 +155,11 @@ func gmailHasReadScope(scopes string) bool {
 }
 
 func gmailMissingSendScopeHint() string {
-	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「设置 → 连接应用」断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
+	return "Gmail 授权缺少「发送邮件」范围（gmail.send）。请到「连接应用」（侧栏底部，或设置里的同名入口）断开后重新连接，并在 Google 授权页勾选发送权限；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.send。"
 }
 
 func gmailMissingReadScopeHint() string {
-	return "Gmail 授权缺少「查看邮件」范围（gmail.readonly）。请到「设置 → 连接应用」断开后重新连接，并在 Google 授权页勾选查看邮件；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.readonly。仅有 gmail.send 的旧连接不能搜索或打开邮件。重新连接才会申请完整同意，不会静默追加权限。"
+	return "Gmail 授权缺少「查看邮件」范围（gmail.readonly）。请到「连接应用」（侧栏底部，或设置里的同名入口）断开后重新连接，并在 Google 授权页勾选查看邮件；同时确认 Google Cloud OAuth 同意屏幕已添加 https://www.googleapis.com/auth/gmail.readonly。仅有 gmail.send 的旧连接不能搜索或打开邮件。重新连接才会申请完整同意，不会静默追加权限。"
 }
 
 func gmailConnectedHint(canSend, canRead bool) string {
@@ -502,9 +502,9 @@ func gmailNotConnectedHint(connected, configured bool) string {
 		return ""
 	}
 	if !configured {
-		return "服务端未配置 Google OAuth（GOOGLE_OAUTH_CLIENT_ID / SECRET）。请管理员配置后再在设置 → 连接应用 中连接 Gmail。"
+		return "服务端未配置 Google OAuth（GOOGLE_OAUTH_CLIENT_ID / SECRET）。请管理员配置后再在「连接应用」（侧栏底部，或设置里的同名入口）中连接 Gmail。"
 	}
-	return "尚未连接 Gmail。请用户打开「设置 → 连接应用」点击「连接 Gmail」完成授权后再发信。"
+	return "尚未连接 Gmail。请用户打开「连接应用」（侧栏底部，或设置里的同名入口）点击「连接 Gmail」完成授权后再发信。"
 }
 
 // ---- single-flight / short dedupe for identical gmail_send ----
@@ -752,7 +752,7 @@ func (s *Server) handleInternalGmailSend(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		result = map[string]any{
 			"ok": false, "connected": false,
-			"error": "Gmail 授权已失效，请重新在「设置 → 连接应用」连接：" + err.Error(),
+			"error": "Gmail 授权已失效，请重新在「连接应用」（侧栏底部，或设置里的同名入口）连接：" + err.Error(),
 		}
 		writeJSON(w, http.StatusOK, result)
 		return

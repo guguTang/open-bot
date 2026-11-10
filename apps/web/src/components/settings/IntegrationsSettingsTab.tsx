@@ -1,17 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  SettingsCard,
-  SettingsEmpty,
-  SettingsHint,
-  SettingsPage,
-  SettingsSection,
-} from "../SettingsLayout";
+import { SettingsCard, SettingsEmpty, SettingsSection } from "../SettingsLayout";
 import type {
   FeishuConnectInput,
   GmailIntegrationStatus,
   InstallIntegrationStatus,
   TelegramConnectInput,
 } from "../../api";
+import type { ConnectAppId } from "../../lib/connectApps/catalog";
 
 export type IntegrationsSettingsTabProps = {
   gmail: GmailIntegrationStatus | null;
@@ -51,135 +46,22 @@ function gmailConnectionTitle(gmail: GmailIntegrationStatus): string {
   return "已连接";
 }
 
-export function IntegrationsSettingsTab({
-  gmail,
-  slack,
-  github,
-  telegram,
-  feishu,
-  busy,
-  loading,
-  loadError,
-  slackLoadError,
-  githubLoadError,
-  telegramLoadError,
-  feishuLoadError,
-  msg,
-  onConnectGmail,
-  onDisconnectGmail,
-  onConnectSlack,
-  onDisconnectSlack,
-  onConnectGitHub,
-  onAttachGitHub,
-  onDisconnectGitHub,
-  onConnectTelegram,
-  onDisconnectTelegram,
-  onConnectFeishu,
-  onDisconnectFeishu,
-  onCopy,
-  onRefresh,
-}: IntegrationsSettingsTabProps) {
-  const configured = gmail?.oauth_configured !== false;
-  const connected = Boolean(gmail?.connected);
-
-  return (
-    <SettingsPage>
-      <SettingsHint>
-        连接个人邮箱后，Bot 可在你确认后发信，并按需搜索、阅读邮件摘要（正文会截断）。不会擅自代发，也不会监听新邮件。
-        桌面 himalaya / google-workspace 仍可用于本机 CLI。Slack / GitHub 可在这里安装，Telegram /
-        飞书可粘贴凭据；这四项成功后会自动绑定一条入站 Hook。Gmail 不创建入站 Hook。未连接或未配置 Client
-        时这里是空态。例行任务里手工创建的 Hook 仍然可用。
-      </SettingsHint>
-      {msg ? <div className="settings-status">{msg}</div> : null}
-      <SettingsSection title="Gmail">
-        <SettingsCard padded>
-          {!gmail ? (
-            loading || !loadError ? (
-              <SettingsEmpty>加载中…</SettingsEmpty>
-            ) : (
-              <div className="settings-status">
-                <p>无法读取连接状态：{loadError}</p>
-                <button type="button" className="ghost" disabled={busy || loading} onClick={() => void onRefresh()}>
-                  重试
-                </button>
-              </div>
-            )
-          ) : !configured ? (
-            <div className="settings-status">
-              服务端未配置 Google OAuth。请在 API 环境变量中设置{" "}
-              <code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code> /{" "}
-              <code>GOOGLE_OAUTH_REDIRECT_URI</code>
-              ，然后重启 API。详见 docs/Gmail连接与Web发信.md。
-            </div>
-          ) : connected ? (
-            <>
-              <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <div>
-                  <div className="agent-name">{gmailConnectionTitle(gmail)}</div>
-                  <div className="agent-desc">{gmail.email || "(未知邮箱)"}</div>
-                  <div className="agent-desc">发送：{gmail.can_send ? "可以" : "不可以"}</div>
-                  <div className="agent-desc">读取：{gmail.can_read ? "可以" : "不可以"}</div>
-                </div>
-                <div className="llm-actions">
-                  <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
-                    刷新
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    disabled={busy}
-                    onClick={() => void onDisconnectGmail()}
-                  >
-                    断开连接
-                  </button>
-                </div>
-              </div>
-              {gmail.can_send ? null : (
-                <div className="settings-status">
-                  当前授权缺少 Gmail 发送范围。请先「断开连接」，再「连接 Gmail」，并在 Google
-                  授权页勾选发送邮件权限；同时确认 Cloud 控制台 OAuth
-                  同意屏幕已添加 <code>gmail.send</code>。
-                </div>
-              )}
-              {gmail.can_read ? null : (
-                <div className="settings-status">
-                  当前授权缺少读取邮件范围（<code>gmail.readonly</code>
-                  ）。请先「断开连接」，再「连接 Gmail」，并在 Google
-                  授权页勾选查看邮件。仅有发送权限的旧连接不能搜索或打开邮件；重新连接才会申请新的同意，不会静默追加权限。
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <SettingsEmpty>
-                尚未连接 Gmail。连接后可以在你确认后发信，并按需搜索、阅读邮件摘要。不会创建入站 Hook，也不会在后台监听新邮件。
-              </SettingsEmpty>
-              <div className="llm-actions">
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={busy}
-                  aria-busy={busy}
-                  onClick={() => void onConnectGmail()}
-                >
-                  {busy ? "连接中…" : "连接 Gmail"}
-                </button>
-                <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
-                  刷新
-                </button>
-              </div>
-            </>
-          )}
-        </SettingsCard>
-      </SettingsSection>
-
+/** 目录页点「连接 / 管理」之后才挂上的既有授权、凭据和 Hook 详情。 */
+export function ConnectAppDetail({
+  id,
+  ...props
+}: IntegrationsSettingsTabProps & { id: ConnectAppId }) {
+  if (id === "gmail") return <GmailConnectCard {...props} />;
+  if (id === "slack") {
+    return (
       <InstallChannelCard
+        bare
         title="Slack"
         connectLabel="安装到 Slack 工作区"
-        status={slack}
-        loadError={slackLoadError}
-        loading={loading}
-        busy={busy}
+        status={props.slack}
+        loadError={props.slackLoadError}
+        loading={props.loading}
+        busy={props.busy}
         unconfigured={
           <>
             服务端未配置 Slack OAuth。请在 API 环境变量中设置 <code>SLACK_CLIENT_ID</code> /{" "}
@@ -187,45 +69,144 @@ export function IntegrationsSettingsTab({
             ，然后重启 API。不会假装已连接。
           </>
         }
-        onConnect={() => onConnectSlack()}
-        onDisconnect={onDisconnectSlack}
-        onCopy={onCopy}
-        onRefresh={onRefresh}
+        onConnect={() => props.onConnectSlack()}
+        onDisconnect={props.onDisconnectSlack}
+        onCopy={props.onCopy}
+        onRefresh={props.onRefresh}
       />
-
+    );
+  }
+  if (id === "github") {
+    return (
       <GitHubInstallCard
-        status={github}
-        loadError={githubLoadError}
-        loading={loading}
-        busy={busy}
-        onConnect={onConnectGitHub}
-        onAttach={onAttachGitHub}
-        onDisconnect={onDisconnectGitHub}
-        onCopy={onCopy}
-        onRefresh={onRefresh}
+        bare
+        status={props.github}
+        loadError={props.githubLoadError}
+        loading={props.loading}
+        busy={props.busy}
+        onConnect={props.onConnectGitHub}
+        onAttach={props.onAttachGitHub}
+        onDisconnect={props.onDisconnectGitHub}
+        onCopy={props.onCopy}
+        onRefresh={props.onRefresh}
       />
-
+    );
+  }
+  if (id === "telegram") {
+    return (
       <TelegramConnectCard
-        status={telegram}
-        loadError={telegramLoadError}
-        loading={loading}
-        busy={busy}
-        onConnect={onConnectTelegram}
-        onDisconnect={onDisconnectTelegram}
-        onCopy={onCopy}
-        onRefresh={onRefresh}
+        bare
+        status={props.telegram}
+        loadError={props.telegramLoadError}
+        loading={props.loading}
+        busy={props.busy}
+        onConnect={props.onConnectTelegram}
+        onDisconnect={props.onDisconnectTelegram}
+        onCopy={props.onCopy}
+        onRefresh={props.onRefresh}
       />
-      <FeishuConnectCard
-        status={feishu}
-        loadError={feishuLoadError}
-        loading={loading}
-        busy={busy}
-        onConnect={onConnectFeishu}
-        onDisconnect={onDisconnectFeishu}
-        onCopy={onCopy}
-        onRefresh={onRefresh}
-      />
-    </SettingsPage>
+    );
+  }
+  return (
+    <FeishuConnectCard
+      bare
+      status={props.feishu}
+      loadError={props.feishuLoadError}
+      loading={props.loading}
+      busy={props.busy}
+      onConnect={props.onConnectFeishu}
+      onDisconnect={props.onDisconnectFeishu}
+      onCopy={props.onCopy}
+      onRefresh={props.onRefresh}
+    />
+  );
+}
+
+function GmailConnectCard({
+  gmail,
+  busy,
+  loading,
+  loadError,
+  onConnectGmail,
+  onDisconnectGmail,
+  onRefresh,
+}: IntegrationsSettingsTabProps) {
+  const configured = gmail?.oauth_configured !== false;
+  const connected = Boolean(gmail?.connected);
+  return (
+    <SettingsCard padded>
+      {!gmail ? (
+        loading || !loadError ? (
+          <SettingsEmpty>加载中…</SettingsEmpty>
+        ) : (
+          <div className="settings-status">
+            <p>无法读取连接状态：{loadError}</p>
+            <button type="button" className="ghost" disabled={busy || loading} onClick={() => void onRefresh()}>
+              重试
+            </button>
+          </div>
+        )
+      ) : !configured ? (
+        <div className="settings-status">
+          服务端未配置 Google OAuth。请在 API 环境变量中设置{" "}
+          <code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code> /{" "}
+          <code>GOOGLE_OAUTH_REDIRECT_URI</code>
+          ，然后重启 API。详见 docs/Gmail连接与Web发信.md。
+        </div>
+      ) : connected ? (
+        <>
+          <div className="llm-item" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div className="agent-name">{gmailConnectionTitle(gmail)}</div>
+              <div className="agent-desc">{gmail.email || "(未知邮箱)"}</div>
+              <div className="agent-desc">发送：{gmail.can_send ? "可以" : "不可以"}</div>
+              <div className="agent-desc">读取：{gmail.can_read ? "可以" : "不可以"}</div>
+            </div>
+            <div className="llm-actions">
+              <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+                刷新
+              </button>
+              <button type="button" className="danger" disabled={busy} onClick={() => void onDisconnectGmail()}>
+                断开连接
+              </button>
+            </div>
+          </div>
+          {gmail.can_send ? null : (
+            <div className="settings-status">
+              当前授权缺少 Gmail 发送范围。请先「断开连接」，再「连接 Gmail」，并在 Google
+              授权页勾选发送邮件权限；同时确认 Cloud 控制台 OAuth 同意屏幕已添加 <code>gmail.send</code>。
+            </div>
+          )}
+          {gmail.can_read ? null : (
+            <div className="settings-status">
+              当前授权缺少读取邮件范围（<code>gmail.readonly</code>
+              ）。请先「断开连接」，再「连接 Gmail」，并在 Google
+              授权页勾选查看邮件。仅有发送权限的旧连接不能搜索或打开邮件；重新连接才会申请新的同意，不会静默追加权限。
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <SettingsEmpty>
+            尚未连接 Gmail。连接后可以在你确认后发信，并按需搜索、阅读邮件摘要。不会创建入站 Hook，也不会在后台监听新邮件。
+          </SettingsEmpty>
+          <div className="llm-actions">
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={() => void onConnectGmail()}
+            >
+              {busy ? "连接中…" : "连接 Gmail"}
+            </button>
+            <button type="button" className="ghost" disabled={busy} onClick={() => void onRefresh()}>
+              刷新
+            </button>
+          </div>
+        </>
+      )}
+    </SettingsCard>
   );
 }
 
@@ -242,6 +223,7 @@ function InstallChannelCard({
   onCopy,
   onRefresh,
   extra,
+  bare,
 }: {
   title: string;
   connectLabel: string;
@@ -255,11 +237,11 @@ function InstallChannelCard({
   onCopy: (text: string, label: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   extra?: ReactNode;
+  bare?: boolean;
 }) {
   const configured = status?.oauth_configured !== false;
   const connected = Boolean(status?.connected);
-  return (
-    <SettingsSection title={title}>
+  const card = (
       <SettingsCard padded>
         {!status ? (
           loading || !loadError ? (
@@ -325,8 +307,9 @@ function InstallChannelCard({
           </>
         )}
       </SettingsCard>
-    </SettingsSection>
   );
+  if (bare) return card;
+  return <SettingsSection title={title}>{card}</SettingsSection>;
 }
 
 function GitHubInstallCard({
@@ -339,6 +322,7 @@ function GitHubInstallCard({
   onDisconnect,
   onCopy,
   onRefresh,
+  bare,
 }: {
   status: InstallIntegrationStatus | null;
   loadError?: string;
@@ -349,6 +333,7 @@ function GitHubInstallCard({
   onDisconnect: () => void | Promise<void>;
   onCopy: (text: string, label: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
+  bare?: boolean;
 }) {
   const [repo, setRepo] = useState("");
   useEffect(() => {
@@ -371,6 +356,7 @@ function GitHubInstallCard({
 
   return (
     <InstallChannelCard
+      bare={bare}
       title="GitHub"
       connectLabel={status?.mode === "github_app" ? "安装 GitHub App" : "连接 GitHub"}
       status={status}
@@ -453,6 +439,7 @@ function ChannelShell({
   busy,
   onRefresh,
   children,
+  bare,
 }: {
   title: string;
   status: InstallIntegrationStatus | null;
@@ -461,9 +448,9 @@ function ChannelShell({
   busy: boolean;
   onRefresh: () => void | Promise<void>;
   children: ReactNode;
+  bare?: boolean;
 }) {
-  return (
-    <SettingsSection title={title}>
+  const card = (
       <SettingsCard padded>
         {!status ? (
           loading || !loadError ? (
@@ -480,8 +467,9 @@ function ChannelShell({
           children
         )}
       </SettingsCard>
-    </SettingsSection>
   );
+  if (bare) return card;
+  return <SettingsSection title={title}>{card}</SettingsSection>;
 }
 
 function ConnectedInstallBody({
@@ -553,6 +541,7 @@ function TelegramConnectCard({
   onDisconnect,
   onCopy,
   onRefresh,
+  bare,
 }: {
   status: InstallIntegrationStatus | null;
   loadError?: string;
@@ -562,9 +551,10 @@ function TelegramConnectCard({
   onDisconnect: () => void | Promise<void>;
   onCopy: (text: string, label: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
+  bare?: boolean;
 }) {
   return (
-    <ChannelShell title="Telegram" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
+    <ChannelShell bare={bare} title="Telegram" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
       {status && status.oauth_configured === false ? (
         <div className="settings-status">
           服务端还不能加密保存凭据。请设置 <code>BOT_SECRETS_KEY</code> 或 <code>ENCRYPTION_KEY</code>
@@ -600,6 +590,7 @@ function FeishuConnectCard({
   onDisconnect,
   onCopy,
   onRefresh,
+  bare,
 }: {
   status: InstallIntegrationStatus | null;
   loadError?: string;
@@ -609,9 +600,10 @@ function FeishuConnectCard({
   onDisconnect: () => void | Promise<void>;
   onCopy: (text: string, label: string) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
+  bare?: boolean;
 }) {
   return (
-    <ChannelShell title="飞书 / Lark" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
+    <ChannelShell bare={bare} title="飞书 / Lark" status={status} loadError={loadError} loading={loading} busy={busy} onRefresh={onRefresh}>
       {status && status.oauth_configured === false ? (
         <div className="settings-status">
           服务端还不能加密保存凭据。请设置 <code>BOT_SECRETS_KEY</code> 或 <code>ENCRYPTION_KEY</code>

@@ -82,6 +82,8 @@ type ScaffoldProps = {
   /** 底部固定操作区（如「新建」按钮），留出安全区 */
   footer?: ReactNode;
   onRetry?: () => void;
+  /** Override the header back button. Detail pages inside a route use this to return to the parent view. */
+  onBack?: () => void;
 };
 
 /**
@@ -102,12 +104,13 @@ export function ScreenScaffold({
   children,
   footer,
   onRetry,
+  onBack,
 }: ScaffoldProps): JSX.Element {
   const hasError = Boolean(error);
 
   return (
     <View className="flex-1 bg-background">
-      <ScreenHeader title={title} subtitle={subtitle} right={headerRight} />
+      <ScreenHeader title={title} subtitle={subtitle} right={headerRight} onBack={onBack} />
 
       <ScrollView
         className="flex-1"

@@ -33,7 +33,6 @@ const SETTINGS_NAV: ReadonlyArray<readonly [SettingsTab, string]> = [
   ["compact", "压缩"],
   ["routines", "例行任务"],
   ["secrets", "密钥"],
-  ["integrations", "连接应用"],
 ];
 
 export type AppSettingsDialogProps = {
@@ -52,6 +51,8 @@ export type AppSettingsDialogProps = {
   onOpenBotAvatar: () => void;
   onLogout: () => void;
   onSystemBack: () => void;
+  /** Old「连接应用」nav item opens the shared market shell. */
+  onOpenConnectApps: () => void;
   children: ReactNode;
 };
 
@@ -85,6 +86,7 @@ export function AppSettingsDialog({
   onOpenBotAvatar,
   onLogout,
   onSystemBack,
+  onOpenConnectApps,
   children,
 }: AppSettingsDialogProps) {
   const apiBaseLabel = (() => {
@@ -133,6 +135,7 @@ export function AppSettingsDialog({
                 onLogout();
               }}
               onNavigate={onHubNavigate}
+              onOpenConnectApps={onOpenConnectApps}
             />
           </>
         ) : null}
@@ -195,6 +198,15 @@ export function AppSettingsDialog({
                     </TabsTrigger>
                   ))}
                 </TabsList>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-0.5 h-auto w-full flex-none justify-start gap-2.5 px-3 py-2 text-[14px] font-medium"
+                  onClick={onOpenConnectApps}
+                >
+                  <SettingsGlyph id="integrations" />
+                  <span>连接应用</span>
+                </Button>
               </ScrollArea>
             </aside>
 

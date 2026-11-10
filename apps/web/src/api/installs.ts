@@ -1,6 +1,6 @@
 import { API_BASE, authHeaders, readError } from "./client";
 
-/** Slack / GitHub install wizard and Telegram / Feishu credential connect (Settings → 连接应用). */
+/** Slack / GitHub install wizard and Telegram / Feishu credential connect（侧栏底部「连接应用」，设置里的同名入口打开同一壳）. */
 export type InstallIntegrationStatus = {
   provider: string;
   connected: boolean;

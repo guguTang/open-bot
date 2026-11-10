@@ -27,4 +27,12 @@ describe("resolveSettingsHubNav", () => {
     expect(resolveSettingsHubNav("llm")).toEqual({ tab: "llm", prefetch: "llm" });
     expect(resolveSettingsHubNav("review")).toEqual({ tab: "review", prefetch: "review" });
   });
+
+  it("sends 连接应用 to the shared market shell", () => {
+    expect(resolveSettingsHubNav("integrations")).toEqual({
+      tab: "integrations",
+      prefetch: "integrations",
+      opensConnectApps: true,
+    });
+  });
 });

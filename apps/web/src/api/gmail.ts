@@ -1,6 +1,6 @@
 import { API_BASE, authHeaders, readError } from "./client";
 
-/** Gmail Web OAuth integration (Settings → 连接应用). */
+/** Gmail Web OAuth integration（侧栏底部「连接应用」，设置里的同名入口打开同一壳）. */
 export type GmailIntegrationStatus = {
   provider: string;
   connected: boolean;

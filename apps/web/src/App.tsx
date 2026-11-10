@@ -2,6 +2,7 @@ import { AuthPage } from "./components/app/AuthPage";
 import { AppSidebar } from "./components/app/AppSidebar";
 import { AppAuthenticatedShell } from "./components/app/AppAuthenticatedShell";
 import { AppSettingsPanel } from "./components/app/AppSettingsPanel";
+import { ConnectAppsShell } from "./components/connectApps/ConnectAppsShell";
 import { AppOverlays } from "./components/app/AppOverlays";
 import { ChatMain } from "./components/app/ChatMain";
 import { useWorkspaceAppSession } from "./hooks/useWorkspaceAppSession";
@@ -20,6 +21,7 @@ export default function App() {
       <AppOverlays settings={settings} />
       <ChatMain />
       <AppSettingsPanel settings={settings} />
+      <ConnectAppsShell settings={settings} />
     </AppAuthenticatedShell>
   );
 }
